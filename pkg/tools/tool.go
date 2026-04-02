@@ -116,6 +116,79 @@ type DeferrableTool interface {
 	ShouldDefer() bool
 }
 
+// Tool result size constants.
+// Source: constants/toolLimits.ts:1-56
+const (
+	// DefaultMaxResultSizeChars is the system-wide default for tool result persistence.
+	// Source: constants/toolLimits.ts:13
+	DefaultMaxResultSizeChars = 50_000
+
+	// MaxToolResultTokens is the upper bound for tool result token count.
+	// Source: constants/toolLimits.ts:22
+	MaxToolResultTokens = 100_000
+
+	// BytesPerToken is the conservative estimate for token-to-byte conversion.
+	// Source: constants/toolLimits.ts:28
+	BytesPerToken = 4
+
+	// MaxToolResultBytes is the byte limit derived from token limit.
+	// Source: constants/toolLimits.ts:33
+	MaxToolResultBytes = MaxToolResultTokens * BytesPerToken
+
+	// MaxToolResultsPerMessageChars is the aggregate cap per user message.
+	// Source: constants/toolLimits.ts:49
+	MaxToolResultsPerMessageChars = 200_000
+
+	// ToolSummaryMaxLength is the max length for compact tool summaries.
+	// Source: constants/toolLimits.ts:56
+	ToolSummaryMaxLength = 50
+)
+
+// maxResultSizeByTool maps tool names to their per-tool maxResultSizeChars.
+// Source: grep of `maxResultSizeChars:` across all TS tool definitions.
+// Tools not listed use DefaultMaxResultSizeChars. Infinity means never persist.
+var maxResultSizeByTool = map[string]int{
+	"Bash":             30_000,  // BashTool.tsx:424
+	"Read":             -1,     // Infinity — FileReadTool.ts:342
+	"Grep":             30_000, // GrepTool.ts
+	"Glob":             30_000, // GlobTool.ts
+	"Agent":            100_000, // AgentTool.tsx
+	"ListMcpResources": 100_000, // ListMcpResourcesTool.ts:53
+	"TaskOutput":       100_000, // TaskOutputTool.tsx:147
+	"TeamDelete":       100_000, // TeamDeleteTool.ts:35
+	"Brief":            100_000, // BriefTool.ts:141
+	"RemoteTrigger":    100_000, // RemoteTriggerTool.ts:49
+}
+
+// MaxResultSizeCharsProvider is an optional interface for tools to declare their
+// max result size. Source: Tool.ts:456-466
+type MaxResultSizeCharsProvider interface {
+	MaxResultSizeChars() int
+}
+
+// GetMaxResultSizeChars returns the max result size for a tool.
+// Returns -1 for Infinity (never persist). Uses interface, then map, then default.
+func GetMaxResultSizeChars(tool Tool) int {
+	if p, ok := tool.(MaxResultSizeCharsProvider); ok {
+		return p.MaxResultSizeChars()
+	}
+	if size, ok := maxResultSizeByTool[tool.Name()]; ok {
+		return size
+	}
+	return DefaultMaxResultSizeChars
+}
+
+// ShouldPersistResult checks if a tool result is too large and should be persisted.
+// Returns true if the result exceeds the tool's maxResultSizeChars.
+// Returns false for tools with Infinity (Read).
+func ShouldPersistResult(tool Tool, resultLen int) bool {
+	maxSize := GetMaxResultSizeChars(tool)
+	if maxSize < 0 {
+		return false // Infinity — never persist
+	}
+	return resultLen > maxSize
+}
+
 // deferredToolNames is the set of tool names that are deferred by default.
 // Source: grep of `shouldDefer: true` across all TS tool definitions.
 var deferredToolNames = map[string]bool{
