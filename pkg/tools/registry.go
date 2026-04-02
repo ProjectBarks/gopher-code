@@ -69,11 +69,15 @@ func (r *ToolRegistry) ToolDefinitions() []provider.ToolDefinition {
 		if !IsToolEnabled(t) {
 			continue
 		}
-		defs = append(defs, provider.ToolDefinition{
+		def := provider.ToolDefinition{
 			Name:        t.Name(),
 			Description: t.Description(),
 			InputSchema: t.InputSchema(),
-		})
+		}
+		if IsToolDeferred(t) {
+			def.DeferLoading = true
+		}
+		defs = append(defs, def)
 	}
 	sort.Slice(defs, func(i, j int) bool {
 		return defs[i].Name < defs[j].Name

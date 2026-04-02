@@ -108,3 +108,35 @@ func IsToolEnabled(tool Tool) bool {
 	}
 	return true
 }
+
+// DeferrableTool is an optional interface for tools that should be deferred
+// (sent with defer_loading: true) until ToolSearch is used.
+// Source: Tool.ts:438-442
+type DeferrableTool interface {
+	ShouldDefer() bool
+}
+
+// deferredToolNames is the set of tool names that are deferred by default.
+// Source: grep of `shouldDefer: true` across all TS tool definitions.
+var deferredToolNames = map[string]bool{
+	"AskUserQuestion": true, "Config": true,
+	"CronCreate": true, "CronDelete": true, "CronList": true,
+	"EnterPlanMode": true, "ExitPlanMode": true,
+	"EnterWorktree": true, "ExitWorktree": true,
+	"ListMcpResources": true, "LSP": true, "NotebookEdit": true,
+	"ReadMcpResource": true, "RemoteTrigger": true, "SendMessage": true,
+	"TaskCreate": true, "TaskGet": true, "TaskList": true,
+	"TaskOutput": true, "TaskStop": true, "TaskUpdate": true,
+	"TeamCreate": true, "TeamDelete": true, "TodoWrite": true,
+	"WebFetch": true, "WebSearch": true,
+}
+
+// IsToolDeferred checks if a tool should be deferred. Checks the interface first,
+// then falls back to the built-in deferred names set.
+// Source: Tool.ts:442
+func IsToolDeferred(tool Tool) bool {
+	if d, ok := tool.(DeferrableTool); ok {
+		return d.ShouldDefer()
+	}
+	return deferredToolNames[tool.Name()]
+}
