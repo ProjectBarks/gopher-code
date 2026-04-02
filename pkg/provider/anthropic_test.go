@@ -337,7 +337,7 @@ func TestAnthropicProvider_ErrorResponse(t *testing.T) {
 			name:       "overloaded_529",
 			statusCode: 529,
 			body:       `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`,
-			wantSubstr: "server error",
+			wantSubstr: "server_overload",
 		},
 	}
 
