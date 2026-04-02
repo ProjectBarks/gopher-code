@@ -163,3 +163,73 @@ func RestoreMessages(entries []TranscriptEntry) []message.Message {
 	}
 	return msgs
 }
+
+// RestoreSessionFromTranscript rebuilds a SessionState from a JSONL transcript.
+// Restores: messages, turn count, usage (input/output tokens), CWD, name.
+// Source: utils/sessionStorage.ts:3818-3896 (loadSessionFile + getLastSessionLog)
+func RestoreSessionFromTranscript(transcriptPath string, cfg SessionConfig) (*SessionState, error) {
+	entries, err := ReadTranscript(transcriptPath)
+	if err != nil {
+		return nil, fmt.Errorf("read transcript: %w", err)
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("empty transcript")
+	}
+
+	// Extract session ID from the first entry that has one
+	sessionID := ""
+	for _, e := range entries {
+		if e.SessionID != "" {
+			sessionID = e.SessionID
+			break
+		}
+	}
+	if sessionID == "" {
+		sessionID = "restored-" + filepath.Base(transcriptPath)
+	}
+
+	sess := &SessionState{
+		ID:       sessionID,
+		Config:   cfg,
+		Messages: make([]message.Message, 0),
+	}
+
+	// Walk entries and restore state
+	for _, e := range entries {
+		switch e.Type {
+		case "message":
+			if e.Message != nil {
+				sess.Messages = append(sess.Messages, *e.Message)
+			}
+		case "usage":
+			sess.TotalInputTokens += e.InputTokens
+			sess.TotalOutputTokens += e.OutputTokens
+			if e.TurnCount > sess.TurnCount {
+				sess.TurnCount = e.TurnCount
+			}
+		case "cwd":
+			if e.CWD != "" {
+				sess.CWD = e.CWD
+			}
+		case "custom-title":
+			if e.CustomTitle != "" {
+				sess.Name = e.CustomTitle
+			}
+		case "model":
+			if e.Model != "" {
+				sess.Config.Model = e.Model
+			}
+		}
+	}
+
+	// If no usage entries had turn count, count from messages
+	if sess.TurnCount == 0 {
+		for _, m := range sess.Messages {
+			if m.Role == message.RoleAssistant {
+				sess.TurnCount++
+			}
+		}
+	}
+
+	return sess, nil
+}
