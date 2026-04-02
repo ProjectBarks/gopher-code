@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"encoding/json"
 
@@ -20,18 +22,28 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/tools"
 )
 
+// Version is the current gopher-code version (kept in sync with main).
+const Version = "0.2.0"
+
 // RunREPL starts an interactive read-eval-print loop.
-func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.ModelProvider, registry *tools.ToolRegistry, verbose bool, hookRunner tools.HookRunner) {
+func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.ModelProvider, registry *tools.ToolRegistry, verbose bool, hookRunner tools.HookRunner, noSessionPersist bool) {
 	scanner := bufio.NewScanner(os.Stdin)
 	orchestrator := tools.NewOrchestrator(registry)
 	if hookRunner != nil {
 		orchestrator.SetHookRunner(hookRunner)
 	}
 
-	fmt.Println("gopher-code v0.1.0")
-	fmt.Printf("Model: %s | CWD: %s\n", sess.Config.Model, sess.CWD)
-	fmt.Printf("Session: %s\n", sess.ID[:8])
-	fmt.Println("Type your message. Ctrl+D to exit. /help for commands.")
+	resuming := sess.TurnCount > 0
+	fmt.Printf("\n\033[1mgopher-code\033[0m v%s\n", Version)
+	fmt.Printf("Model: \033[36m%s\033[0m\n", sess.Config.Model)
+	fmt.Printf("CWD:   %s\n", sess.CWD)
+	if resuming {
+		fmt.Printf("Session: %s (resumed, %d turns)\n", sess.ID[:8], sess.TurnCount)
+	} else {
+		fmt.Printf("Session: %s\n", sess.ID[:8])
+	}
+	fmt.Println()
+	fmt.Println("Type your message or /help for commands.")
 	fmt.Println()
 
 	for {
@@ -214,6 +226,95 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 			data, _ := json.MarshalIndent(cfg, "", "  ")
 			fmt.Println(string(data))
 			continue
+		case input == "/init":
+			claudeDir := filepath.Join(sess.CWD, ".claude")
+			if err := os.MkdirAll(claudeDir, 0755); err != nil {
+				fmt.Fprintf(os.Stderr, "Error creating .claude directory: %v\n", err)
+				continue
+			}
+			// Create CLAUDE.md if it doesn't exist
+			claudeMD := filepath.Join(sess.CWD, "CLAUDE.md")
+			if _, err := os.Stat(claudeMD); os.IsNotExist(err) {
+				if err := os.WriteFile(claudeMD, []byte("# Project Instructions\n\nAdd project-specific instructions here.\n"), 0644); err != nil {
+					fmt.Fprintf(os.Stderr, "Error creating CLAUDE.md: %v\n", err)
+				} else {
+					fmt.Printf("Created %s\n", claudeMD)
+				}
+			} else {
+				fmt.Println("CLAUDE.md already exists")
+			}
+			// Create settings.json if it doesn't exist
+			settingsPath := filepath.Join(claudeDir, "settings.json")
+			if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
+				if err := os.WriteFile(settingsPath, []byte("{\n}\n"), 0644); err != nil {
+					fmt.Fprintf(os.Stderr, "Error creating settings.json: %v\n", err)
+				} else {
+					fmt.Printf("Created %s\n", settingsPath)
+				}
+			}
+			fmt.Println("Project initialized.")
+			continue
+		case strings.HasPrefix(input, "/export"):
+			parts := strings.Fields(input)
+			format := "json"
+			if len(parts) > 1 {
+				format = parts[1]
+			}
+			switch format {
+			case "json":
+				data, _ := json.MarshalIndent(sess.Messages, "", "  ")
+				fmt.Println(string(data))
+			case "markdown", "md":
+				for _, msg := range sess.Messages {
+					fmt.Printf("## %s\n\n", msg.Role)
+					for _, block := range msg.Content {
+						switch block.Type {
+						case message.ContentText:
+							fmt.Println(block.Text)
+						case message.ContentToolUse:
+							fmt.Printf("**Tool: %s**\n```json\n%s\n```\n", block.Name, string(block.Input))
+						case message.ContentToolResult:
+							fmt.Printf("**Result:**\n%s\n", block.Content)
+						}
+					}
+					fmt.Println()
+				}
+			default:
+				fmt.Printf("Unknown format: %s (use json or markdown)\n", format)
+			}
+			continue
+		case input == "/usage":
+			fmt.Println("Token Usage:")
+			fmt.Printf("  Input:          %d tokens\n", sess.TotalInputTokens)
+			fmt.Printf("  Output:         %d tokens\n", sess.TotalOutputTokens)
+			fmt.Printf("  Cache creation: %d tokens\n", sess.TotalCacheCreationTokens)
+			fmt.Printf("  Cache read:     %d tokens\n", sess.TotalCacheReadTokens)
+			fmt.Printf("  Turns:          %d\n", sess.TurnCount)
+			// Rough cost estimate (Sonnet pricing)
+			inputCost := float64(sess.TotalInputTokens) / 1_000_000 * 3.0
+			outputCost := float64(sess.TotalOutputTokens) / 1_000_000 * 15.0
+			fmt.Printf("  Est. cost:      $%.4f\n", inputCost+outputCost)
+			continue
+		case input == "/session":
+			fmt.Printf("Session ID:   %s\n", sess.ID)
+			fmt.Printf("Created:      %s\n", sess.CreatedAt.Format(time.RFC3339))
+			fmt.Printf("Model:        %s\n", sess.Config.Model)
+			fmt.Printf("CWD:          %s\n", sess.CWD)
+			fmt.Printf("Turns:        %d / %d\n", sess.TurnCount, sess.Config.MaxTurns)
+			fmt.Printf("Messages:     %d\n", len(sess.Messages))
+			if sess.Config.ThinkingEnabled {
+				fmt.Printf("Thinking:     enabled (budget: %d)\n", sess.Config.ThinkingBudget)
+			}
+			continue
+		case strings.HasPrefix(input, "/rename"):
+			parts := strings.SplitN(input, " ", 2)
+			if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
+				fmt.Println("Usage: /rename <name>")
+			} else {
+				sess.Name = strings.TrimSpace(parts[1])
+				fmt.Printf("Session renamed to: %s\n", sess.Name)
+			}
+			continue
 		}
 
 		sess.PushMessage(message.UserMessage(input))
@@ -227,10 +328,12 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 			fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
 		}
 
-		// Auto-save after each exchange
-		if saveErr := sess.Save(); saveErr != nil {
-			if verbose {
-				fmt.Fprintf(os.Stderr, "Auto-save failed: %v\n", saveErr)
+		// Auto-save after each exchange (unless disabled)
+		if !noSessionPersist {
+			if saveErr := sess.Save(); saveErr != nil {
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Auto-save failed: %v\n", saveErr)
+				}
 			}
 		}
 
@@ -240,21 +343,26 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 
 func printHelp() {
 	fmt.Println("Commands:")
-	fmt.Println("  /help          Show this help")
-	fmt.Println("  /clear         Clear conversation history")
-	fmt.Println("  /compact       Compact conversation to save context")
-	fmt.Println("  /cost          Show token usage")
-	fmt.Println("  /context       Show context window usage")
-	fmt.Println("  /status        Show session info")
-	fmt.Println("  /model [name]  Show or set model")
-	fmt.Println("  /permissions   Show or set permission mode")
-	fmt.Println("  /diff          Show git diff in CWD")
-	fmt.Println("  /save          Save session")
-	fmt.Println("  /resume        List saved sessions")
-	fmt.Println("  /doctor        Check system health")
-	fmt.Println("  /config        Show loaded settings")
-	fmt.Println("  /exit          Exit")
+	fmt.Println("  /help              Show this help")
+	fmt.Println("  /clear             Clear conversation history")
+	fmt.Println("  /compact           Compact conversation to save context")
+	fmt.Println("  /cost              Show token usage")
+	fmt.Println("  /usage             Show detailed token usage and cost estimate")
+	fmt.Println("  /context           Show context window usage")
+	fmt.Println("  /status            Show session info")
+	fmt.Println("  /session           Show detailed session info")
+	fmt.Println("  /model [name]      Show or set model")
+	fmt.Println("  /permissions       Show or set permission mode")
+	fmt.Println("  /diff              Show git diff in CWD")
+	fmt.Println("  /save              Save session")
+	fmt.Println("  /resume            List saved sessions")
+	fmt.Println("  /rename <name>     Rename the current session")
+	fmt.Println("  /init              Initialize .claude/ project config")
+	fmt.Println("  /export [format]   Export conversation (json or markdown)")
+	fmt.Println("  /doctor            Check system health")
+	fmt.Println("  /config            Show loaded settings")
+	fmt.Println("  /exit              Exit")
 	fmt.Println()
-	fmt.Println("  ! <command>    Run a shell command")
-	fmt.Println("  line ending \\  Continue input on next line")
+	fmt.Println("  ! <command>        Run a shell command")
+	fmt.Println("  line ending \\      Continue input on next line")
 }

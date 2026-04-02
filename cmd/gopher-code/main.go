@@ -24,11 +24,17 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/tools"
 )
 
+// Version is the current gopher-code version.
+const Version = "0.2.0"
+
 func main() {
 	// Existing flags
 	model := flag.String("model", "claude-sonnet-4-20250514", "Model to use")
 	queryStr := flag.String("query", "", "One-shot query (non-interactive)")
 	cwd := flag.String("cwd", "", "Working directory (default: current)")
+
+	// Version flag
+	showVersion := flag.Bool("version", false, "Show version and exit")
 
 	// Print mode
 	printMode := flag.Bool("p", false, "Print response and exit (headless mode)")
@@ -64,7 +70,16 @@ func main() {
 	// Additional directories
 	addDirs := flag.String("add-dir", "", "Additional allowed directories (comma-separated)")
 
+	// Session persistence
+	noSessionPersist := flag.Bool("no-session-persistence", false, "Disable session persistence")
+
 	flag.Parse()
+
+	// Handle --version
+	if *showVersion {
+		fmt.Printf("gopher-code v%s\n", Version)
+		os.Exit(0)
+	}
 
 	// Suppress unused variable warning for addDirs (reserved for future use)
 	_ = addDirs
@@ -284,5 +299,5 @@ func main() {
 	}
 
 	// Interactive REPL
-	cli.RunREPL(ctx, sess, prov, registry, *verbose, hookRunner)
+	cli.RunREPL(ctx, sess, prov, registry, *verbose, hookRunner, *noSessionPersist)
 }

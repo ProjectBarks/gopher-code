@@ -34,6 +34,7 @@ func DefaultConfig() SessionConfig {
 // SessionState holds the mutable state of a conversation session.
 type SessionState struct {
 	ID                       string            `json:"id"`
+	Name                     string            `json:"name,omitempty"`
 	Config                   SessionConfig     `json:"config"`
 	Messages                 []message.Message `json:"messages"`
 	CWD                      string            `json:"cwd"`
