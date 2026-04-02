@@ -1,10 +1,30 @@
 package tools
 
-import "github.com/projectbarks/gopher-code/pkg/provider"
+import (
+	"os"
+
+	"github.com/projectbarks/gopher-code/pkg/provider"
+)
+
+// SimpleToolNames are the only tools available in simple mode.
+// Source: tools.ts:287 — [BashTool, FileReadTool, FileEditTool]
+var SimpleToolNames = []string{"Bash", "Read", "Edit"}
+
+// IsSimpleMode returns true when CLAUDE_CODE_SIMPLE=1 is set.
+// Source: tools.ts:273
+func IsSimpleMode() bool {
+	v := os.Getenv("CLAUDE_CODE_SIMPLE")
+	return v == "1" || v == "true"
+}
 
 // RegisterDefaults registers all built-in tools with the given registry.
+// When CLAUDE_CODE_SIMPLE=1, only Bash, Read, and Edit are registered.
+// Source: tools.ts:271-298
 // It returns the PlanState so the caller (e.g. REPL) can inspect/set plan mode.
 func RegisterDefaults(registry *ToolRegistry) *PlanState {
+	if IsSimpleMode() {
+		return registerSimple(registry)
+	}
 	registry.Register(&BashTool{})
 	registry.Register(&FileReadTool{})
 	registry.Register(&FileWriteTool{})
@@ -80,6 +100,15 @@ func RegisterDefaults(registry *ToolRegistry) *PlanState {
 	registry.Register(&REPLTool{})
 
 	return planState
+}
+
+// registerSimple registers only Bash, Read, Edit for CLAUDE_CODE_SIMPLE mode.
+// Source: tools.ts:287
+func registerSimple(registry *ToolRegistry) *PlanState {
+	registry.Register(&BashTool{})
+	registry.Register(&FileReadTool{})
+	registry.Register(&FileEditTool{})
+	return &PlanState{} // No plan mode in simple mode
 }
 
 // RegisterAgentTool registers the Agent tool, which needs runtime dependencies
