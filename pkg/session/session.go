@@ -29,6 +29,7 @@ type SessionConfig struct {
 	JSONSchema        string  `json:"json_schema,omitempty"`
 	MaxBudgetUSD      float64 `json:"max_budget_usd,omitempty"`
 	TokenBudgetTarget int     `json:"token_budget_target,omitempty"` // +500k feature: output token target
+	FallbackModel     string  `json:"fallback_model,omitempty"`      // --fallback-model: switch on 529 exhaustion
 }
 
 // DefaultConfig returns sensible defaults.

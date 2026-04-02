@@ -303,3 +303,84 @@ func TestL2ErrorRecovery(t *testing.T) {
 		}
 	})
 }
+
+func TestFallbackModelSwitch(t *testing.T) {
+	// Source: query.ts:894-951 — FallbackTriggeredError switches model and retries
+	// Source: services/api/withRetry.ts:160-168 — FallbackTriggeredError definition
+
+	t.Run("switches_model_on_fallback_error", func(t *testing.T) {
+		// Turn 1: provider returns FallbackTriggeredError
+		// Turn 2: provider succeeds with fallback model
+		prov := testharness.NewScriptedProvider(
+			testharness.MakeErrorTurn(&query.FallbackTriggeredError{
+				OriginalModel: "claude-opus-4-20250514",
+				FallbackModel: "claude-sonnet-4-20250514",
+			}),
+			testharness.MakeTextTurn("ok from fallback", provider.StopReasonEndTurn),
+		)
+
+		registry := tools.NewRegistry()
+		orchestrator := tools.NewOrchestrator(registry)
+
+		sess := testharness.MakeSession()
+		sess.Config.Model = "claude-opus-4-20250514"
+		sess.Config.FallbackModel = "claude-sonnet-4-20250514"
+
+		var events []query.QueryEvent
+		callback := func(evt query.QueryEvent) {
+			events = append(events, evt)
+		}
+
+		err := query.Query(context.Background(), sess, prov, registry, orchestrator, callback)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		// Model should have been switched
+		if sess.Config.Model != "claude-sonnet-4-20250514" {
+			t.Errorf("expected model to be switched to fallback, got %s", sess.Config.Model)
+		}
+
+		// Should have emitted a switch notification
+		found := false
+		for _, evt := range events {
+			if evt.Type == query.QEventTextDelta && strings.Contains(evt.Text, "Switched to") {
+				found = true
+			}
+		}
+		if !found {
+			t.Error("expected a 'Switched to' notification event")
+		}
+
+		// Second request should use the fallback model
+		requests := prov.CapturedRequests
+		if len(requests) < 2 {
+			t.Fatalf("expected 2 requests, got %d", len(requests))
+		}
+		if requests[1].Model != "claude-sonnet-4-20250514" {
+			t.Errorf("second request should use fallback model, got %s", requests[1].Model)
+		}
+	})
+
+	t.Run("no_fallback_without_config", func(t *testing.T) {
+		// Without FallbackModel configured, FallbackTriggeredError is a regular error
+		prov := testharness.NewScriptedProvider(
+			testharness.MakeErrorTurn(&query.FallbackTriggeredError{
+				OriginalModel: "claude-opus-4-20250514",
+				FallbackModel: "claude-sonnet-4-20250514",
+			}),
+		)
+
+		registry := tools.NewRegistry()
+		orchestrator := tools.NewOrchestrator(registry)
+
+		sess := testharness.MakeSession()
+		sess.Config.Model = "claude-opus-4-20250514"
+		sess.Config.FallbackModel = "" // No fallback configured
+
+		err := query.Query(context.Background(), sess, prov, registry, orchestrator, nil)
+		if err == nil {
+			t.Fatal("expected error when no fallback configured")
+		}
+	})
+}
