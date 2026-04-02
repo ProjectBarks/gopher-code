@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/projectbarks/gopher-code/internal/cli"
+	"github.com/projectbarks/gopher-code/pkg/auth"
 	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/config"
 	"github.com/projectbarks/gopher-code/pkg/hooks"
@@ -23,6 +24,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/provider"
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/session"
+	"github.com/projectbarks/gopher-code/pkg/skills"
 	"github.com/projectbarks/gopher-code/pkg/tools"
 )
 
@@ -164,9 +166,9 @@ func main() {
 	_ = betas
 	_ = fallbackModel
 
-	apiKey := os.Getenv("ANTHROPIC_API_KEY")
-	if apiKey == "" {
-		fmt.Fprintln(os.Stderr, "Error: ANTHROPIC_API_KEY environment variable not set")
+	apiKey, err := auth.GetAPIKey()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
@@ -310,6 +312,12 @@ func main() {
 	planState := tools.RegisterDefaults(registry)
 	tools.RegisterAgentTool(registry, prov, query.AsQueryFunc())
 
+	// Load skills (prompt-based commands)
+	loadedSkills := skills.LoadSkills(*cwd)
+	if len(loadedSkills) > 0 {
+		registry.Register(tools.NewSkillTool(loadedSkills))
+	}
+
 	// Load MCP servers (unless --bare mode)
 	mcpMgr := mcp.NewManager()
 	if !*bare {
@@ -432,22 +440,28 @@ func main() {
 		}
 
 		// Select callback based on output format
-		var callback query.EventCallback
-		switch *outputFormat {
-		case "json":
-			callback = cli.JSONCallback
-		case "stream-json":
-			callback = cli.StreamJSONCallback
-		default:
-			callback = cli.PlainTextCallback
+		if *outputFormat == "json" {
+			collector := cli.NewJSONCollector()
+			err := query.Query(ctx, sess, prov, registry, orchestrator, collector.Callback)
+			collector.Emit()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+		} else if *outputFormat == "stream-json" {
+			err := query.Query(ctx, sess, prov, registry, orchestrator, cli.StreamJSONCallback)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			err := query.Query(ctx, sess, prov, registry, orchestrator, cli.PlainTextCallback)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println() // Final newline
 		}
-
-		err := query.Query(ctx, sess, prov, registry, orchestrator, callback)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println() // Final newline
 		os.Exit(0)
 	}
 
@@ -464,10 +478,26 @@ func main() {
 		if hookRunner != nil {
 			orchestrator.SetHookRunner(hookRunner)
 		}
-		err := query.Query(ctx, sess, prov, registry, orchestrator, cli.PrintEvent)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+		if *outputFormat == "json" {
+			collector := cli.NewJSONCollector()
+			err := query.Query(ctx, sess, prov, registry, orchestrator, collector.Callback)
+			collector.Emit()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+		} else if *outputFormat == "stream-json" {
+			err := query.Query(ctx, sess, prov, registry, orchestrator, cli.StreamJSONCallback)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+		} else {
+			err := query.Query(ctx, sess, prov, registry, orchestrator, cli.PrintEvent)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
 		}
 		os.Exit(0)
 	}

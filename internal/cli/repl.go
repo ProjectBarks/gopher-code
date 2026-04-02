@@ -13,12 +13,14 @@ import (
 
 	"encoding/json"
 
+	"github.com/projectbarks/gopher-code/pkg/auth"
 	"github.com/projectbarks/gopher-code/pkg/config"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
 	"github.com/projectbarks/gopher-code/pkg/provider"
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/session"
+	"github.com/projectbarks/gopher-code/pkg/skills"
 	"github.com/projectbarks/gopher-code/pkg/tools"
 )
 
@@ -210,10 +212,10 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 			fmt.Println("gopher-code doctor")
 			fmt.Println()
 			// Check API key
-			if os.Getenv("ANTHROPIC_API_KEY") != "" {
-				fmt.Println("  [ok] ANTHROPIC_API_KEY is set")
+			if _, authErr := auth.GetAPIKey(); authErr == nil {
+				fmt.Printf("  [ok] %s\n", auth.Status())
 			} else {
-				fmt.Println("  [missing] ANTHROPIC_API_KEY not set")
+				fmt.Println("  [missing] No API key configured")
 			}
 			// Check ripgrep
 			if _, err := exec.LookPath("rg"); err == nil {
@@ -342,6 +344,35 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 				fmt.Println(tools.FormatTaskList(store))
 			}
 			continue
+		case input == "/login":
+			fmt.Print("Enter your Anthropic API key: ")
+			if scanner.Scan() {
+				key := strings.TrimSpace(scanner.Text())
+				if key == "" {
+					fmt.Println("No key provided.")
+				} else if err := auth.SaveAPIKey(key); err != nil {
+					fmt.Printf("Error saving key: %v\n", err)
+				} else {
+					fmt.Println("API key saved to ~/.claude/auth.json")
+				}
+			}
+			continue
+		case input == "/logout":
+			home, _ := os.UserHomeDir()
+			os.Remove(filepath.Join(home, ".claude", "auth.json"))
+			fmt.Println("Logged out. API key removed.")
+			continue
+		case input == "/skills":
+			loaded := skills.LoadSkills(sess.CWD)
+			if len(loaded) == 0 {
+				fmt.Println("No skills found. Add .md files to ~/.claude/skills/ or .claude/skills/")
+			} else {
+				fmt.Println("Available skills:")
+				for _, s := range loaded {
+					fmt.Printf("  /%s - %s [%s]\n", s.Name, s.Description, s.Source)
+				}
+			}
+			continue
 		}
 
 		sess.PushMessage(message.UserMessage(input))
@@ -390,6 +421,9 @@ func printHelp() {
 	fmt.Println("  /config            Show loaded settings")
 	fmt.Println("  /plan              Enter plan mode (outline before executing)")
 	fmt.Println("  /tasks             Show current task list")
+	fmt.Println("  /skills            List available skills")
+	fmt.Println("  /login             Save Anthropic API key to ~/.claude/auth.json")
+	fmt.Println("  /logout            Remove saved API key")
 	fmt.Println("  /exit              Exit")
 	fmt.Println()
 	fmt.Println("  ! <command>        Run a shell command")
