@@ -571,6 +571,46 @@
     }
   },
   {
+    "name": "TaskStop",
+    "description": "Stop/cancel a running task.",
+    "is_read_only": false,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "description": "The ID of the task to stop"
+        }
+      },
+      "required": ["taskId"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "TaskOutput",
+    "description": "Capture output for a task.",
+    "is_read_only": false,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "description": "The ID of the task to record output for"
+        },
+        "output": {
+          "type": "string",
+          "description": "The output to capture"
+        }
+      },
+      "required": ["taskId", "output"],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "AskUserQuestion",
     "description": "Ask the user a question with multiple choice options.",
     "is_read_only": true,

@@ -163,9 +163,9 @@ func TestCrossToolValidation(t *testing.T) {
 		t.Fatalf("failed to load schemas: %v", err)
 	}
 
-	t.Run("tool_count_is_19", func(t *testing.T) {
-		if len(schemas) != 19 {
-			t.Errorf("expected 19 tools, got %d", len(schemas))
+	t.Run("tool_count_is_21", func(t *testing.T) {
+		if len(schemas) != 21 {
+			t.Errorf("expected 21 tools, got %d", len(schemas))
 		}
 	})
 
@@ -204,7 +204,7 @@ func TestCrossToolValidation(t *testing.T) {
 		})
 	}
 
-	extTools := []string{"WebFetch", "WebSearch", "Agent", "Skill", "ToolSearch", "LSP", "NotebookEdit", "TodoWrite", "TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "AskUserQuestion"}
+	extTools := []string{"WebFetch", "WebSearch", "Agent", "Skill", "ToolSearch", "LSP", "NotebookEdit", "TodoWrite", "TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskStop", "TaskOutput", "AskUserQuestion"}
 	for _, name := range extTools {
 		name := name
 		t.Run(fmt.Sprintf("extended_tool_%s_present", name), func(t *testing.T) {
@@ -278,6 +278,8 @@ func TestPerToolExpectedValues(t *testing.T) {
 		{"TaskUpdate", false, true, 100000, 9, 1, []string{"taskId"}},
 		{"TaskGet", true, true, 100000, 1, 1, []string{"taskId"}},
 		{"TaskList", true, true, 100000, 0, 0, []string{}},
+		{"TaskStop", false, true, 100000, 1, 1, []string{"taskId"}},
+		{"TaskOutput", false, true, 100000, 2, 2, []string{"taskId", "output"}},
 		{"AskUserQuestion", true, true, 100000, 4, 1, []string{"questions"}},
 	}
 
@@ -444,6 +446,11 @@ func TestPropertyTypes(t *testing.T) {
 		{"TaskUpdate", "metadata", "object", false, nil},
 		// TaskGet
 		{"TaskGet", "taskId", "string", false, nil},
+		// TaskStop
+		{"TaskStop", "taskId", "string", false, nil},
+		// TaskOutput
+		{"TaskOutput", "taskId", "string", false, nil},
+		{"TaskOutput", "output", "string", false, nil},
 		// AskUserQuestion
 		{"AskUserQuestion", "questions", "array", false, nil},
 		{"AskUserQuestion", "answers", "object", false, nil},
