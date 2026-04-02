@@ -1,6 +1,10 @@
 # Gopher Code
 
 <p align="center">
+  <img src="assets/go-gopher-pixel-art.png" width="200" alt="Gopher Code mascot — pixel art Go gopher">
+</p>
+
+<p align="center">
   <strong>Claude Code, rewritten from scratch in Go. Zero Node.js. Zero Electron. One binary.</strong>
 </p>
 
