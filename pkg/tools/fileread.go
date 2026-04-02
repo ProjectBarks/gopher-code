@@ -65,10 +65,76 @@ func hasBinaryExtension(filePath string) bool {
 // FileReadTool reads files with line numbers.
 type FileReadTool struct{}
 
+// PDFMaxPagesPerRead is the max pages for a single PDF read.
+// Source: constants/apiLimits.ts:77
+const PDFMaxPagesPerRead = 20
+
 type fileReadInput struct {
 	FilePath string `json:"file_path"`
 	Offset   int    `json:"offset"`
 	Limit    int    `json:"limit"`
+	Pages    string `json:"pages,omitempty"` // PDF page range: "1-5", "3", "10-20"
+}
+
+// PDFPageRange is a parsed page range.
+// Source: utils/pdfUtils.ts:16-50
+type PDFPageRange struct {
+	FirstPage int
+	LastPage  int // -1 means Infinity (open-ended)
+}
+
+// ParsePDFPageRange parses a page range string.
+// Source: utils/pdfUtils.ts:16-50
+func ParsePDFPageRange(pages string) *PDFPageRange {
+	pages = strings.TrimSpace(pages)
+	if pages == "" {
+		return nil
+	}
+
+	// "N-" open-ended range
+	// Source: pdfUtils.ts:25-31
+	if strings.HasSuffix(pages, "-") {
+		first := parseInt(pages[:len(pages)-1])
+		if first < 1 {
+			return nil
+		}
+		return &PDFPageRange{FirstPage: first, LastPage: -1}
+	}
+
+	dashIdx := strings.Index(pages, "-")
+	if dashIdx == -1 {
+		// Single page: "5"
+		// Source: pdfUtils.ts:34-40
+		page := parseInt(pages)
+		if page < 1 {
+			return nil
+		}
+		return &PDFPageRange{FirstPage: page, LastPage: page}
+	}
+
+	// Range: "1-10"
+	// Source: pdfUtils.ts:43-49
+	first := parseInt(pages[:dashIdx])
+	last := parseInt(pages[dashIdx+1:])
+	if first < 1 || last < 1 || last < first {
+		return nil
+	}
+	return &PDFPageRange{FirstPage: first, LastPage: last}
+}
+
+func parseInt(s string) int {
+	s = strings.TrimSpace(s)
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return -1
+		}
+		n = n*10 + int(c-'0')
+	}
+	if len(s) == 0 {
+		return -1
+	}
+	return n
 }
 
 func (f *FileReadTool) Name() string        { return "Read" }
@@ -81,7 +147,8 @@ func (f *FileReadTool) InputSchema() json.RawMessage {
 		"properties": {
 			"file_path": {"type": "string", "description": "The absolute path to the file to read"},
 			"offset": {"type": "integer", "description": "The line number to start reading from. Only provide if the file is too large to read at once", "minimum": 0},
-			"limit": {"type": "integer", "description": "The number of lines to read. Only provide if the file is too large to read at once."}
+			"limit": {"type": "integer", "description": "The number of lines to read. Only provide if the file is too large to read at once."},
+			"pages": {"type": "string", "description": "Page range for PDF files (e.g., \"1-5\", \"3\", \"10-20\"). Only applicable to PDF files. Maximum 20 pages per request."}
 		},
 		"required": ["file_path"],
 		"additionalProperties": false
@@ -101,6 +168,26 @@ func (f *FileReadTool) Execute(_ context.Context, tc *ToolContext, input json.Ra
 	path := in.FilePath
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(tc.CWD, path)
+	}
+
+	// Validate pages parameter (pure string parsing, no I/O)
+	// Source: FileReadTool.ts:419-440
+	if in.Pages != "" {
+		parsed := ParsePDFPageRange(in.Pages)
+		if parsed == nil {
+			return ErrorOutput(fmt.Sprintf(
+				"Invalid pages parameter: %q. Use formats like \"1-5\", \"3\", or \"10-20\". Pages are 1-indexed.", in.Pages,
+			)), nil
+		}
+		rangeSize := PDFMaxPagesPerRead + 1 // default for open-ended
+		if parsed.LastPage > 0 {
+			rangeSize = parsed.LastPage - parsed.FirstPage + 1
+		}
+		if rangeSize > PDFMaxPagesPerRead {
+			return ErrorOutput(fmt.Sprintf(
+				"Page range %q exceeds maximum of %d pages per request. Please use a smaller range.", in.Pages, PDFMaxPagesPerRead,
+			)), nil
+		}
 	}
 
 	// Binary extension check (no I/O)
