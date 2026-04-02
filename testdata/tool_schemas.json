@@ -1,0 +1,645 @@
+[
+  {
+    "name": "Bash",
+    "description": "Executes a given bash command and returns its output.",
+    "is_read_only": false,
+    "is_concurrency_safe": false,
+    "max_result_size_chars": 30000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "The command to execute"
+        },
+        "timeout": {
+          "type": "number",
+          "description": "Optional timeout in milliseconds (max 600000)"
+        },
+        "description": {
+          "type": "string",
+          "description": "Clear, concise description of what this command does in active voice."
+        },
+        "run_in_background": {
+          "type": "boolean",
+          "description": "Set to true to run this command in the background."
+        },
+        "dangerouslyDisableSandbox": {
+          "type": "boolean",
+          "description": "Set this to true to dangerously override sandbox mode and run commands without sandboxing."
+        }
+      },
+      "required": ["command"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "Read",
+    "description": "Reads a file from the local filesystem.",
+    "is_read_only": true,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": -1,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "description": "The absolute path to the file to read"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The line number to start reading from. Only provide if the file is too large to read at once"
+        },
+        "limit": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "The number of lines to read. Only provide if the file is too large to read at once."
+        },
+        "pages": {
+          "type": "string",
+          "description": "Page range for PDF files (e.g., \"1-5\", \"3\", \"10-20\"). Only applicable to PDF files. Maximum 20 pages per request."
+        }
+      },
+      "required": ["file_path"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "Write",
+    "description": "Writes a file to the local filesystem.",
+    "is_read_only": false,
+    "is_concurrency_safe": false,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "description": "The absolute path to the file to write (must be absolute, not relative)"
+        },
+        "content": {
+          "type": "string",
+          "description": "The content to write to the file"
+        }
+      },
+      "required": ["file_path", "content"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "Edit",
+    "description": "Performs exact string replacements in files.",
+    "is_read_only": false,
+    "is_concurrency_safe": false,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "description": "The absolute path to the file to modify"
+        },
+        "old_string": {
+          "type": "string",
+          "description": "The text to replace"
+        },
+        "new_string": {
+          "type": "string",
+          "description": "The text to replace it with (must be different from old_string)"
+        },
+        "replace_all": {
+          "type": "boolean",
+          "default": false,
+          "description": "Replace all occurrences of old_string (default false)"
+        }
+      },
+      "required": ["file_path", "old_string", "new_string"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "Glob",
+    "description": "Fast file pattern matching tool that works with any codebase size.",
+    "is_read_only": true,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "The glob pattern to match files against"
+        },
+        "path": {
+          "type": "string",
+          "description": "The directory to search in. If not specified, the current working directory will be used."
+        }
+      },
+      "required": ["pattern"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "Grep",
+    "description": "A powerful search tool built on ripgrep.",
+    "is_read_only": true,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 20000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "The regular expression pattern to search for in file contents"
+        },
+        "path": {
+          "type": "string",
+          "description": "File or directory to search in (rg PATH). Defaults to current working directory."
+        },
+        "glob": {
+          "type": "string",
+          "description": "Glob pattern to filter files (e.g. \"*.js\", \"*.{ts,tsx}\") - maps to rg --glob"
+        },
+        "output_mode": {
+          "type": "string",
+          "enum": ["content", "files_with_matches", "count"],
+          "description": "Output mode. Defaults to \"files_with_matches\"."
+        },
+        "-B": {
+          "type": "number",
+          "description": "Number of lines to show before each match (rg -B)."
+        },
+        "-A": {
+          "type": "number",
+          "description": "Number of lines to show after each match (rg -A)."
+        },
+        "-C": {
+          "type": "number",
+          "description": "Alias for context."
+        },
+        "context": {
+          "type": "number",
+          "description": "Number of lines to show before and after each match (rg -C)."
+        },
+        "-n": {
+          "type": "boolean",
+          "description": "Show line numbers in output (rg -n). Defaults to true."
+        },
+        "-i": {
+          "type": "boolean",
+          "description": "Case insensitive search (rg -i)"
+        },
+        "type": {
+          "type": "string",
+          "description": "File type to search (rg --type)."
+        },
+        "head_limit": {
+          "type": "number",
+          "description": "Limit output to first N lines/entries. Defaults to 250 when unspecified."
+        },
+        "offset": {
+          "type": "number",
+          "description": "Skip first N lines/entries before applying head_limit. Defaults to 0."
+        },
+        "multiline": {
+          "type": "boolean",
+          "description": "Enable multiline mode. Default: false."
+        }
+      },
+      "required": ["pattern"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "WebFetch",
+    "description": "Fetches content from a URL.",
+    "is_read_only": true,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The URL to fetch content from"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "The prompt to run on the fetched content"
+        }
+      },
+      "required": ["url", "prompt"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "WebSearch",
+    "description": "Allows Claude to search the web.",
+    "is_read_only": true,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "minLength": 2,
+          "description": "The search query to use"
+        },
+        "allowed_domains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Only include search results from these domains"
+        },
+        "blocked_domains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Never include search results from these domains"
+        }
+      },
+      "required": ["query"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "Agent",
+    "description": "Launch a new agent to handle complex, multi-step tasks autonomously.",
+    "is_read_only": true,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "A short (3-5 word) description of the task"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "The task for the agent to perform"
+        },
+        "subagent_type": {
+          "type": "string",
+          "description": "The type of specialized agent to use for this task"
+        },
+        "model": {
+          "type": "string",
+          "enum": ["sonnet", "opus", "haiku"],
+          "description": "Optional model override for this agent."
+        },
+        "run_in_background": {
+          "type": "boolean",
+          "description": "Set to true to run this agent in the background."
+        },
+        "isolation": {
+          "type": "string",
+          "enum": ["worktree"],
+          "description": "Isolation mode."
+        }
+      },
+      "required": ["description", "prompt"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "Skill",
+    "description": "Execute a skill within the main conversation.",
+    "is_read_only": false,
+    "is_concurrency_safe": false,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "skill": {
+          "type": "string",
+          "description": "The skill name. E.g., \"commit\", \"review-pr\", or \"pdf\""
+        },
+        "args": {
+          "type": "string",
+          "description": "Optional arguments for the skill"
+        }
+      },
+      "required": ["skill"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "ToolSearch",
+    "description": "Fetches full schema definitions for deferred tools so they can be called.",
+    "is_read_only": true,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Query to find deferred tools."
+        },
+        "max_results": {
+          "type": "number",
+          "default": 5,
+          "description": "Maximum number of results to return (default: 5)"
+        }
+      },
+      "required": ["query"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "LSP",
+    "description": "Language Server Protocol integration for code intelligence.",
+    "is_read_only": true,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "goToDefinition",
+            "findReferences",
+            "hover",
+            "documentSymbol",
+            "workspaceSymbol",
+            "goToImplementation",
+            "prepareCallHierarchy",
+            "incomingCalls",
+            "outgoingCalls"
+          ],
+          "description": "The LSP operation to perform"
+        },
+        "filePath": {
+          "type": "string",
+          "description": "The absolute or relative path to the file"
+        },
+        "line": {
+          "type": "number",
+          "description": "The line number (1-based)"
+        },
+        "character": {
+          "type": "number",
+          "description": "The character offset (1-based)"
+        }
+      },
+      "required": ["operation", "filePath", "line", "character"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "NotebookEdit",
+    "description": "Edit Jupyter notebook cells.",
+    "is_read_only": false,
+    "is_concurrency_safe": false,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "notebook_path": {
+          "type": "string",
+          "description": "The absolute path to the Jupyter notebook file to edit"
+        },
+        "cell_id": {
+          "type": "string",
+          "description": "The ID of the cell to edit."
+        },
+        "new_source": {
+          "type": "string",
+          "description": "The new source for the cell"
+        },
+        "cell_type": {
+          "type": "string",
+          "enum": ["code", "markdown"],
+          "description": "The type of the cell."
+        },
+        "edit_mode": {
+          "type": "string",
+          "enum": ["replace", "insert", "delete"],
+          "description": "The type of edit to make. Defaults to replace."
+        }
+      },
+      "required": ["notebook_path", "new_source"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "TodoWrite",
+    "description": "Write and manage a todo list.",
+    "is_read_only": false,
+    "is_concurrency_safe": false,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "todos": {
+          "type": "array",
+          "description": "The updated todo list",
+          "items": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["pending", "completed"]
+              },
+              "content": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "required": ["todos"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "TaskCreate",
+    "description": "Create a new task.",
+    "is_read_only": false,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "subject": {
+          "type": "string",
+          "description": "A brief title for the task"
+        },
+        "description": {
+          "type": "string",
+          "description": "What needs to be done"
+        },
+        "activeForm": {
+          "type": "string",
+          "description": "Present continuous form shown in spinner when in_progress"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Arbitrary metadata to attach to the task"
+        }
+      },
+      "required": ["subject", "description"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "TaskUpdate",
+    "description": "Update an existing task.",
+    "is_read_only": false,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "description": "The ID of the task to update"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "activeForm": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "in_progress", "completed", "deleted"]
+        },
+        "addBlocks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Task IDs that this task blocks"
+        },
+        "addBlockedBy": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Task IDs that block this task"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object"
+        }
+      },
+      "required": ["taskId"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "TaskGet",
+    "description": "Retrieve task details.",
+    "is_read_only": true,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string",
+          "description": "The ID of the task to retrieve"
+        }
+      },
+      "required": ["taskId"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "TaskList",
+    "description": "List all tasks.",
+    "is_read_only": true,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "AskUserQuestion",
+    "description": "Ask the user a question with multiple choice options.",
+    "is_read_only": true,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "questions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "description": "Questions to ask the user (1-4 questions)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "question": {
+                "type": "string",
+                "description": "The complete question to ask the user."
+              },
+              "header": {
+                "type": "string",
+                "description": "Very short label displayed as a chip/tag (max 12 chars)."
+              },
+              "options": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 4,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "preview": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["label", "description"]
+                }
+              },
+              "multiSelect": {
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "required": ["question", "header", "options", "multiSelect"]
+          }
+        },
+        "answers": {
+          "type": "object"
+        },
+        "annotations": {
+          "type": "object"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": ["questions"],
+      "additionalProperties": false
+    }
+  }
+]

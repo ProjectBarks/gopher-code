@@ -1,0 +1,96 @@
+{
+  "_source": "Claude Code v2.1.88 TypeScript source (query.ts, autoCompact.ts, context.ts, microCompact.ts)",
+  "_purpose": "Golden file of query loop constants for parity testing",
+
+  "max_output_tokens_recovery_limit": 3,
+  "max_consecutive_autocompact_failures": 3,
+  "autocompact_buffer_tokens": 13000,
+  "warning_threshold_buffer_tokens": 20000,
+  "error_threshold_buffer_tokens": 20000,
+  "manual_compact_buffer_tokens": 3000,
+  "max_output_tokens_for_summary": 20000,
+  "escalated_max_tokens": 64000,
+  "max_tool_use_concurrency": 10,
+  "default_max_output_tokens": 16000,
+  "synthetic_tool_result_placeholder": "[Tool result missing due to internal error]",
+
+  "error_recovery": {
+    "context_too_long": {
+      "strategy": "reactive_compact_then_fail",
+      "max_retries": 1,
+      "description": "On 413/context_too_long: attempt reactive compact once, then fail if still too long"
+    },
+    "max_output_tokens": {
+      "strategy": "escalate_then_multi_turn",
+      "escalation_target": 64000,
+      "multi_turn_limit": 3,
+      "continuation_prompt": "Output token limit hit. Resume directly — no apology, no recap...",
+      "description": "First escalate from 8k to 64k, then inject continuation prompts up to 3 times"
+    },
+    "rate_limit_429": {
+      "strategy": "retry_with_backoff",
+      "handled_by": "withRetry wrapper in callModel",
+      "description": "Handled by HTTP client retry logic, not query loop"
+    },
+    "auth_401": {
+      "strategy": "fail_fast",
+      "description": "Authentication errors are never retried"
+    },
+    "server_5xx": {
+      "strategy": "retry_with_backoff",
+      "handled_by": "withRetry wrapper in callModel",
+      "description": "Handled by HTTP client retry logic"
+    }
+  },
+
+  "compaction": {
+    "autocompact": {
+      "threshold_formula": "contextWindow - MAX_OUTPUT_TOKENS_FOR_SUMMARY - AUTOCOMPACT_BUFFER_TOKENS",
+      "description": "Fire when token count >= threshold. Skipped for compact/session_memory/marble_origami query sources."
+    },
+    "microcompact": {
+      "runs_before": "autocompact",
+      "compactable_tools": ["Bash", "Read", "Write", "Edit", "Grep", "Glob", "WebSearch", "WebFetch"],
+      "description": "Clears content of old tool results. Only affects specific tool types."
+    }
+  },
+
+  "stop_conditions": [
+    {"reason": "completed", "description": "Model finished with no tool_use blocks"},
+    {"reason": "max_turns", "description": "Turn count exceeds maxTurns parameter"},
+    {"reason": "aborted_streaming", "description": "User interrupted during streaming"},
+    {"reason": "aborted_tools", "description": "User interrupted during tool execution"},
+    {"reason": "hook_stopped", "description": "Pre/post tool hook prevented continuation"},
+    {"reason": "image_error", "description": "Unrecoverable image/media size error"},
+    {"reason": "model_error", "description": "Unrecoverable API error"},
+    {"reason": "prompt_too_long", "description": "Context too long after all recovery attempts"},
+    {"reason": "blocking_limit", "description": "Blocking limit reached"}
+  ],
+
+  "tool_execution": {
+    "read_only_concurrent": true,
+    "mutating_sequential": true,
+    "max_concurrency_env": "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY",
+    "max_concurrency_default": 10,
+    "permission_check_before_mutating": true,
+    "description": "Read-only tools batched concurrently, mutating tools run one at a time"
+  },
+
+  "message_format": {
+    "tool_results_role": "user",
+    "tool_result_block_type": "tool_result",
+    "tool_use_block_type": "tool_use",
+    "every_tool_use_needs_result": true,
+    "missing_result_placeholder": "[Tool result missing due to internal error]",
+    "description": "Tool results sent as user messages with tool_result content blocks. Every tool_use must have exactly one tool_result."
+  },
+
+  "permission_modes": [
+    {"mode": "default", "description": "Ask for mutating operations"},
+    {"mode": "acceptEdits", "description": "Auto-approve file edits, ask for bash"},
+    {"mode": "bypassPermissions", "description": "Skip all permission checks"},
+    {"mode": "dontAsk", "description": "Auto-deny risky operations"},
+    {"mode": "plan", "description": "Read-only plus plan file editing"},
+    {"mode": "auto", "description": "ML classifier decides (feature-gated)"}
+  ]
+}
