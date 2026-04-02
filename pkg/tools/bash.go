@@ -21,9 +21,11 @@ const (
 type BashTool struct{}
 
 type bashInput struct {
-	Command     string `json:"command"`
-	Description string `json:"description,omitempty"`
-	Timeout     int    `json:"timeout,omitempty"` // milliseconds
+	Command                  string `json:"command"`
+	Description              string `json:"description,omitempty"`
+	Timeout                  int    `json:"timeout,omitempty"` // milliseconds
+	RunInBackground          bool   `json:"run_in_background,omitempty"`
+	DangerouslyDisableSandbox bool  `json:"dangerouslyDisableSandbox,omitempty"`
 }
 
 func (b *BashTool) Name() string        { return "Bash" }
@@ -47,7 +49,9 @@ func (b *BashTool) InputSchema() json.RawMessage {
 		"properties": {
 			"command": {"type": "string", "description": "The command to execute"},
 			"description": {"type": "string", "description": "Clear, concise description of what this command does in active voice."},
-			"timeout": {"type": "integer", "description": "Optional timeout in milliseconds (up to 600000ms / 10 minutes). By default, your command will timeout after 120000ms (2 minutes)."}
+			"timeout": {"type": "integer", "description": "Optional timeout in milliseconds (up to 600000ms / 10 minutes). By default, your command will timeout after 120000ms (2 minutes)."},
+			"run_in_background": {"type": "boolean", "description": "Set to true to run this command in the background. Use Read to read the output later."},
+			"dangerouslyDisableSandbox": {"type": "boolean", "description": "Set this to true to dangerously override sandbox mode and run commands without sandboxing."}
 		},
 		"required": ["command"],
 		"additionalProperties": false
