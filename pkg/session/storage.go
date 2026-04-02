@@ -185,6 +185,24 @@ func SearchSessions(query string) ([]SessionMetadata, error) {
 	return matches, nil
 }
 
+// ValidateCrossProjectResume checks whether a session from a different project
+// can be safely resumed in the current CWD. Returns a warning message if the
+// session's original CWD differs from the current one, or empty string if same.
+// Source: utils/sessionRestore.ts:439-440 — cross-project resume handling
+func ValidateCrossProjectResume(sessionCWD, currentCWD string) string {
+	if sessionCWD == "" || currentCWD == "" {
+		return ""
+	}
+	if sessionCWD == currentCWD {
+		return ""
+	}
+	return fmt.Sprintf(
+		"This session was originally started in %s but you are now in %s. "+
+			"File paths from the original session may not resolve correctly.",
+		sessionCWD, currentCWD,
+	)
+}
+
 func homeDir() string {
 	home, _ := homeDirFn()
 	return home
