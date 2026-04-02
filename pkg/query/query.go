@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
 	"github.com/projectbarks/gopher-code/pkg/provider"
@@ -95,6 +96,13 @@ func Query(
 ) error {
 	retryCount := 0
 	compactedOnce := false
+
+	// Token budget tracker for +500k feature
+	// Source: query.ts:111, 1308-1355
+	var budgetTracker *compact.BudgetTracker
+	if sess.Config.TokenBudgetTarget > 0 {
+		budgetTracker = compact.NewBudgetTracker()
+	}
 
 	// Memory prefetch: load CLAUDE.md once before the loop
 	memoryContent := loadClaudeMD(sess.CWD)
@@ -292,6 +300,18 @@ func Query(
 				sess.PushMessage(message.UserMessage("Output token limit hit. Resume directly — no apology, no recap of what you were doing. Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces."))
 				continue
 			}
+
+			// Token budget nudge: if user specified +500k, check if we should continue
+			// Source: query.ts:1308-1355
+			if sess.Config.TokenBudgetTarget > 0 && budgetTracker != nil {
+				decision := budgetTracker.CheckTokenBudget(sess.Config.TokenBudgetTarget, sess.TotalOutputTokens)
+				if decision.Action == compact.BudgetContinue {
+					nudgeMsg := compact.GetBudgetContinuationMessage(decision.Pct, decision.TurnTokens, decision.Budget)
+					sess.PushMessage(message.UserMessage(nudgeMsg))
+					continue
+				}
+			}
+
 			emit(onEvent, QueryEvent{Type: QEventTurnComplete, StopReason: stopReason})
 			return nil
 		}
