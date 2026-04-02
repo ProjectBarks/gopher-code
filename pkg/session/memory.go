@@ -112,6 +112,14 @@ func FormatMemoryFile(entry *MemoryEntry) string {
 	return sb.String()
 }
 
+// MEMORY.md index constants.
+// Source: memdir/memdir.ts:34-38
+const (
+	EntrypointName     = "MEMORY.md"
+	MaxEntrypointLines = 200
+	MaxEntrypointBytes = 25_000
+)
+
 // MemoryDir returns the path to the memory directory.
 func MemoryDir() string {
 	home, _ := os.UserHomeDir()
@@ -120,5 +128,95 @@ func MemoryDir() string {
 
 // MemoryIndexPath returns the path to MEMORY.md in the given memory dir.
 func MemoryIndexPath(memDir string) string {
-	return filepath.Join(memDir, "MEMORY.md")
+	return filepath.Join(memDir, EntrypointName)
+}
+
+// EntrypointTruncation describes the result of truncating MEMORY.md.
+// Source: memdir/memdir.ts:41-47
+type EntrypointTruncation struct {
+	Content          string
+	LineCount        int
+	ByteCount        int
+	WasLineTruncated bool
+	WasByteTruncated bool
+}
+
+// TruncateEntrypointContent truncates MEMORY.md to line and byte caps.
+// Source: memdir/memdir.ts:57-103
+func TruncateEntrypointContent(raw string) EntrypointTruncation {
+	trimmed := strings.TrimSpace(raw)
+	lines := strings.Split(trimmed, "\n")
+	lineCount := len(lines)
+	byteCount := len(trimmed)
+
+	wasLineTruncated := lineCount > MaxEntrypointLines
+	wasByteTruncated := byteCount > MaxEntrypointBytes
+
+	if !wasLineTruncated && !wasByteTruncated {
+		return EntrypointTruncation{
+			Content:          trimmed,
+			LineCount:        lineCount,
+			ByteCount:        byteCount,
+			WasLineTruncated: false,
+			WasByteTruncated: false,
+		}
+	}
+
+	truncated := trimmed
+	if wasLineTruncated {
+		truncated = strings.Join(lines[:MaxEntrypointLines], "\n")
+	}
+	if len(truncated) > MaxEntrypointBytes {
+		cutAt := strings.LastIndex(truncated[:MaxEntrypointBytes], "\n")
+		if cutAt > 0 {
+			truncated = truncated[:cutAt]
+		} else {
+			truncated = truncated[:MaxEntrypointBytes]
+		}
+	}
+
+	var reason string
+	switch {
+	case wasByteTruncated && !wasLineTruncated:
+		reason = fmt.Sprintf("%d bytes (limit: %d) — index entries are too long", byteCount, MaxEntrypointBytes)
+	case wasLineTruncated && !wasByteTruncated:
+		reason = fmt.Sprintf("%d lines (limit: %d)", lineCount, MaxEntrypointLines)
+	default:
+		reason = fmt.Sprintf("%d lines and %d bytes", lineCount, byteCount)
+	}
+
+	return EntrypointTruncation{
+		Content:          truncated + "\n\n> WARNING: " + EntrypointName + " is " + reason + ". Only part of it was loaded. Keep index entries to one line under ~200 chars; move detail into topic files.",
+		LineCount:        lineCount,
+		ByteCount:        byteCount,
+		WasLineTruncated: wasLineTruncated,
+		WasByteTruncated: wasByteTruncated,
+	}
+}
+
+// AppendToMemoryIndex adds a one-line entry to MEMORY.md.
+func AppendToMemoryIndex(memDir, line string) error {
+	indexPath := MemoryIndexPath(memDir)
+	if err := os.MkdirAll(memDir, 0755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(indexPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.WriteString(line + "\n")
+	return err
+}
+
+// ReadMemoryIndex reads MEMORY.md with truncation applied.
+func ReadMemoryIndex(memDir string) (EntrypointTruncation, error) {
+	data, err := os.ReadFile(MemoryIndexPath(memDir))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return EntrypointTruncation{}, nil
+		}
+		return EntrypointTruncation{}, err
+	}
+	return TruncateEntrypointContent(string(data)), nil
 }
