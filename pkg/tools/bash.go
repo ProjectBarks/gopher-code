@@ -10,24 +10,34 @@ import (
 	"time"
 )
 
+// Bash timeout constants matching TS source.
+// Source: utils/timeouts.ts:2-3
+const (
+	DefaultBashTimeoutMs = 120_000 // 2 minutes
+	MaxBashTimeoutMs     = 600_000 // 10 minutes
+)
+
 // BashTool executes shell commands.
 type BashTool struct{}
 
 type bashInput struct {
-	Command string `json:"command"`
-	Timeout int    `json:"timeout"`
+	Command     string `json:"command"`
+	Description string `json:"description,omitempty"`
+	Timeout     int    `json:"timeout,omitempty"` // milliseconds
 }
 
 func (b *BashTool) Name() string        { return "Bash" }
-func (b *BashTool) Description() string { return "Execute a bash command" }
+func (b *BashTool) Description() string { return "Executes a given bash command and returns its output." }
 func (b *BashTool) IsReadOnly() bool    { return false }
 
+// Source: BashTool.tsx:220-259
 func (b *BashTool) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
 		"properties": {
-			"command": {"type": "string", "description": "The bash command to execute"},
-			"timeout": {"type": "integer", "description": "Timeout in seconds (default 30)"}
+			"command": {"type": "string", "description": "The command to execute"},
+			"description": {"type": "string", "description": "Clear, concise description of what this command does in active voice."},
+			"timeout": {"type": "integer", "description": "Optional timeout in milliseconds (up to 600000ms / 10 minutes). By default, your command will timeout after 120000ms (2 minutes)."}
 		},
 		"required": ["command"],
 		"additionalProperties": false
@@ -43,12 +53,17 @@ func (b *BashTool) Execute(ctx context.Context, tc *ToolContext, input json.RawM
 		return ErrorOutput("command is required"), nil
 	}
 
-	timeout := 30
+	// Timeout: default 120s, max 600s, matching TS source
+	// Source: utils/timeouts.ts:2-3, 12-39
+	timeoutMs := DefaultBashTimeoutMs
 	if in.Timeout > 0 {
-		timeout = in.Timeout
+		timeoutMs = in.Timeout
+		if timeoutMs > MaxBashTimeoutMs {
+			timeoutMs = MaxBashTimeoutMs
+		}
 	}
 
-	cmdCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+	cmdCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
 
 	cmd := exec.CommandContext(cmdCtx, "sh", "-c", in.Command)
@@ -64,7 +79,7 @@ func (b *BashTool) Execute(ctx context.Context, tc *ToolContext, input json.RawM
 	output := stdout.String() + stderr.String()
 	if err != nil {
 		if cmdCtx.Err() == context.DeadlineExceeded {
-			return ErrorOutput(fmt.Sprintf("command timed out after %d seconds", timeout)), nil
+			return ErrorOutput(fmt.Sprintf("command timed out after %d seconds", timeoutMs/1000)), nil
 		}
 		return ErrorOutput(fmt.Sprintf("command failed: %s\n%s", err, output)), nil
 	}
