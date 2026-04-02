@@ -1,11 +1,26 @@
 package permissions
 
-type PermissionMode int
+// PermissionMode matches the TS permission modes.
+// Source: types/permissions.ts:16-29
+type PermissionMode string
 
 const (
-	AutoApprove PermissionMode = iota
-	Interactive
-	Deny
+	// External modes (user-facing)
+	// Source: types/permissions.ts:16-22
+	ModeDefault          PermissionMode = "default"
+	ModeAcceptEdits      PermissionMode = "acceptEdits"
+	ModeBypassPermissions PermissionMode = "bypassPermissions"
+	ModeDontAsk          PermissionMode = "dontAsk"
+	ModePlan             PermissionMode = "plan"
+
+	// Internal modes
+	// Source: types/permissions.ts:28
+	ModeAuto   PermissionMode = "auto"
+
+	// Legacy aliases for backward compatibility with existing Go code
+	AutoApprove = ModeBypassPermissions
+	Interactive = ModeDefault
+	Deny        PermissionMode = "deny" // Not in TS, used internally
 )
 
 // PermissionDecision is a sealed interface for permission check results.
