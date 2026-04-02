@@ -147,6 +147,44 @@ func ListSessions() ([]SessionMetadata, error) {
 	return metas, nil
 }
 
+// SearchSessions searches sessions by ID prefix, name/title, or CWD.
+// Returns matching sessions sorted by recency.
+// Source: utils/sessionStorage.ts:3065-3104
+func SearchSessions(query string) ([]SessionMetadata, error) {
+	all, err := ListSessions()
+	if err != nil {
+		return nil, err
+	}
+
+	if query == "" {
+		return all, nil
+	}
+
+	q := strings.ToLower(strings.TrimSpace(query))
+	var matches []SessionMetadata
+
+	for _, m := range all {
+		// Match by ID prefix
+		if strings.HasPrefix(strings.ToLower(m.ID), q) {
+			matches = append(matches, m)
+			continue
+		}
+		// Match by name/title (substring, case-insensitive)
+		// Source: sessionStorage.ts:3079-3080
+		if m.Name != "" && strings.Contains(strings.ToLower(m.Name), q) {
+			matches = append(matches, m)
+			continue
+		}
+		// Match by CWD (substring)
+		if m.CWD != "" && strings.Contains(strings.ToLower(m.CWD), q) {
+			matches = append(matches, m)
+			continue
+		}
+	}
+
+	return matches, nil
+}
+
 func homeDir() string {
 	home, _ := homeDirFn()
 	return home
