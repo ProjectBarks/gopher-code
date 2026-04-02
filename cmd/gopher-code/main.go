@@ -88,15 +88,51 @@ func main() {
 	prov := provider.NewAnthropicProvider(apiKey, *model)
 	registry := tools.NewRegistry()
 	tools.RegisterDefaults(registry)
+	tools.RegisterAgentTool(registry, prov, query.AsQueryFunc())
 
-	cfg := session.SessionConfig{
-		Model:          *model,
-		SystemPrompt:   sysPrompt,
-		MaxTurns:       *maxTurns,
-		TokenBudget:    compact.DefaultBudget(),
-		PermissionMode: permMode,
+	// Try to load an existing session via -c or -r flags
+	var sess *session.SessionState
+
+	if *continueSession {
+		loaded, err := session.LoadLatest(*cwd)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "No session to continue: %v\n", err)
+			// Fall through to create new session
+		} else {
+			sess = loaded
+			sess.CWD = *cwd // Update CWD
+			// Rebuild system prompt for resumed session
+			sess.Config.SystemPrompt = sysPrompt
+			if *verbose {
+				fmt.Fprintf(os.Stderr, "Resuming session %s (%d turns)\n", sess.ID, sess.TurnCount)
+			}
+		}
 	}
-	sess := session.New(cfg, *cwd)
+
+	if sess == nil && *resume != "" {
+		loaded, err := session.Load(*resume)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Cannot resume session %s: %v\n", *resume, err)
+			os.Exit(1)
+		}
+		sess = loaded
+		sess.CWD = *cwd
+		sess.Config.SystemPrompt = sysPrompt
+		if *verbose {
+			fmt.Fprintf(os.Stderr, "Resuming session %s (%d turns)\n", sess.ID, sess.TurnCount)
+		}
+	}
+
+	if sess == nil {
+		cfg := session.SessionConfig{
+			Model:          *model,
+			SystemPrompt:   sysPrompt,
+			MaxTurns:       *maxTurns,
+			TokenBudget:    compact.DefaultBudget(),
+			PermissionMode: permMode,
+		}
+		sess = session.New(cfg, *cwd)
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -159,18 +195,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Log session management flags (placeholders until persistence is implemented)
-	if *continueSession {
-		if *verbose {
-			fmt.Fprintln(os.Stderr, "Note: --continue requires session persistence (not yet implemented)")
-		}
-	}
-	if *resume != "" {
-		if *verbose {
-			fmt.Fprintf(os.Stderr, "Note: --resume=%s requires session persistence (not yet implemented)\n", *resume)
-		}
-	}
-
 	// Interactive REPL
-	cli.RunREPL(ctx, sess, prov, registry)
+	cli.RunREPL(ctx, sess, prov, registry, *verbose)
 }

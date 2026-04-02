@@ -18,13 +18,14 @@ import (
 )
 
 // RunREPL starts an interactive read-eval-print loop.
-func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.ModelProvider, registry *tools.ToolRegistry) {
+func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.ModelProvider, registry *tools.ToolRegistry, verbose bool) {
 	scanner := bufio.NewScanner(os.Stdin)
 	orchestrator := tools.NewOrchestrator(registry)
 
 	fmt.Println("gopher-code v0.1.0")
 	fmt.Printf("Model: %s | CWD: %s\n", sess.Config.Model, sess.CWD)
-	fmt.Println("Type your message. Press Ctrl+D to exit.")
+	fmt.Printf("Session: %s\n", sess.ID[:8])
+	fmt.Println("Type your message. Ctrl+D to exit. /help for commands.")
 	fmt.Println()
 
 	for {
@@ -32,7 +33,18 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 		if !scanner.Scan() {
 			break
 		}
-		input := strings.TrimSpace(scanner.Text())
+		input := scanner.Text()
+
+		// Multi-line: if line ends with \, continue reading
+		for strings.HasSuffix(strings.TrimSpace(input), "\\") {
+			input = strings.TrimSuffix(strings.TrimSpace(input), "\\")
+			fmt.Print("... ")
+			if !scanner.Scan() {
+				break
+			}
+			input += "\n" + scanner.Text()
+		}
+		input = strings.TrimSpace(input)
 		if input == "" {
 			continue
 		}
@@ -105,10 +117,30 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 			}
 			continue
 		case input == "/resume":
-			fmt.Println("Session persistence not yet implemented.")
+			metas, err := session.ListSessions()
+			if err != nil || len(metas) == 0 {
+				fmt.Println("No saved sessions found.")
+			} else {
+				fmt.Println("Saved sessions (most recent first):")
+				limit := len(metas)
+				if limit > 10 {
+					limit = 10
+				}
+				for i := 0; i < limit; i++ {
+					m := metas[i]
+					fmt.Printf("  %s  %s  turns=%d  %s\n",
+						m.ID[:8], m.CWD, m.TurnCount,
+						m.UpdatedAt.Format("2006-01-02 15:04"))
+				}
+				fmt.Println("Use --resume <id> to resume a session.")
+			}
 			continue
 		case input == "/save":
-			fmt.Println("Session persistence not yet implemented.")
+			if err := sess.Save(); err != nil {
+				fmt.Fprintf(os.Stderr, "Save failed: %v\n", err)
+			} else {
+				fmt.Printf("Session %s saved.\n", sess.ID[:8])
+			}
 			continue
 		case strings.HasPrefix(input, "/permissions"):
 			parts := strings.Fields(input)
@@ -134,6 +166,18 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 				}
 				fmt.Printf("Permission mode: %s\n", modes[sess.Config.PermissionMode])
 			}
+			continue
+		case strings.HasPrefix(input, "!"):
+			cmd := strings.TrimSpace(strings.TrimPrefix(input, "!"))
+			if cmd == "" {
+				continue
+			}
+			shellCmd := exec.Command("sh", "-c", cmd)
+			shellCmd.Dir = sess.CWD
+			shellCmd.Stdout = os.Stdout
+			shellCmd.Stderr = os.Stderr
+			shellCmd.Stdin = os.Stdin
+			shellCmd.Run()
 			continue
 		case input == "/doctor":
 			fmt.Println("gopher-code doctor")
@@ -171,12 +215,20 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
 		}
+
+		// Auto-save after each exchange
+		if saveErr := sess.Save(); saveErr != nil {
+			if verbose {
+				fmt.Fprintf(os.Stderr, "Auto-save failed: %v\n", saveErr)
+			}
+		}
+
 		fmt.Println()
 	}
 }
 
 func printHelp() {
-	fmt.Println("Slash commands:")
+	fmt.Println("Commands:")
 	fmt.Println("  /help          Show this help")
 	fmt.Println("  /clear         Clear conversation history")
 	fmt.Println("  /compact       Compact conversation to save context")
@@ -190,4 +242,7 @@ func printHelp() {
 	fmt.Println("  /resume        List saved sessions")
 	fmt.Println("  /doctor        Check system health")
 	fmt.Println("  /exit          Exit")
+	fmt.Println()
+	fmt.Println("  ! <command>    Run a shell command")
+	fmt.Println("  line ending \\  Continue input on next line")
 }

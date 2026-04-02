@@ -1,0 +1,75 @@
+{
+  "_source": "Claude Code v2.1.88 — tools.ts getAllBaseTools() and tool properties",
+  "_purpose": "Tool registration order, deferral status, feature gating, and simple mode rules",
+
+  "always_available_tools": [
+    "Agent", "TaskOutput", "Bash", "ExitPlanMode",
+    "Read", "Edit", "Write", "NotebookEdit",
+    "WebFetch", "TodoWrite", "WebSearch", "TaskStop",
+    "AskUserQuestion", "Skill", "EnterPlanMode",
+    "SendMessage", "Brief", "ListMcpResources", "ReadMcpResource"
+  ],
+
+  "conditionally_available_tools": {
+    "Glob": "not available when hasEmbeddedSearchTools()",
+    "Grep": "not available when hasEmbeddedSearchTools()",
+    "Config": "USER_TYPE === 'ant' only",
+    "LSP": "ENABLE_LSP_TOOL env var",
+    "TaskCreate": "isTodoV2Enabled()",
+    "TaskGet": "isTodoV2Enabled()",
+    "TaskUpdate": "isTodoV2Enabled()",
+    "TaskList": "isTodoV2Enabled()",
+    "EnterWorktree": "isWorktreeModeEnabled()",
+    "ExitWorktree": "isWorktreeModeEnabled()",
+    "REPL": "USER_TYPE === 'ant' and feature gate",
+    "PowerShell": "Windows platform",
+    "CronCreate": "AGENT_TRIGGERS feature",
+    "CronDelete": "AGENT_TRIGGERS feature",
+    "CronList": "AGENT_TRIGGERS feature",
+    "RemoteTrigger": "AGENT_TRIGGERS_REMOTE feature",
+    "ToolSearch": "isToolSearchEnabledOptimistic()",
+    "Sleep": "PROACTIVE or KAIROS feature"
+  },
+
+  "deferred_tools": [
+    "Config", "EnterPlanMode", "ExitPlanMode",
+    "EnterWorktree", "ExitWorktree",
+    "ListMcpResources", "ReadMcpResources",
+    "LSP", "NotebookEdit",
+    "RemoteTrigger", "SendMessage",
+    "CronCreate", "CronDelete", "CronList",
+    "TaskCreate", "TaskGet", "TaskList", "TaskUpdate", "TaskStop",
+    "TeamCreate", "TeamDelete",
+    "TodoWrite", "WebFetch", "WebSearch"
+  ],
+
+  "never_deferred_tools": [
+    "Agent", "Bash", "Read", "Edit", "Write",
+    "Glob", "Grep", "AskUserQuestion", "Skill", "Brief"
+  ],
+
+  "simple_mode_tools": ["Bash", "Read", "Edit"],
+
+  "registration_order_first_5": ["Agent", "TaskOutput", "Bash", "Glob", "Grep"],
+
+  "message_normalization_pipeline": [
+    "reorder_attachments_bubble_up",
+    "filter_virtual_messages",
+    "build_strip_targets_for_media_errors",
+    "convert_system_local_commands_to_user",
+    "strip_tool_references_unavailable",
+    "strip_oversized_media",
+    "normalize_tool_inputs",
+    "merge_assistant_messages_by_id",
+    "relocate_tool_reference_siblings",
+    "filter_orphaned_thinking_only_assistants",
+    "strip_trailing_thinking",
+    "filter_whitespace_only_assistants",
+    "ensure_non_empty_assistant_content",
+    "merge_adjacent_user_messages",
+    "smoosh_system_reminder_into_tool_results",
+    "sanitize_error_tool_result_content",
+    "append_message_id_tags_for_snip",
+    "validate_image_sizes"
+  ]
+}
