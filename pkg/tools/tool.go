@@ -91,3 +91,20 @@ func CheckToolPermissions(tool Tool, ctx context.Context, tc *ToolContext, input
 	}
 	return nil // Default: passthrough to generic permission system
 }
+
+// FeatureGatedTool is an optional interface tools implement to control
+// whether they are available in the current environment.
+// Default is true (enabled) when not implemented.
+// Source: Tool.ts:403, 758
+type FeatureGatedTool interface {
+	IsEnabled() bool
+}
+
+// IsToolEnabled checks if a tool is enabled. Defaults to true.
+// Source: Tool.ts:749, 758 — isEnabled: () => true
+func IsToolEnabled(tool Tool) bool {
+	if gated, ok := tool.(FeatureGatedTool); ok {
+		return gated.IsEnabled()
+	}
+	return true
+}
