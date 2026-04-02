@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -134,6 +135,11 @@ func Query(
 			}
 		}
 
+		// Add JSON schema for structured output if configured
+		if sess.Config.JSONSchema != "" {
+			req.JSONSchema = json.RawMessage(sess.Config.JSONSchema)
+		}
+
 		// 4. Call provider.Stream - with error classification for L2
 		ch, err := prov.Stream(ctx, req)
 		if err != nil {
@@ -228,6 +234,16 @@ func Query(
 			sess.TotalCacheReadTokens += *usage.CacheReadInputTokens
 		}
 		sess.TurnCount++
+
+		// Budget check: stop if spend exceeds --max-budget-usd
+		if sess.Config.MaxBudgetUSD > 0 {
+			// Rough Sonnet pricing: $3/MTok input, $15/MTok output
+			cost := float64(sess.TotalInputTokens)/1_000_000*3.0 + float64(sess.TotalOutputTokens)/1_000_000*15.0
+			cost = math.Round(cost*10000) / 10000 // round to 4 decimal places
+			if cost > sess.Config.MaxBudgetUSD {
+				return &AgentError{Kind: ErrProvider, Detail: fmt.Sprintf("budget exceeded: $%.4f > $%.2f", cost, sess.Config.MaxBudgetUSD)}
+			}
+		}
 
 		// Emit usage event
 		ue := QueryEvent{

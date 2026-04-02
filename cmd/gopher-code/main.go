@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -132,6 +134,26 @@ func main() {
 	// Permission mode
 	permModeFlag := flag.String("permission-mode", "", "Permission mode: auto, interactive, deny")
 
+	// Handle "completion" subcommand before flag.Parse()
+	if len(os.Args) > 1 && os.Args[1] == "completion" {
+		shell := "bash"
+		if len(os.Args) > 2 {
+			shell = os.Args[2]
+		}
+		switch shell {
+		case "bash":
+			fmt.Println(cli.GenerateBashCompletion())
+		case "zsh":
+			fmt.Println(cli.GenerateZshCompletion())
+		case "fish":
+			fmt.Println(cli.GenerateFishCompletion())
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown shell: %s (use bash, zsh, fish)\n", shell)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	flag.Parse()
 
 	// Handle --version
@@ -156,21 +178,10 @@ func main() {
 
 	// Suppress unused variable warnings for flags reserved for future use
 	_ = addDirs
-	_ = maxBudgetUSD
-	_ = providerFlag
-	_ = apiURL
-	_ = inputFormat
-	_ = jsonSchema
 	_ = includeHookEvents
 	_ = worktree
 	_ = betas
 	_ = fallbackModel
-
-	apiKey, err := auth.GetAPIKey()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
 
 	if *cwd == "" {
 		var err error
@@ -306,8 +317,35 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Max turns: %d\n", *maxTurns)
 	}
 
-	// Create provider, registry, session
-	prov := provider.NewAnthropicProvider(apiKey, *model)
+	// Create provider based on --provider flag
+	var prov provider.ModelProvider
+	switch *providerFlag {
+	case "anthropic", "":
+		apiKey, err := auth.GetAPIKey()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		p := provider.NewAnthropicProvider(apiKey, *model)
+		if *apiURL != "" {
+			p.SetBaseURL(*apiURL)
+		}
+		prov = p
+	case "bedrock":
+		prov = provider.NewBedrockProvider(os.Getenv("AWS_REGION"), *model)
+	case "vertex":
+		prov = provider.NewVertexProvider(os.Getenv("GOOGLE_PROJECT_ID"), os.Getenv("GOOGLE_REGION"), *model)
+	case "openai":
+		apiKey, _ := auth.GetAPIKey()
+		url := *apiURL
+		if url == "" {
+			url = "https://api.openai.com"
+		}
+		prov = provider.NewOpenAICompatProvider(url, apiKey, *model)
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown provider: %s\n", *providerFlag)
+		os.Exit(1)
+	}
 	registry := tools.NewRegistry()
 	planState := tools.RegisterDefaults(registry)
 	tools.RegisterAgentTool(registry, prov, query.AsQueryFunc())
@@ -396,6 +434,10 @@ func main() {
 			PermissionMode:  permMode,
 			ThinkingEnabled: thinkingEnabled,
 			ThinkingBudget:  thinkingBudget,
+			MaxBudgetUSD:    *maxBudgetUSD,
+		}
+		if *jsonSchema != "" {
+			cfg.JSONSchema = *jsonSchema
 		}
 		sess = session.New(cfg, *cwd)
 	}
@@ -418,23 +460,38 @@ func main() {
 
 	// Handle -p / --print mode
 	if *printMode {
-		prompt := strings.Join(flag.Args(), " ")
-		if prompt == "" {
-			// Read from stdin
-			data, err := io.ReadAll(os.Stdin)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
+		orchestrator := tools.NewOrchestrator(registry)
+
+		// Handle --input-format stream-json: read JSON lines from stdin
+		if *inputFormat == "stream-json" {
+			scanner := bufio.NewScanner(os.Stdin)
+			for scanner.Scan() {
+				line := scanner.Text()
+				var msg struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				}
+				if json.Unmarshal([]byte(line), &msg) == nil && msg.Text != "" {
+					sess.PushMessage(message.UserMessage(msg.Text))
+				}
+			}
+		} else {
+			prompt := strings.Join(flag.Args(), " ")
+			if prompt == "" {
+				// Read from stdin
+				data, err := io.ReadAll(os.Stdin)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
+					os.Exit(1)
+				}
+				prompt = strings.TrimSpace(string(data))
+			}
+			if prompt == "" {
+				fmt.Fprintln(os.Stderr, "Error: no prompt provided")
 				os.Exit(1)
 			}
-			prompt = strings.TrimSpace(string(data))
+			sess.PushMessage(message.UserMessage(prompt))
 		}
-		if prompt == "" {
-			fmt.Fprintln(os.Stderr, "Error: no prompt provided")
-			os.Exit(1)
-		}
-
-		sess.PushMessage(message.UserMessage(prompt))
-		orchestrator := tools.NewOrchestrator(registry)
 		if hookRunner != nil {
 			orchestrator.SetHookRunner(hookRunner)
 		}

@@ -36,6 +36,11 @@ func NewAnthropicProvider(apiKey, model string) *AnthropicProvider {
 	}
 }
 
+// SetBaseURL overrides the default Anthropic API base URL.
+func (p *AnthropicProvider) SetBaseURL(url string) {
+	p.baseURL = url
+}
+
 // Name returns the provider name.
 func (p *AnthropicProvider) Name() string {
 	return "anthropic"

@@ -38,4 +38,5 @@ type ModelRequest struct {
 	Tools       []ToolDefinition `json:"tools,omitempty"`
 	Temperature *float64         `json:"temperature,omitempty"`
 	Thinking    *ThinkingConfig  `json:"thinking,omitempty"`
+	JSONSchema  json.RawMessage  `json:"json_schema,omitempty"`
 }
