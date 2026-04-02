@@ -156,6 +156,17 @@ func Query(
 		// 4. Call provider.Stream - with error classification for L2
 		ch, err := prov.Stream(ctx, req)
 		if err != nil {
+			// Fallback model switch: when 529 retries are exhausted and a fallback is configured
+			// Source: query.ts:894-951
+			if fte, ok := IsFallbackTriggered(err); ok && sess.Config.FallbackModel != "" {
+				sess.Config.Model = fte.FallbackModel
+				emit(onEvent, QueryEvent{
+					Type: QEventTextDelta,
+					Text: fmt.Sprintf("\n[Switched to %s due to high demand for %s]\n", fte.FallbackModel, fte.OriginalModel),
+				})
+				continue // Retry with fallback model
+			}
+
 			errStr := strings.ToLower(err.Error())
 
 			// Context too long: compact and retry once

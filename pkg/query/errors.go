@@ -1,6 +1,9 @@
 package query
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // AgentErrorKind identifies the category of agent error.
 type AgentErrorKind int
@@ -39,4 +42,24 @@ func (e *AgentError) Error() string {
 
 func (e *AgentError) Unwrap() error {
 	return e.Wrapped
+}
+
+// FallbackTriggeredError is thrown when 529 retries are exhausted and a fallback model is available.
+// Source: services/api/withRetry.ts:160-168
+type FallbackTriggeredError struct {
+	OriginalModel string
+	FallbackModel string
+}
+
+func (e *FallbackTriggeredError) Error() string {
+	return fmt.Sprintf("Model fallback triggered: %s -> %s", e.OriginalModel, e.FallbackModel)
+}
+
+// IsFallbackTriggered checks if an error is a FallbackTriggeredError.
+func IsFallbackTriggered(err error) (*FallbackTriggeredError, bool) {
+	var fte *FallbackTriggeredError
+	if errors.As(err, &fte) {
+		return fte, true
+	}
+	return nil, false
 }
