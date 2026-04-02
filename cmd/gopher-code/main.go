@@ -400,6 +400,11 @@ func main() {
 		sess.Name = *sessionName
 	}
 
+	// Wire interactive permission policy (runtime only, not serialized)
+	if permMode == permissions.Interactive {
+		sess.PermissionPolicy = permissions.NewInteractivePolicy()
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 

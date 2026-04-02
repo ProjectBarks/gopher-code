@@ -52,6 +52,9 @@ type SessionState struct {
 	TotalCacheReadTokens     int               `json:"total_cache_read_tokens"`
 	LastInputTokens          int               `json:"last_input_tokens"`
 	CreatedAt                time.Time         `json:"created_at"`
+
+	// PermissionPolicy is the runtime permission policy (not serialized).
+	PermissionPolicy interface{} `json:"-"`
 }
 
 // New creates a new SessionState with the given config and working directory.

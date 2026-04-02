@@ -19,13 +19,44 @@ const microCompactThreshold = 10000
 
 const maxRetries = 3
 
-// loadClaudeMD reads CLAUDE.md from the given directory, if it exists.
+// loadClaudeMD loads CLAUDE.md files following the same hierarchy as the TS source:
+// 1. Global ~/.claude/CLAUDE.md
+// 2. Walk up from CWD (up to 10 levels) looking for CLAUDE.md
+// 3. Check .claude/CLAUDE.md in CWD (distinct from CWD/CLAUDE.md)
 func loadClaudeMD(cwd string) string {
-	data, err := os.ReadFile(filepath.Join(cwd, "CLAUDE.md"))
-	if err != nil {
-		return ""
+	var parts []string
+
+	// 1. Global CLAUDE.md
+	if home, err := os.UserHomeDir(); err == nil {
+		if data, err := os.ReadFile(filepath.Join(home, ".claude", "CLAUDE.md")); err == nil {
+			parts = append(parts, string(data))
+		}
 	}
-	return string(data)
+
+	// 2. Walk up from CWD (up to 10 levels)
+	dir := cwd
+	for i := 0; i < 10; i++ {
+		if data, err := os.ReadFile(filepath.Join(dir, "CLAUDE.md")); err == nil {
+			parts = append(parts, string(data))
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	// 3. Check .claude/CLAUDE.md in CWD (distinct from CLAUDE.md in CWD)
+	dotClaudePath := filepath.Join(cwd, ".claude", "CLAUDE.md")
+	cwdPath := filepath.Join(cwd, "CLAUDE.md")
+	if dotClaudePath != cwdPath {
+		if data, err := os.ReadFile(dotClaudePath); err == nil {
+			parts = append(parts, string(data))
+		}
+	}
+
+	return strings.Join(parts, "\n\n")
 }
 
 // buildSystemPrompt combines the base system prompt with memory content.
@@ -250,9 +281,15 @@ func Query(
 		}
 
 		// 10. Execute tools via orchestrator
+		var permPolicy permissions.PermissionPolicy
+		if pp, ok := sess.PermissionPolicy.(permissions.PermissionPolicy); ok && pp != nil {
+			permPolicy = pp
+		} else {
+			permPolicy = permissions.NewRuleBasedPolicy(sess.Config.PermissionMode)
+		}
 		toolCtx := &tools.ToolContext{
 			CWD:         sess.CWD,
-			Permissions: permissions.NewRuleBasedPolicy(sess.Config.PermissionMode),
+			Permissions: permPolicy,
 			SessionID:   sess.ID,
 		}
 		results := orchestrator.ExecuteBatch(ctx, toolCalls, toolCtx)
