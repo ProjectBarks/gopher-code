@@ -16,19 +16,10 @@ const (
 	anthropicVersion        = "2023-06-01"
 )
 
-// Model alias mappings
-var modelAliases = map[string]string{
-	"haiku":  "claude-haiku-4-5-20251001",
-	"sonnet": "claude-sonnet-4-6",
-	"opus":   "claude-opus-4-6",
-}
-
-// resolveModel converts model aliases to full model IDs
+// resolveModel converts model aliases to full model IDs using the full model system.
+// Source: model/model.ts:445-506
 func resolveModel(model string) string {
-	if resolved, ok := modelAliases[model]; ok {
-		return resolved
-	}
-	return model
+	return NormalizeModelStringForAPI(ParseUserSpecifiedModel(model))
 }
 
 // AnthropicProvider implements the ModelProvider interface for the Anthropic
@@ -161,6 +152,11 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req ModelRequest) (<-cha
 	httpReq.Header.Set("x-api-key", p.apiKey)
 	httpReq.Header.Set("anthropic-version", anthropicVersion)
 	httpReq.Header.Set("content-type", "application/json")
+
+	// Add beta headers — Source: utils/betas.ts:397-428
+	if betas := GetMergedBetas(req.Model, true); len(betas) > 0 {
+		httpReq.Header.Set("anthropic-beta", strings.Join(betas, ","))
+	}
 
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
