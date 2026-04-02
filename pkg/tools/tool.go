@@ -65,3 +65,29 @@ func CheckDestructive(tool Tool, input json.RawMessage) bool {
 	}
 	return false
 }
+
+// PermissionCheckResult is the result of a tool-specific permission check.
+// Source: Tool.ts:500-503 — checkPermissions returns PermissionResult
+type PermissionCheckResult struct {
+	Behavior string // "allow", "deny", "ask", "passthrough"
+	Message  string // Reason for deny/ask
+}
+
+// ToolPermissionChecker is an optional interface tools implement for
+// tool-specific permission logic. Called before the generic waterfall.
+// Default behavior is "allow" (passthrough to generic system).
+// Source: Tool.ts:495-503, 762-766
+type ToolPermissionChecker interface {
+	CheckPermissions(ctx context.Context, tc *ToolContext, input json.RawMessage) PermissionCheckResult
+}
+
+// CheckToolPermissions calls the tool's CheckPermissions if implemented.
+// Returns nil if the tool doesn't implement the interface (use generic check).
+// Source: Tool.ts:762-766 — default: { behavior: 'allow', updatedInput: input }
+func CheckToolPermissions(tool Tool, ctx context.Context, tc *ToolContext, input json.RawMessage) *PermissionCheckResult {
+	if checker, ok := tool.(ToolPermissionChecker); ok {
+		result := checker.CheckPermissions(ctx, tc, input)
+		return &result
+	}
+	return nil // Default: passthrough to generic permission system
+}
