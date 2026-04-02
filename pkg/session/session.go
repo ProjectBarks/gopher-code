@@ -26,8 +26,9 @@ type SessionConfig struct {
 	PermissionMode  permissions.PermissionMode
 	ThinkingEnabled bool
 	ThinkingBudget  int     // default 10000
-	JSONSchema      string  `json:"json_schema,omitempty"`
-	MaxBudgetUSD    float64 `json:"max_budget_usd,omitempty"`
+	JSONSchema        string  `json:"json_schema,omitempty"`
+	MaxBudgetUSD      float64 `json:"max_budget_usd,omitempty"`
+	TokenBudgetTarget int     `json:"token_budget_target,omitempty"` // +500k feature: output token target
 }
 
 // DefaultConfig returns sensible defaults.

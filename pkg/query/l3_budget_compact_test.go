@@ -379,3 +379,85 @@ func TestL3BudgetCompact(t *testing.T) {
 		}
 	})
 }
+
+func TestTokenBudgetNudge(t *testing.T) {
+	// Source: query.ts:1308-1355 — token budget continuation nudge
+
+	t.Run("nudge_injected_when_under_budget", func(t *testing.T) {
+		// Source: query.ts:1316-1340 — action='continue' injects nudge message
+		// With a 100k budget, when the model produces ~5k output tokens
+		// (well under 90% threshold), a nudge should be injected and the loop continues.
+
+		// Turn 1: model responds with text (5k output tokens)
+		// Turn 2: model responds with text (after nudge)
+		prov := testharness.NewScriptedProvider(
+			testharness.MakeTextTurnWithUsage("first part", provider.StopReasonEndTurn,
+				provider.Usage{InputTokens: 1000, OutputTokens: 5000}),
+			testharness.MakeTextTurnWithUsage("second part", provider.StopReasonEndTurn,
+				provider.Usage{InputTokens: 2000, OutputTokens: 90000}), // now at 95k, above 90% of 100k
+		)
+
+		registry := tools.NewRegistry()
+		orchestrator := tools.NewOrchestrator(registry)
+
+		sess := testharness.MakeSessionWithConfig(session.SessionConfig{
+			Model:             "test-model",
+			MaxTurns:          100,
+			TokenBudget:       compact.DefaultBudget(),
+			PermissionMode:    permissions.AutoApprove,
+			TokenBudgetTarget: 100_000, // +100k
+		})
+
+		err := query.Query(context.Background(), sess, prov, registry, orchestrator, nil)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		// Should have at least 3 messages: user("hello"), asst("first part"), user(nudge), asst("second part")
+		if len(sess.Messages) < 4 {
+			t.Fatalf("expected at least 4 messages (with nudge), got %d", len(sess.Messages))
+		}
+
+		// Find the nudge message
+		foundNudge := false
+		for _, msg := range sess.Messages {
+			if msg.Role == message.RoleUser {
+				for _, b := range msg.Content {
+					if b.Type == message.ContentText && strings.Contains(b.Text, "Stopped at") && strings.Contains(b.Text, "token target") {
+						foundNudge = true
+					}
+				}
+			}
+		}
+		if !foundNudge {
+			t.Error("expected a nudge message containing 'Stopped at...token target'")
+		}
+	})
+
+	t.Run("no_nudge_without_budget_target", func(t *testing.T) {
+		// When TokenBudgetTarget is 0, no nudge should be injected
+		prov := testharness.NewScriptedProvider(
+			testharness.MakeTextTurn("done", provider.StopReasonEndTurn),
+		)
+		registry := tools.NewRegistry()
+		orchestrator := tools.NewOrchestrator(registry)
+
+		sess := testharness.MakeSessionWithConfig(session.SessionConfig{
+			Model:             "test-model",
+			MaxTurns:          100,
+			TokenBudget:       compact.DefaultBudget(),
+			PermissionMode:    permissions.AutoApprove,
+			TokenBudgetTarget: 0, // no budget
+		})
+
+		err := query.Query(context.Background(), sess, prov, registry, orchestrator, nil)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		// Should have exactly 2 messages: user("hello"), asst("done")
+		if len(sess.Messages) != 2 {
+			t.Errorf("expected 2 messages (no nudge), got %d", len(sess.Messages))
+		}
+	})
+}
