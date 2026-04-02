@@ -104,8 +104,14 @@ func Query(
 		budgetTracker = compact.NewBudgetTracker()
 	}
 
-	// Memory prefetch: load CLAUDE.md once before the loop
-	memoryContent := loadClaudeMD(sess.CWD)
+	// Memory prefetch: load CLAUDE.md async, consume before first API call.
+	// Source: query.ts — memory prefetch runs in parallel with skill discovery
+	memCh := make(chan string, 1)
+	go func() {
+		memCh <- loadClaudeMD(sess.CWD)
+	}()
+	// Consume prefetch result (blocks until ready, but file read is fast)
+	memoryContent := <-memCh
 	systemPrompt := buildSystemPrompt(sess.Config.SystemPrompt, memoryContent)
 
 	for {
