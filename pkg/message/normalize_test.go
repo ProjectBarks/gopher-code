@@ -477,3 +477,51 @@ func TestJoinTextAtSeam(t *testing.T) {
 		}
 	})
 }
+
+func TestNormalizeAttachment(t *testing.T) {
+	// Source: utils/messages.ts:3453
+
+	t.Run("wraps_in_system_reminder", func(t *testing.T) {
+		msg := NormalizeAttachment(Attachment{
+			Type:    AttachmentMemory,
+			Content: "User prefers dark mode",
+		})
+		if msg.Role != RoleUser {
+			t.Errorf("expected user role, got %s", msg.Role)
+		}
+		if len(msg.Content) != 1 {
+			t.Fatalf("expected 1 content block, got %d", len(msg.Content))
+		}
+		if !strings.HasPrefix(msg.Content[0].Text, "<system-reminder>") {
+			t.Error("should be wrapped in system-reminder")
+		}
+		if !strings.Contains(msg.Content[0].Text, "User prefers dark mode") {
+			t.Error("should contain original content")
+		}
+	})
+
+	t.Run("truncates_large_content", func(t *testing.T) {
+		largeContent := strings.Repeat("x", MaxAttachmentSize+1000)
+		msg := NormalizeAttachment(Attachment{
+			Type:    AttachmentContext,
+			Content: largeContent,
+		})
+		if !strings.Contains(msg.Content[0].Text, "...[truncated]") {
+			t.Error("large attachment should be truncated")
+		}
+		// The wrapped content should be under MaxAttachmentSize + overhead
+		if len(msg.Content[0].Text) > MaxAttachmentSize+200 {
+			t.Errorf("content too large after truncation: %d", len(msg.Content[0].Text))
+		}
+	})
+
+	t.Run("small_content_unchanged", func(t *testing.T) {
+		msg := NormalizeAttachment(Attachment{
+			Type:    AttachmentFile,
+			Content: "small content",
+		})
+		if strings.Contains(msg.Content[0].Text, "truncated") {
+			t.Error("small content should not be truncated")
+		}
+	})
+}

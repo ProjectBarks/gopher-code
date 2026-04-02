@@ -82,6 +82,44 @@ func (m Message) ToolUses() []ContentBlock {
 // Source: utils/messages.ts:247
 const SyntheticToolResultPlaceholder = "[Tool result missing due to internal error]"
 
+// MaxAttachmentSize is the maximum size for an attachment's text content
+// before it gets truncated. Roughly matches the micro-compact threshold.
+const MaxAttachmentSize = 10_000
+
+// AttachmentType identifies the kind of attachment.
+type AttachmentType string
+
+const (
+	AttachmentMemory     AttachmentType = "memory"
+	AttachmentHookResult AttachmentType = "hook_result"
+	AttachmentContext    AttachmentType = "context"
+	AttachmentFile       AttachmentType = "file"
+)
+
+// Attachment represents system-injected context that gets converted to
+// API-compatible user messages during normalization.
+// Source: utils/messages.ts:3453 (normalizeAttachmentForAPI)
+type Attachment struct {
+	Type    AttachmentType `json:"type"`
+	Content string         `json:"content"`
+	Name    string         `json:"name,omitempty"`
+}
+
+// NormalizeAttachment converts an attachment to an API-compatible user message.
+// Content is wrapped in <system-reminder> tags and truncated if too large.
+// Source: utils/messages.ts:3453-3550
+func NormalizeAttachment(att Attachment) Message {
+	content := att.Content
+	if len(content) > MaxAttachmentSize {
+		content = content[:MaxAttachmentSize] + "\n...[truncated]"
+	}
+	wrapped := WrapInSystemReminder(content)
+	return Message{
+		Role:    RoleUser,
+		Content: []ContentBlock{{Type: ContentText, Text: wrapped}},
+	}
+}
+
 // SystemReminderPrefix is the XML tag that wraps system-injected context.
 // Source: utils/messages.ts:3097-3098
 const SystemReminderPrefix = "<system-reminder>"
