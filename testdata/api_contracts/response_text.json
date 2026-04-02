@@ -1,0 +1,18 @@
+{
+  "_description": "Simple text response from Anthropic API",
+  "id": "msg_01ABC",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "2 + 2 = 4"
+    }
+  ],
+  "model": "claude-sonnet-4-20250514",
+  "stop_reason": "end_turn",
+  "usage": {
+    "input_tokens": 25,
+    "output_tokens": 10
+  }
+}

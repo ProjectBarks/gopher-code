@@ -1,0 +1,17 @@
+{
+  "_description": "Minimal text-only request to Anthropic Messages API",
+  "model": "claude-sonnet-4-20250514",
+  "max_tokens": 16000,
+  "system": "You are a helpful assistant.",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "What is 2+2?"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "_description": "Response with tool_use block from Anthropic API",
+  "id": "msg_02DEF",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "I'll list the files for you."
+    },
+    {
+      "type": "tool_use",
+      "id": "toolu_01ABC",
+      "name": "Bash",
+      "input": {
+        "command": "ls -la"
+      }
+    }
+  ],
+  "model": "claude-sonnet-4-20250514",
+  "stop_reason": "tool_use",
+  "usage": {
+    "input_tokens": 100,
+    "output_tokens": 50
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "_description": "Tool result with is_error=true (permission denied)",
+  "model": "claude-sonnet-4-20250514",
+  "max_tokens": 16000,
+  "messages": [
+    {
+      "role": "user",
+      "content": [{"type": "text", "text": "Delete everything"}]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "toolu_02DEF",
+          "name": "Bash",
+          "input": {"command": "rm -rf /"}
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_02DEF",
+          "content": "permission denied: destructive command blocked by policy",
+          "is_error": true
+        }
+      ]
+    }
+  ]
+}

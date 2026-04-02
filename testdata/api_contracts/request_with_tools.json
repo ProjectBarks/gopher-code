@@ -1,0 +1,53 @@
+{
+  "_description": "Request with tool definitions matching Claude Code's format",
+  "model": "claude-sonnet-4-20250514",
+  "max_tokens": 16000,
+  "system": "You are a helpful assistant.",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "List files in the current directory"
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "name": "Bash",
+      "description": "Executes a given bash command and returns its output.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "The command to execute"
+          }
+        },
+        "required": ["command"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "Glob",
+      "description": "Fast file pattern matching tool.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "description": "The glob pattern to match files against"
+          },
+          "path": {
+            "type": "string",
+            "description": "The directory to search in."
+          }
+        },
+        "required": ["pattern"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

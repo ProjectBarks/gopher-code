@@ -1,0 +1,43 @@
+{
+  "_description": "Multi-turn request with tool_use and tool_result messages",
+  "model": "claude-sonnet-4-20250514",
+  "max_tokens": 16000,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "List files"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "I'll list the files for you."
+        },
+        {
+          "type": "tool_use",
+          "id": "toolu_01ABC",
+          "name": "Bash",
+          "input": {
+            "command": "ls -la"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_01ABC",
+          "content": "total 42\ndrwxr-xr-x  5 user staff 160 Jan 1 00:00 .\n-rw-r--r--  1 user staff 100 Jan 1 00:00 file.txt"
+        }
+      ]
+    }
+  ]
+}

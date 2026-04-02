@@ -1,0 +1,63 @@
+{
+  "_description": "Error response shapes from Anthropic API",
+  "errors": [
+    {
+      "name": "context_too_long",
+      "status": 400,
+      "body": {
+        "type": "error",
+        "error": {
+          "type": "invalid_request_error",
+          "message": "prompt is too long: 210000 tokens > 200000 maximum"
+        }
+      }
+    },
+    {
+      "name": "rate_limit",
+      "status": 429,
+      "body": {
+        "type": "error",
+        "error": {
+          "type": "rate_limit_error",
+          "message": "Number of request tokens has exceeded your per-minute rate limit"
+        }
+      }
+    },
+    {
+      "name": "overloaded",
+      "status": 529,
+      "body": {
+        "type": "error",
+        "error": {
+          "type": "overloaded_error",
+          "message": "Overloaded"
+        }
+      }
+    },
+    {
+      "name": "auth_error",
+      "status": 401,
+      "body": {
+        "type": "error",
+        "error": {
+          "type": "authentication_error",
+          "message": "invalid x-api-key"
+        }
+      }
+    },
+    {
+      "name": "server_error",
+      "status": 500,
+      "body": {
+        "type": "error",
+        "error": {
+          "type": "api_error",
+          "message": "Internal server error"
+        }
+      }
+    }
+  ],
+  "stop_reasons": ["end_turn", "tool_use", "max_tokens", "stop_sequence"],
+  "content_block_types": ["text", "tool_use", "tool_result"],
+  "message_roles": ["user", "assistant"]
+}
