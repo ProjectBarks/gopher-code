@@ -64,6 +64,11 @@ type SessionState struct {
 	// It can prevent continuation or inject blocking errors.
 	// Source: query/stopHooks.ts:60-63
 	StopHookRunner interface{} `json:"-"`
+
+	// PostSamplingHooks are fire-and-forget callbacks that run after model
+	// sampling completes, before tool execution.
+	// Source: utils/hooks/postSamplingHooks.ts:24-33
+	PostSamplingHooks []interface{} `json:"-"`
 }
 
 // New creates a new SessionState with the given config and working directory.
