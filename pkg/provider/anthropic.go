@@ -16,6 +16,21 @@ const (
 	anthropicVersion        = "2023-06-01"
 )
 
+// Model alias mappings
+var modelAliases = map[string]string{
+	"haiku":  "claude-haiku-4-5-20251001",
+	"sonnet": "claude-sonnet-4-6",
+	"opus":   "claude-opus-4-6",
+}
+
+// resolveModel converts model aliases to full model IDs
+func resolveModel(model string) string {
+	if resolved, ok := modelAliases[model]; ok {
+		return resolved
+	}
+	return model
+}
+
 // AnthropicProvider implements the ModelProvider interface for the Anthropic
 // Messages API with SSE streaming support.
 type AnthropicProvider struct {
@@ -32,7 +47,7 @@ func NewAnthropicProvider(apiKey, model string) *AnthropicProvider {
 		apiKey:     apiKey,
 		baseURL:    defaultAnthropicBaseURL,
 		httpClient: &http.Client{},
-		model:      model,
+		model:      resolveModel(model),
 	}
 }
 
