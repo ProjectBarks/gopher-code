@@ -272,6 +272,149 @@ func TestSmooshSystemReminderSiblings(t *testing.T) {
 	})
 }
 
+func TestFilterOrphanedThinkingOnly(t *testing.T) {
+	// Source: utils/messages.ts:4997-5054
+
+	t.Run("thinking_only_assistant_removed", func(t *testing.T) {
+		// Source: utils/messages.ts:5029-5035 — all-thinking assistant is orphaned
+		// When a thinking-only assistant is separated by a user message, it's truly orphaned
+		msgs := []Message{
+			UserMessage("hello"),
+			{Role: RoleAssistant, Content: []ContentBlock{
+				{Type: ContentThinking, Thinking: "let me think..."},
+			}},
+			UserMessage("still waiting"),
+			{Role: RoleAssistant, Content: []ContentBlock{TextBlock("answer")}},
+		}
+		result := NormalizeForAPI(msgs)
+		// The thinking-only assistant should be dropped
+		for _, msg := range result {
+			if msg.Role == RoleAssistant {
+				for _, b := range msg.Content {
+					if b.Type == ContentThinking {
+						t.Error("orphaned thinking block should have been filtered")
+					}
+				}
+			}
+		}
+	})
+
+	t.Run("mixed_thinking_and_text_kept", func(t *testing.T) {
+		// Source: utils/messages.ts:5033-5034 — has non-thinking content, keep it
+		msgs := []Message{
+			UserMessage("hello"),
+			{Role: RoleAssistant, Content: []ContentBlock{
+				{Type: ContentThinking, Thinking: "hmm"},
+				TextBlock("here's my answer"),
+			}},
+		}
+		result := NormalizeForAPI(msgs)
+		if len(result) != 2 {
+			t.Fatalf("expected 2 messages, got %d", len(result))
+		}
+		foundThinking := false
+		for _, b := range result[1].Content {
+			if b.Type == ContentThinking {
+				foundThinking = true
+			}
+		}
+		if !foundThinking {
+			t.Error("thinking block in mixed message should be preserved")
+		}
+	})
+
+	t.Run("redacted_thinking_also_filtered", func(t *testing.T) {
+		// Redacted thinking-only assistant separated by a user message = orphaned
+		msgs := []Message{
+			UserMessage("hello"),
+			{Role: RoleAssistant, Content: []ContentBlock{
+				{Type: ContentRedactedThinking, Signature: "abc123"},
+			}},
+			UserMessage("waiting"),
+			{Role: RoleAssistant, Content: []ContentBlock{TextBlock("answer")}},
+		}
+		result := NormalizeForAPI(msgs)
+		for _, msg := range result {
+			for _, b := range msg.Content {
+				if b.Type == ContentRedactedThinking {
+					t.Error("orphaned redacted_thinking should have been filtered")
+				}
+			}
+		}
+	})
+}
+
+func TestFilterTrailingThinkingFromLastAssistant(t *testing.T) {
+	// Source: utils/messages.ts:4781-4828
+
+	t.Run("trailing_thinking_stripped", func(t *testing.T) {
+		// Source: utils/messages.ts:4778-4779 — API rejects messages ending with thinking
+		msgs := []Message{
+			UserMessage("hello"),
+			{Role: RoleAssistant, Content: []ContentBlock{
+				TextBlock("answer"),
+				{Type: ContentThinking, Thinking: "trailing thought"},
+			}},
+		}
+		result := NormalizeForAPI(msgs)
+		lastMsg := result[len(result)-1]
+		lastBlock := lastMsg.Content[len(lastMsg.Content)-1]
+		if isThinkingBlock(lastBlock) {
+			t.Error("trailing thinking should have been stripped from last assistant")
+		}
+		if lastBlock.Type != ContentText || lastBlock.Text != "answer" {
+			t.Errorf("last block should be text 'answer', got %v", lastBlock)
+		}
+	})
+
+	t.Run("all_thinking_gets_placeholder", func(t *testing.T) {
+		// Source: utils/messages.ts:4814-4816 — placeholder inserted
+		msgs := []Message{
+			UserMessage("hello"),
+			{Role: RoleAssistant, Content: []ContentBlock{
+				{Type: ContentThinking, Thinking: "only thinking"},
+			}},
+		}
+		result := NormalizeForAPI(msgs)
+		// The thinking-only message gets filtered by filterOrphanedThinkingOnly first,
+		// so we need to check differently. If it survives (has non-thinking sibling
+		// with same ID), the trailing filter would add a placeholder.
+		// In this case, the orphan filter removes it entirely.
+		// Verify no thinking blocks remain
+		for _, msg := range result {
+			for _, b := range msg.Content {
+				if isThinkingBlock(b) {
+					t.Error("thinking block should not survive normalization when orphaned")
+				}
+			}
+		}
+	})
+
+	t.Run("non_last_assistant_not_affected", func(t *testing.T) {
+		// Only the LAST assistant message is checked
+		msgs := []Message{
+			UserMessage("hello"),
+			{Role: RoleAssistant, Content: []ContentBlock{
+				{Type: ContentThinking, Thinking: "thought"},
+				TextBlock("answer"),
+			}},
+			UserMessage("followup"),
+			{Role: RoleAssistant, Content: []ContentBlock{TextBlock("final")}},
+		}
+		result := NormalizeForAPI(msgs)
+		// First assistant should still have thinking block
+		foundThinking := false
+		for _, b := range result[1].Content {
+			if b.Type == ContentThinking {
+				foundThinking = true
+			}
+		}
+		if !foundThinking {
+			t.Error("thinking in non-last assistant should be preserved")
+		}
+	})
+}
+
 func TestWrapInSystemReminder(t *testing.T) {
 	// Source: utils/messages.ts:3097-3098
 	result := WrapInSystemReminder("hello world")

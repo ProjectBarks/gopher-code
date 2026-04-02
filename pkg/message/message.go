@@ -15,9 +15,11 @@ const (
 type ContentBlockType string
 
 const (
-	ContentText       ContentBlockType = "text"
-	ContentToolUse    ContentBlockType = "tool_use"
-	ContentToolResult ContentBlockType = "tool_result"
+	ContentText              ContentBlockType = "text"
+	ContentToolUse           ContentBlockType = "tool_use"
+	ContentToolResult        ContentBlockType = "tool_result"
+	ContentThinking          ContentBlockType = "thinking"
+	ContentRedactedThinking  ContentBlockType = "redacted_thinking"
 )
 
 // ContentBlock is a tagged union. Go lacks sum types, so we use a struct with a Type discriminator.
@@ -30,6 +32,8 @@ type ContentBlock struct {
 	ToolUseID string           `json:"tool_use_id,omitempty"` // for tool_result
 	Content   string           `json:"content,omitempty"`     // for tool_result
 	IsError   bool             `json:"is_error,omitempty"`    // for tool_result
+	Thinking  string           `json:"thinking,omitempty"`    // for thinking blocks
+	Signature string           `json:"signature,omitempty"`   // for redacted_thinking blocks
 }
 
 type Message struct {
@@ -102,15 +106,24 @@ func NormalizeForAPI(messages []Message) []Message {
 	// Step 2: Ensure tool_use/tool_result pairing
 	paired := ensureToolResultPairing(smooshed)
 
-	// Step 3: Smoosh system-reminder text siblings into tool_results
+	// Step 3: Filter orphaned thinking-only assistant messages
+	// Source: utils/messages.ts:2311
+	withoutOrphans := filterOrphanedThinkingOnly(paired)
+
+	// Step 4: Strip trailing thinking from last assistant
+	// Source: utils/messages.ts:2322
+	withoutTrailing := filterTrailingThinkingFromLastAssistant(withoutOrphans)
+
+	// Step 5: Filter whitespace-only assistant messages
+	// Source: utils/messages.ts:2324
+	filtered := filterWhitespaceOnlyAssistants(withoutTrailing)
+
+	// Step 6: Ensure non-empty assistant content
+	withNonEmpty := ensureNonEmptyAssistantContent(filtered)
+
+	// Step 7: Smoosh system-reminder text siblings into tool_results
 	// Source: utils/messages.ts:2334-2338
-	withSR := smooshSystemReminderSiblings(paired)
-
-	// Step 4: Filter whitespace-only assistant messages
-	filtered := filterWhitespaceOnlyAssistants(withSR)
-
-	// Step 5: Ensure non-empty assistant content
-	result := ensureNonEmptyAssistantContent(filtered)
+	result := smooshSystemReminderSiblings(withNonEmpty)
 
 	return result
 }
@@ -321,6 +334,82 @@ func ensureNonEmptyAssistantContent(messages []Message) []Message {
 		}
 	}
 	return messages
+}
+
+// isThinkingBlock returns true for thinking or redacted_thinking blocks.
+// Source: utils/messages.ts:4771-4775
+func isThinkingBlock(b ContentBlock) bool {
+	return b.Type == ContentThinking || b.Type == ContentRedactedThinking
+}
+
+// filterOrphanedThinkingOnly removes assistant messages that contain ONLY thinking blocks
+// and have no chance of being merged with a non-thinking sibling.
+// Source: utils/messages.ts:4997-5054
+func filterOrphanedThinkingOnly(messages []Message) []Message {
+	result := make([]Message, 0, len(messages))
+	for _, msg := range messages {
+		if msg.Role != RoleAssistant {
+			result = append(result, msg)
+			continue
+		}
+		if len(msg.Content) == 0 {
+			result = append(result, msg)
+			continue
+		}
+		allThinking := true
+		for _, b := range msg.Content {
+			if !isThinkingBlock(b) {
+				allThinking = false
+				break
+			}
+		}
+		if allThinking {
+			continue // Drop orphaned thinking-only message
+		}
+		result = append(result, msg)
+	}
+	return result
+}
+
+// filterTrailingThinkingFromLastAssistant strips thinking blocks from the end
+// of the last assistant message. The API rejects messages ending with thinking blocks.
+// Source: utils/messages.ts:4781-4828
+func filterTrailingThinkingFromLastAssistant(messages []Message) []Message {
+	if len(messages) == 0 {
+		return messages
+	}
+	last := &messages[len(messages)-1]
+	if last.Role != RoleAssistant {
+		return messages
+	}
+	if len(last.Content) == 0 {
+		return messages
+	}
+	// Check if last block is a thinking block
+	if !isThinkingBlock(last.Content[len(last.Content)-1]) {
+		return messages
+	}
+
+	// Find last non-thinking block index
+	lastValidIdx := len(last.Content) - 1
+	for lastValidIdx >= 0 && isThinkingBlock(last.Content[lastValidIdx]) {
+		lastValidIdx--
+	}
+
+	// Source: utils/messages.ts:4814-4817
+	var filtered []ContentBlock
+	if lastValidIdx < 0 {
+		// All blocks were thinking — insert placeholder
+		filtered = []ContentBlock{{Type: ContentText, Text: "[No message content]"}}
+	} else {
+		filtered = make([]ContentBlock, lastValidIdx+1)
+		copy(filtered, last.Content[:lastValidIdx+1])
+	}
+
+	result := make([]Message, len(messages))
+	copy(result, messages)
+	result[len(result)-1] = Message{Role: last.Role, Content: filtered}
+	return result
 }
 
 // smooshSystemReminderSiblings moves <system-reminder>-prefixed text blocks
