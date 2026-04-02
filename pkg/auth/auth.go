@@ -84,6 +84,24 @@ func DeleteAPIKey() {
 	}
 }
 
+// EnsureValidAuth checks that a valid API key or token is available before
+// making an API call. For API key auth, this is a simple lookup.
+// For OAuth (future), this would refresh expired tokens.
+// Source: services/api/claude.ts — getClient() calls refreshIfExpired before each request
+func EnsureValidAuth() (string, error) {
+	key, err := GetAPIKey()
+	if err != nil {
+		return "", err
+	}
+
+	// Future: OAuth token refresh would go here
+	// if isOAuthToken(key) && isExpired(key) {
+	//     key, err = refreshToken(key)
+	// }
+
+	return key, nil
+}
+
 // Status returns the current auth status.
 func Status() string {
 	key, err := GetAPIKey()
