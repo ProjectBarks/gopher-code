@@ -205,4 +205,59 @@ func TestGlobTool(t *testing.T) {
 			t.Fatalf("InputSchema() is not valid JSON: %v", err)
 		}
 	})
+
+	t.Run("truncates_at_100_results", func(t *testing.T) {
+		// Source: GlobTool.ts:157 — default limit 100
+		// Source: GlobTool.ts:190-193 — truncation message
+		dir := t.TempDir()
+		// Create 120 files
+		for i := 0; i < 120; i++ {
+			os.WriteFile(filepath.Join(dir, fmt.Sprintf("file_%03d.txt", i)), []byte("x"), 0644)
+		}
+
+		tc := &tools.ToolContext{CWD: dir}
+		input, _ := json.Marshal(map[string]string{"pattern": "*.txt"})
+		out, err := tool.Execute(context.Background(), tc, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.IsError {
+			t.Fatalf("unexpected tool error: %s", out.Content)
+		}
+
+		lines := strings.Split(strings.TrimSpace(out.Content), "\n")
+		// Should have 100 file lines + 1 truncation message
+		if len(lines) != 101 {
+			t.Errorf("expected 101 lines (100 files + truncation), got %d", len(lines))
+		}
+		// Last line should be the truncation message
+		if lines[len(lines)-1] != tools.GlobTruncationMessage {
+			t.Errorf("expected truncation message, got %q", lines[len(lines)-1])
+		}
+	})
+
+	t.Run("no_truncation_under_limit", func(t *testing.T) {
+		dir := t.TempDir()
+		for i := 0; i < 5; i++ {
+			os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%d.txt", i)), []byte("x"), 0644)
+		}
+
+		tc := &tools.ToolContext{CWD: dir}
+		input, _ := json.Marshal(map[string]string{"pattern": "*.txt"})
+		out, _ := tool.Execute(context.Background(), tc, input)
+		if strings.Contains(out.Content, tools.GlobTruncationMessage) {
+			t.Error("should not have truncation message when under limit")
+		}
+	})
+
+	t.Run("no_files_message", func(t *testing.T) {
+		// Source: GlobTool.ts:178-183
+		dir := t.TempDir()
+		tc := &tools.ToolContext{CWD: dir}
+		input, _ := json.Marshal(map[string]string{"pattern": "*.xyz"})
+		out, _ := tool.Execute(context.Background(), tc, input)
+		if out.Content != "No files found" {
+			t.Errorf("expected 'No files found', got %q", out.Content)
+		}
+	})
 }

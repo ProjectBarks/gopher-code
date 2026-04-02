@@ -10,6 +10,14 @@ import (
 	"strings"
 )
 
+// DefaultGlobMaxResults is the default max results for glob operations.
+// Source: GlobTool.ts:157
+const DefaultGlobMaxResults = 100
+
+// GlobTruncationMessage is appended when results are truncated.
+// Source: GlobTool.ts:191-193
+const GlobTruncationMessage = "(Results are truncated. Consider using a more specific path or pattern.)"
+
 // GlobTool finds files matching a glob pattern.
 type GlobTool struct{}
 
@@ -117,8 +125,21 @@ func (g *GlobTool) Execute(_ context.Context, tc *ToolContext, input json.RawMes
 	sort.Strings(matches)
 
 	if len(matches) == 0 {
-		return SuccessOutput("No files found matching pattern"), nil
+		// Source: GlobTool.ts:178-183
+		return SuccessOutput("No files found"), nil
 	}
 
-	return SuccessOutput(strings.Join(matches, "\n") + "\n"), nil
+	// Enforce max results limit with truncation message
+	// Source: GlobTool.ts:157, 190-193
+	truncated := len(matches) > DefaultGlobMaxResults
+	if truncated {
+		matches = matches[:DefaultGlobMaxResults]
+	}
+
+	result := strings.Join(matches, "\n")
+	if truncated {
+		result += "\n" + GlobTruncationMessage
+	}
+
+	return SuccessOutput(result), nil
 }
