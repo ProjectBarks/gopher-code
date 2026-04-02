@@ -290,7 +290,7 @@ func main() {
 		hookConfigs := make([]hooks.HookConfig, len(settings.Hooks))
 		for i, h := range settings.Hooks {
 			hookConfigs[i] = hooks.HookConfig{
-				Type:    hooks.HookType(h.Type),
+				Type:    hooks.HookEvent(h.Type),
 				Matcher: h.Matcher,
 				Command: h.Command,
 				Timeout: h.Timeout,
