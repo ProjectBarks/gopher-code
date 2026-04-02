@@ -1,11 +1,13 @@
 package session
 
 import (
+	"time"
+
+	"github.com/google/uuid"
 	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
 	"github.com/projectbarks/gopher-code/pkg/provider"
-	"github.com/google/uuid"
 )
 
 // SessionConfig holds configuration for a session.
@@ -29,25 +31,27 @@ func DefaultConfig() SessionConfig {
 
 // SessionState holds the mutable state of a conversation session.
 type SessionState struct {
-	ID                       string
-	Config                   SessionConfig
-	Messages                 []message.Message
-	CWD                      string
-	TurnCount                int
-	TotalInputTokens         int
-	TotalOutputTokens        int
-	TotalCacheCreationTokens int
-	TotalCacheReadTokens     int
-	LastInputTokens          int
+	ID                       string            `json:"id"`
+	Config                   SessionConfig     `json:"config"`
+	Messages                 []message.Message `json:"messages"`
+	CWD                      string            `json:"cwd"`
+	TurnCount                int               `json:"turn_count"`
+	TotalInputTokens         int               `json:"total_input_tokens"`
+	TotalOutputTokens        int               `json:"total_output_tokens"`
+	TotalCacheCreationTokens int               `json:"total_cache_creation_tokens"`
+	TotalCacheReadTokens     int               `json:"total_cache_read_tokens"`
+	LastInputTokens          int               `json:"last_input_tokens"`
+	CreatedAt                time.Time         `json:"created_at"`
 }
 
 // New creates a new SessionState with the given config and working directory.
 func New(config SessionConfig, cwd string) *SessionState {
 	return &SessionState{
-		ID:       uuid.New().String(),
-		Config:   config,
-		Messages: make([]message.Message, 0),
-		CWD:      cwd,
+		ID:        uuid.New().String(),
+		Config:    config,
+		Messages:  make([]message.Message, 0),
+		CWD:       cwd,
+		CreatedAt: time.Now(),
 	}
 }
 

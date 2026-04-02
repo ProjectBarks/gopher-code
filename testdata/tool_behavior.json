@@ -1,0 +1,95 @@
+{
+  "_source": "Claude Code v2.1.88 TypeScript source — tool-level behavioral facts",
+  "_purpose": "Golden file of per-tool behavioral constants extracted from TS source for parity testing",
+
+  "bash": {
+    "tool_name": "Bash",
+    "default_timeout_ms": 120000,
+    "max_timeout_ms": 600000,
+    "max_timeout_always_gte_default": true,
+    "default_timeout_env": "BASH_DEFAULT_TIMEOUT_MS",
+    "max_timeout_env": "BASH_MAX_TIMEOUT_MS",
+    "max_result_size_chars": 30000,
+    "is_read_only_dynamic": true,
+    "is_concurrency_safe_dynamic": true,
+    "_note": "isReadOnly depends on command analysis; isConcurrencySafe follows isReadOnly"
+  },
+
+  "file_read": {
+    "tool_name": "Read",
+    "default_max_output_tokens": 25000,
+    "default_max_output_tokens_env": "CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS",
+    "max_output_size_bytes": 262144,
+    "max_result_size_chars": -1,
+    "pdf_max_pages_per_read": 20,
+    "pdf_inline_threshold_pages": 10,
+    "pdf_extract_size_threshold_bytes": 3145728,
+    "blocked_paths": [
+      "/dev/zero", "/dev/random", "/dev/urandom", "/dev/full",
+      "/dev/stdin", "/dev/tty", "/dev/console",
+      "/dev/stdout", "/dev/stderr",
+      "/dev/fd/0", "/dev/fd/1", "/dev/fd/2"
+    ],
+    "blocked_path_patterns": ["/proc/*/fd/0", "/proc/*/fd/1", "/proc/*/fd/2"],
+    "is_read_only": true,
+    "is_concurrency_safe": true
+  },
+
+  "file_write": {
+    "tool_name": "Write",
+    "max_result_size_chars": 100000,
+    "is_read_only": false,
+    "is_concurrency_safe": false
+  },
+
+  "file_edit": {
+    "tool_name": "Edit",
+    "max_file_size_bytes": 1073741824,
+    "max_result_size_chars": 100000,
+    "error_codes": {
+      "file_not_found_with_old_string": 4,
+      "file_not_read_yet": 6,
+      "file_modified_since_read": 7,
+      "string_not_found": 8,
+      "multiple_matches_no_replace_all": 9,
+      "file_already_exists_empty_old": 3,
+      "file_too_large": 10
+    },
+    "requires_full_read_before_edit": true,
+    "is_read_only": false,
+    "is_concurrency_safe": false
+  },
+
+  "glob": {
+    "tool_name": "Glob",
+    "max_results_default": 100,
+    "truncation_message": "(Results are truncated. Consider using a more specific path or pattern.)",
+    "truncated_flag": true,
+    "max_result_size_chars": 100000,
+    "is_read_only": true,
+    "is_concurrency_safe": true
+  },
+
+  "grep": {
+    "tool_name": "Grep",
+    "default_head_limit": 250,
+    "default_output_mode": "files_with_matches",
+    "default_line_numbers": true,
+    "max_line_length_chars": 500,
+    "vcs_directories_excluded": [".git", ".svn", ".hg", ".bzr", ".jj", ".sl"],
+    "max_result_size_chars": 20000,
+    "is_read_only": true,
+    "is_concurrency_safe": true
+  },
+
+  "query_loop": {
+    "turn_counter_starts_at": 1,
+    "max_output_tokens_recovery_message": "Output token limit hit. Resume directly — no apology, no recap of what you were doing. Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
+    "tool_detection_uses_content_blocks_not_stop_reason": true,
+    "system_prompt_in_separate_field_not_messages": true,
+    "tool_results_in_user_role_messages": true,
+    "capped_default_max_tokens": 8000,
+    "compact_max_output_tokens": 20000,
+    "fallback_default_max_output_tokens": 32000
+  }
+}

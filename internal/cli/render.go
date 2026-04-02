@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/projectbarks/gopher-code/pkg/query"
@@ -28,6 +29,32 @@ func PrintEvent(evt query.QueryEvent) {
 	case query.QEventUsage:
 		// Optionally show usage — silent by default
 	}
+}
+
+// PlainTextCallback prints just the text with no ANSI colors or formatting.
+func PlainTextCallback(evt query.QueryEvent) {
+	if evt.Type == query.QEventTextDelta {
+		fmt.Print(evt.Text)
+	}
+}
+
+// JSONCallback outputs text content without ANSI formatting.
+// A full structured JSON envelope can be added when needed.
+func JSONCallback(evt query.QueryEvent) {
+	if evt.Type == query.QEventTextDelta {
+		fmt.Print(evt.Text)
+	}
+}
+
+// StreamJSONCallback prints each event as a JSON line (newline-delimited JSON).
+func StreamJSONCallback(evt query.QueryEvent) {
+	data, _ := json.Marshal(map[string]interface{}{
+		"type":    string(evt.Type),
+		"text":    evt.Text,
+		"tool":    evt.ToolName,
+		"content": evt.Content,
+	})
+	fmt.Println(string(data))
 }
 
 // truncate shortens a string to maxLen, appending "..." if truncated.

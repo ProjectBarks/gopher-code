@@ -1,0 +1,87 @@
+{
+  "_source": "Claude Code v2.1.88 TypeScript — behavioral parity rules for Go reimplementation",
+  "_purpose": "Facts that the Go code MUST match for behavioral parity with the TS source",
+
+  "tool_partitioning": {
+    "rule": "Consecutive read-only tools are batched together. Each mutating tool gets its own batch of size 1.",
+    "source": "toolOrchestration.ts:84-118 partitionToolCalls()",
+    "examples": [
+      {"tools": ["Read", "Grep", "Glob"], "batches": [{"concurrent": true, "tools": ["Read", "Grep", "Glob"]}]},
+      {"tools": ["Bash"], "batches": [{"concurrent": false, "tools": ["Bash"]}]},
+      {"tools": ["Read", "Bash", "Glob"], "batches": [{"concurrent": true, "tools": ["Read"]}, {"concurrent": false, "tools": ["Bash"]}, {"concurrent": true, "tools": ["Glob"]}]},
+      {"tools": ["Bash", "Write"], "batches": [{"concurrent": false, "tools": ["Bash"]}, {"concurrent": false, "tools": ["Write"]}]},
+      {"tools": ["Read", "Read", "Bash", "Glob", "Grep"], "batches": [{"concurrent": true, "tools": ["Read", "Read"]}, {"concurrent": false, "tools": ["Bash"]}, {"concurrent": true, "tools": ["Glob", "Grep"]}]}
+    ],
+    "on_parse_failure": "treat as not concurrency-safe (conservative)",
+    "max_concurrency": 10
+  },
+
+  "turn_counting": {
+    "starts_at": 1,
+    "increments_after": "tool results yielded, before next model call",
+    "max_turns_check": "nextTurnCount > maxTurns (strict greater than, not >=)",
+    "source": "query.ts:276,1679-1720"
+  },
+
+  "tool_detection": {
+    "rule": "Detect tool_use from content blocks, NOT from stop_reason",
+    "reason": "stop_reason === 'tool_use' is unreliable — not always set correctly",
+    "source": "query.ts:554"
+  },
+
+  "max_output_tokens_recovery": {
+    "escalation_value": 64000,
+    "multi_turn_limit": 3,
+    "continuation_message_starts_with": "Output token limit hit. Resume directly",
+    "continuation_message_contains": "no apology, no recap",
+    "source": "query.ts:164,1185-1252"
+  },
+
+  "context_too_long_recovery": {
+    "max_attempts": 1,
+    "strategy": "compact then retry once",
+    "no_stop_hooks_on_ptl": true,
+    "source": "query.ts:1065-1183"
+  },
+
+  "message_format_rules": {
+    "tool_results_role": "user",
+    "every_tool_use_needs_exactly_one_result": true,
+    "missing_result_synthesized": true,
+    "missing_result_text": "[Tool result missing due to internal error]",
+    "system_prompt_in_system_field": true,
+    "system_prompt_not_in_messages": true,
+    "source": "query.ts:138-143,661; messages.ts:245"
+  },
+
+  "stop_reasons": {
+    "valid_values": ["completed", "max_turns", "aborted_streaming", "aborted_tools", "hook_stopped", "image_error", "model_error", "prompt_too_long", "blocking_limit"],
+    "source": "query.ts return sites"
+  },
+
+  "error_classification": {
+    "context_too_long_keywords": ["context_too_long", "prompt is too long"],
+    "rate_limit_status": 429,
+    "overloaded_status": 529,
+    "auth_error_status": 401,
+    "server_error_range": [500, 599],
+    "auth_never_retried": true,
+    "source": "query.ts error handling"
+  },
+
+  "memory_prefetch": {
+    "file_name": "CLAUDE.md",
+    "loaded_once_before_loop": true,
+    "merged_into_system_prompt": true,
+    "missing_file_is_silent": true,
+    "source": "query.ts memory prefetch"
+  },
+
+  "compact_behavior": {
+    "proactive_check_before_each_turn": true,
+    "reactive_on_413_once": true,
+    "preserves_system_prompt": true,
+    "circuit_breaker_after_3_failures": true,
+    "source": "autoCompact.ts"
+  }
+}

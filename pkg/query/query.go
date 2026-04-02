@@ -71,7 +71,7 @@ func Query(
 
 		// 1.5. Proactive compaction: check token budget before building request
 		if sess.LastInputTokens > 0 && sess.Config.TokenBudget.ShouldCompact(sess.LastInputTokens) {
-			compactSession(sess)
+			CompactSession(sess)
 		}
 
 		// 2. Max turns check
@@ -102,7 +102,7 @@ func Query(
 					return &AgentError{Kind: ErrContextTooLong, Wrapped: err}
 				}
 				compactedOnce = true
-				compactSession(sess)
+				CompactSession(sess)
 				continue
 			}
 
@@ -290,9 +290,9 @@ func microCompact(content string) string {
 	return content[:microCompactThreshold] + "...[truncated]"
 }
 
-// compactSession removes middle messages from the session to reduce context size.
+// CompactSession removes middle messages from the session to reduce context size.
 // It keeps the first message and the last few messages.
-func compactSession(sess *session.SessionState) {
+func CompactSession(sess *session.SessionState) {
 	msgs := sess.Messages
 	if len(msgs) <= 4 {
 		return
