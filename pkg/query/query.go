@@ -312,6 +312,28 @@ func Query(
 				continue
 			}
 
+			// Stop hooks: run after model response, can prevent continuation
+			// Source: query.ts:1267-1305
+			if runner, ok := sess.StopHookRunner.(StopHookRunner); ok && runner != nil {
+				var assistantTexts []string
+				for _, b := range contentBlocks {
+					if b.Type == message.ContentText && b.Text != "" {
+						assistantTexts = append(assistantTexts, b.Text)
+					}
+				}
+				hookResult := runner(assistantTexts)
+				if hookResult.PreventContinuation {
+					emit(onEvent, QueryEvent{Type: QEventTurnComplete, StopReason: stopReason})
+					return nil
+				}
+				if len(hookResult.BlockingErrors) > 0 {
+					for _, errMsg := range hookResult.BlockingErrors {
+						sess.PushMessage(message.UserMessage(errMsg))
+					}
+					continue
+				}
+			}
+
 			// Token budget nudge: if user specified +500k, check if we should continue
 			// Source: query.ts:1308-1355
 			if sess.Config.TokenBudgetTarget > 0 && budgetTracker != nil {

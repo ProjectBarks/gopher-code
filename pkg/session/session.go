@@ -59,6 +59,11 @@ type SessionState struct {
 
 	// PermissionPolicy is the runtime permission policy (not serialized).
 	PermissionPolicy interface{} `json:"-"`
+
+	// StopHookRunner is an optional callback that runs after model turns.
+	// It can prevent continuation or inject blocking errors.
+	// Source: query/stopHooks.ts:60-63
+	StopHookRunner interface{} `json:"-"`
 }
 
 // New creates a new SessionState with the given config and working directory.
