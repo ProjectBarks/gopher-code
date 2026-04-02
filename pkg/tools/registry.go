@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"sort"
 	"sync"
 
 	"github.com/projectbarks/gopher-code/pkg/provider"
@@ -31,7 +32,8 @@ func (r *ToolRegistry) Get(name string) Tool {
 	return r.tools[name]
 }
 
-// All returns all registered tools.
+// All returns all registered tools, sorted by name for prompt cache stability.
+// Source: tools.ts:362-364
 func (r *ToolRegistry) All() []Tool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -39,6 +41,9 @@ func (r *ToolRegistry) All() []Tool {
 	for _, t := range r.tools {
 		result = append(result, t)
 	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name() < result[j].Name()
+	})
 	return result
 }
 
@@ -49,7 +54,9 @@ func (r *ToolRegistry) Unregister(name string) {
 	delete(r.tools, name)
 }
 
-// ToolDefinitions returns tool definitions for the model request.
+// ToolDefinitions returns tool definitions for the model request, sorted by name
+// for prompt cache stability.
+// Source: tools.ts:354-366
 func (r *ToolRegistry) ToolDefinitions() []provider.ToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -61,5 +68,8 @@ func (r *ToolRegistry) ToolDefinitions() []provider.ToolDefinition {
 			InputSchema: t.InputSchema(),
 		})
 	}
+	sort.Slice(defs, func(i, j int) bool {
+		return defs[i].Name < defs[j].Name
+	})
 	return defs
 }
