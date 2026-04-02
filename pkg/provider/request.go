@@ -3,9 +3,10 @@ package provider
 import "encoding/json"
 
 type ToolDefinition struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"input_schema"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	InputSchema  json.RawMessage `json:"input_schema"`
+	DeferLoading bool            `json:"defer_loading,omitempty"` // Source: Tool.ts:439-442
 }
 
 type RequestContent struct {
