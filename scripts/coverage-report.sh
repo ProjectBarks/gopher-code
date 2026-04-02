@@ -34,7 +34,7 @@ echo ""
 # Per-package breakdown
 echo "=== Per-Package ==="
 for pkg in $(go list ./... 2>/dev/null | grep -v testharness | grep -v cmd | grep -v internal/cli); do
-  short=$(echo "$pkg" | sed 's|.*gopher-code/||')
+  short=$(echo "$pkg" | sed 's|.*gopher/||')
   count=$(go test "$pkg" -v -count=1 2>&1 | grep -c "=== RUN" 2>/dev/null || echo "0")
   if [ "$count" -gt 0 ]; then
     echo "  $short: $count"
