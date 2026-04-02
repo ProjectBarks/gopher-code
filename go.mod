@@ -1,58 +1,54 @@
 module github.com/projectbarks/gopher-code
 
-go 1.24
-
-toolchain go1.25.8
+go 1.25.8
 
 require (
+	charm.land/bubbles/v2 v2.1.0
 	// Terminal UI — Charm v2 stack (March 2026)
 	charm.land/bubbletea/v2 v2.0.2
-	charm.land/bubbles/v2 v2.1.0
 	charm.land/glamour/v2 v2.0.0
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.2
 	charm.land/log/v2 v2.0.0
+	github.com/alecthomas/chroma/v2 v2.23.1
+	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/charmbracelet/x/term v0.2.2
-
-	// API & streaming
-	github.com/hashicorp/go-retryablehttp v0.7.8
-	github.com/tmaxmax/go-sse v0.11.0
 	github.com/coder/websocket v1.8.14
-	github.com/golang-jwt/jwt/v5 v5.3.1
 
-	// MCP (Model Context Protocol)
-	github.com/mark3labs/mcp-go v0.46.0
-
-	// Shell parsing & file operations
-	mvdan.cc/sh/v3 v3.13.0
-	github.com/bmatcuk/doublestar/v4 v4.10.0
-	github.com/alecthomas/chroma/v2 v2.23.1
-	github.com/sergi/go-diff v1.4.0
+	// Image & PDF
+	github.com/disintegration/imaging v1.6.2
 	github.com/fsnotify/fsnotify v1.9.0
-	github.com/google/renameio v1.0.1
-	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d
-	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
-
-	// Configuration & validation
-	github.com/knadh/koanf/v2 v2.3.4
-	github.com/goccy/go-yaml v1.19.2
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
-	github.com/spf13/cobra v1.10.2
 
 	// Git & GitHub
 	github.com/go-git/go-git/v5 v5.17.2
+	github.com/goccy/go-yaml v1.19.2
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/go-github/v84 v84.0.0
-	golang.org/x/oauth2 v0.36.0
+	github.com/google/renameio v1.0.1
 
-	// Concurrency
-	golang.org/x/sync v0.20.0
+	// Core
+	github.com/google/uuid v1.6.0
+	github.com/growthbook/growthbook-golang v0.2.8
+
+	// API & streaming
+	github.com/hashicorp/go-retryablehttp v0.7.8
 
 	// Caching
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 
-	// Core
-	github.com/google/uuid v1.6.0
+	// Configuration & validation
+	github.com/knadh/koanf/v2 v2.3.4
+	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
+
+	// MCP (Model Context Protocol)
+	github.com/mark3labs/mcp-go v0.46.0
+	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
+	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+	github.com/sergi/go-diff v1.4.0
+	github.com/spf13/cobra v1.10.2
+	github.com/tmaxmax/go-sse v0.11.0
 
 	// Security
 	github.com/zalando/go-keyring v0.2.8
@@ -60,11 +56,13 @@ require (
 	// Observability
 	go.opentelemetry.io/otel v1.42.0
 	go.opentelemetry.io/otel/trace v1.42.0
-	github.com/growthbook/growthbook-golang v0.2.8
+	golang.org/x/oauth2 v0.36.0
 
-	// Image & PDF
-	github.com/disintegration/imaging v1.6.2
-	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
+	// Concurrency
+	golang.org/x/sync v0.20.0
+
+	// Shell parsing & file operations
+	mvdan.cc/sh/v3 v3.13.0
 )
 
 require (
