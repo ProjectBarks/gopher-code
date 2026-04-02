@@ -30,3 +30,21 @@ type Tool interface {
 	Execute(ctx context.Context, tc *ToolContext, input json.RawMessage) (*ToolOutput, error)
 	IsReadOnly() bool
 }
+
+// ConcurrencySafeChecker is an optional interface tools can implement
+// to provide per-call concurrency safety evaluation.
+// If not implemented, falls back to IsReadOnly().
+// Source: Tool.ts:402 — isConcurrencySafe(input)
+type ConcurrencySafeChecker interface {
+	IsConcurrencySafe(input json.RawMessage) bool
+}
+
+// CheckConcurrencySafe checks if a tool call is safe for concurrent execution.
+// Uses ConcurrencySafeChecker if available, otherwise falls back to IsReadOnly().
+// Source: Tool.ts:759 — default false
+func CheckConcurrencySafe(tool Tool, input json.RawMessage) bool {
+	if checker, ok := tool.(ConcurrencySafeChecker); ok {
+		return checker.IsConcurrencySafe(input)
+	}
+	return tool.IsReadOnly()
+}

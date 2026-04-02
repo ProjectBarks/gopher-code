@@ -30,6 +30,16 @@ func (b *BashTool) Name() string        { return "Bash" }
 func (b *BashTool) Description() string { return "Executes a given bash command and returns its output." }
 func (b *BashTool) IsReadOnly() bool    { return false }
 
+// IsConcurrencySafe evaluates per-call based on whether the command is read-only.
+// Source: BashTool.tsx:434-436
+func (b *BashTool) IsConcurrencySafe(input json.RawMessage) bool {
+	var in bashInput
+	if err := json.Unmarshal(input, &in); err != nil {
+		return false
+	}
+	return IsReadOnlyCommand(in.Command)
+}
+
 // Source: BashTool.tsx:220-259
 func (b *BashTool) InputSchema() json.RawMessage {
 	return json.RawMessage(`{

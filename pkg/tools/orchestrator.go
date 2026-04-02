@@ -51,7 +51,7 @@ func (o *ToolOrchestrator) ExecuteBatch(ctx context.Context, calls []ToolCall, t
 	var concurrent, sequential []ToolCall
 	for _, call := range calls {
 		tool := o.registry.Get(call.Name)
-		if tool != nil && tool.IsReadOnly() {
+		if tool != nil && CheckConcurrencySafe(tool, call.Input) {
 			concurrent = append(concurrent, call)
 		} else {
 			sequential = append(sequential, call)
