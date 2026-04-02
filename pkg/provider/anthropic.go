@@ -166,7 +166,8 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req ModelRequest) (<-cha
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, classifyHTTPError(resp.StatusCode, bodyBytes)
+		retryAfter := resp.Header.Get("Retry-After")
+		return nil, ClassifyHTTPError(resp.StatusCode, bodyBytes, retryAfter)
 	}
 
 	ch := make(chan StreamResult, 16)
@@ -176,19 +177,9 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req ModelRequest) (<-cha
 	return ch, nil
 }
 
-// classifyHTTPError returns a typed error based on the HTTP status code.
+// classifyHTTPError is the legacy error classifier, now delegating to ClassifyHTTPError.
 func classifyHTTPError(statusCode int, body []byte) error {
-	msg := string(body)
-	switch {
-	case statusCode == http.StatusUnauthorized:
-		return fmt.Errorf("authentication error (401): %s", msg)
-	case statusCode == http.StatusTooManyRequests:
-		return fmt.Errorf("rate limit error (429): %s", msg)
-	case statusCode >= 500:
-		return fmt.Errorf("server error (%d): %s", statusCode, msg)
-	default:
-		return fmt.Errorf("API error (%d): %s", statusCode, msg)
-	}
+	return ClassifyHTTPError(statusCode, body, "")
 }
 
 // readSSEStream reads SSE events from the HTTP response body and sends
