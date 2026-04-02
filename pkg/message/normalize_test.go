@@ -2,6 +2,7 @@ package message
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -179,6 +180,104 @@ func TestOrphanedToolResultStripped(t *testing.T) {
 		if b.Type == ContentToolResult {
 			t.Error("orphaned tool_result should have been stripped")
 		}
+	}
+}
+
+func TestSmooshSystemReminderSiblings(t *testing.T) {
+	// Source: utils/messages.ts:1835-1873
+	t.Run("sr_text_smooshed_into_tool_result", func(t *testing.T) {
+		// A user message with tool_result + system-reminder text sibling
+		msgs := []Message{
+			UserMessage("hello"),
+			{Role: RoleAssistant, Content: []ContentBlock{
+				ToolUseBlock("t1", "my_tool", json.RawMessage(`{}`)),
+			}},
+			{Role: RoleUser, Content: []ContentBlock{
+				ToolResultBlock("t1", "tool output", false),
+				{Type: ContentText, Text: WrapInSystemReminder("Current date is 2026-04-02")},
+			}},
+		}
+		result := NormalizeForAPI(msgs)
+
+		// Find the user message with tool_result
+		for _, msg := range result {
+			if msg.Role != RoleUser {
+				continue
+			}
+			for _, b := range msg.Content {
+				if b.Type == ContentText && isSystemReminder(b.Text) {
+					t.Error("system-reminder text should have been smooshed into tool_result, but found as sibling")
+				}
+				if b.Type == ContentToolResult && b.ToolUseID == "t1" {
+					if !strings.Contains(b.Content, "tool output") {
+						t.Error("tool_result should still contain original content")
+					}
+					if !strings.Contains(b.Content, "<system-reminder>") {
+						t.Error("tool_result should contain smooshed system-reminder")
+					}
+				}
+			}
+		}
+	})
+
+	t.Run("no_tool_result_leaves_sr_alone", func(t *testing.T) {
+		// Source: utils/messages.ts:1843-1844 — no tool_result means no smoosh
+		msgs := []Message{
+			{Role: RoleUser, Content: []ContentBlock{
+				{Type: ContentText, Text: "regular text"},
+				{Type: ContentText, Text: WrapInSystemReminder("context info")},
+			}},
+		}
+		result := NormalizeForAPI(msgs)
+		if len(result) != 1 {
+			t.Fatalf("expected 1 message, got %d", len(result))
+		}
+		// Both blocks should remain since there's no tool_result to smoosh into
+		srFound := false
+		for _, b := range result[0].Content {
+			if b.Type == ContentText && isSystemReminder(b.Text) {
+				srFound = true
+			}
+		}
+		if !srFound {
+			t.Error("system-reminder should remain as sibling when no tool_result present")
+		}
+	})
+
+	t.Run("non_sr_text_not_smooshed", func(t *testing.T) {
+		// Source: utils/messages.ts:1827-1831 — non-SR text stays as sibling
+		msgs := []Message{
+			UserMessage("hello"),
+			{Role: RoleAssistant, Content: []ContentBlock{
+				ToolUseBlock("t1", "my_tool", json.RawMessage(`{}`)),
+			}},
+			{Role: RoleUser, Content: []ContentBlock{
+				ToolResultBlock("t1", "output", false),
+				{Type: ContentText, Text: "regular user text"},
+			}},
+		}
+		result := NormalizeForAPI(msgs)
+		// The regular text should remain as a sibling, not smooshed
+		for _, msg := range result {
+			if msg.Role != RoleUser {
+				continue
+			}
+			for _, b := range msg.Content {
+				if b.Type == ContentText && b.Text == "regular user text" {
+					return // Found it as a sibling — correct
+				}
+			}
+		}
+		t.Error("non-SR text should remain as sibling")
+	})
+}
+
+func TestWrapInSystemReminder(t *testing.T) {
+	// Source: utils/messages.ts:3097-3098
+	result := WrapInSystemReminder("hello world")
+	expected := "<system-reminder>\nhello world\n</system-reminder>"
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
 
