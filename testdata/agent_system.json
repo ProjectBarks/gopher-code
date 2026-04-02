@@ -1,0 +1,64 @@
+{
+  "_source": "Claude Code v2.1.88 — AgentTool/builtInAgents.ts, built-in/*.ts, mcp/utils.ts",
+
+  "built_in_agents": {
+    "always_available": [
+      {"type": "general-purpose", "tools": ["*"], "model": "inherit_default_subagent"},
+      {"type": "statusline-setup", "tools": ["Read", "Edit"], "model": "sonnet"}
+    ],
+    "conditionally_available": [
+      {"type": "Explore", "model": "haiku_for_external_inherit_for_ant", "condition": "BUILTIN_EXPLORE_PLAN_AGENTS feature"},
+      {"type": "Plan", "model": "inherit", "condition": "BUILTIN_EXPLORE_PLAN_AGENTS feature"},
+      {"type": "claude-code-guide", "model": "haiku", "condition": "non-SDK entrypoints only"},
+      {"type": "verification", "condition": "VERIFICATION_AGENT feature + growthbook gate"}
+    ],
+    "can_disable_all_via": "CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS=1 (noninteractive only)",
+    "source": "builtInAgents.ts:22-75"
+  },
+
+  "agent_tool_behavior": {
+    "default_type_when_omitted": "general-purpose",
+    "fork_subagent_overrides_default": true,
+    "subagent_type_explicit_wins": true,
+    "agent_spawns_with_own_session": true,
+    "agent_inherits_tool_context": true,
+    "isolation_modes": ["worktree"],
+    "model_options": ["sonnet", "opus", "haiku", "inherit"],
+    "source": "AgentTool.tsx:319-322"
+  },
+
+  "explore_agent": {
+    "type": "Explore",
+    "disallowed_tools": ["Agent", "ExitPlanMode", "Edit", "Write", "NotebookEdit"],
+    "model_external": "haiku",
+    "model_ant": "inherit",
+    "purpose": "Fast codebase exploration without modification capabilities",
+    "source": "exploreAgent.ts:65-78"
+  },
+
+  "plan_agent": {
+    "type": "Plan",
+    "disallowed_tools": ["Agent", "ExitPlanMode", "Edit", "Write", "NotebookEdit"],
+    "model": "inherit",
+    "shares_tools_with_explore": true,
+    "source": "planAgent.ts:74-87"
+  },
+
+  "mcp_naming": {
+    "tool_name_format": "mcp__{serverName}__{toolName}",
+    "separator": "__",
+    "prefix": "mcp__",
+    "detection": "name.startsWith('mcp__') || isMcp === true",
+    "parse_rule": "first __ after mcp__ splits server from tool (mcp__my__server__tool → server=my, tool=server__tool)",
+    "source": "mcp/utils.ts:40-47, mcpStringUtils.ts:11-15"
+  },
+
+  "session_persistence": {
+    "format": "JSONL (one JSON object per line)",
+    "file_extension": ".jsonl",
+    "location": "~/.claude/projects/{project_hash}/{session_id}.jsonl",
+    "history_file": "~/.claude/history.jsonl",
+    "transcript_blocked_from_read": true,
+    "source": "history.ts:115, FileReadTool.ts:216-219"
+  }
+}

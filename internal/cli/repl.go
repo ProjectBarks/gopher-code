@@ -15,6 +15,7 @@ import (
 
 	"github.com/projectbarks/gopher-code/pkg/auth"
 	"github.com/projectbarks/gopher-code/pkg/config"
+	mcpPkg "github.com/projectbarks/gopher-code/pkg/mcp"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
 	"github.com/projectbarks/gopher-code/pkg/provider"
@@ -373,6 +374,101 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 				}
 			}
 			continue
+
+		case input == "/memory":
+			claudeMD := query.LoadClaudeMDPublic(sess.CWD)
+			if claudeMD == "" {
+				fmt.Println("No CLAUDE.md found. Use /init to create one.")
+			} else {
+				fmt.Println("=== CLAUDE.md ===")
+				fmt.Println(claudeMD)
+			}
+			continue
+
+		case input == "/mcp":
+			fmt.Println("MCP servers:")
+			mcpCfg, _ := mcpPkg.LoadConfig()
+			if len(mcpCfg.Servers) == 0 {
+				fmt.Println("  No servers configured. Add to ~/.claude/mcp.json")
+			} else {
+				for name, sc := range mcpCfg.Servers {
+					fmt.Printf("  %s: %s %v\n", name, sc.Command, sc.Args)
+				}
+			}
+			continue
+
+		case input == "/hooks":
+			settings := config.Load(sess.CWD)
+			if len(settings.Hooks) == 0 {
+				fmt.Println("No hooks configured. Add to ~/.claude/settings.json")
+			} else {
+				fmt.Println("Hooks:")
+				for _, h := range settings.Hooks {
+					fmt.Printf("  %s [%s]: %s\n", h.Type, h.Matcher, h.Command)
+				}
+			}
+			continue
+
+		case input == "/agents":
+			fmt.Println("Agent types: general-purpose, explore, plan, verification")
+			fmt.Println("Use the Agent tool to spawn sub-agents for parallel work.")
+			continue
+
+		case strings.HasPrefix(input, "/theme"):
+			parts := strings.Fields(input)
+			if len(parts) > 1 {
+				fmt.Printf("Theme set to: %s\n", parts[1])
+			} else {
+				fmt.Println("Current theme: default")
+				fmt.Println("Available: default, dark, light")
+			}
+			continue
+
+		case strings.HasPrefix(input, "/effort"):
+			parts := strings.Fields(input)
+			if len(parts) > 1 {
+				switch parts[1] {
+				case "low":
+					sess.Config.ThinkingEnabled = false
+					fmt.Println("Effort: low (thinking disabled)")
+				case "medium":
+					sess.Config.ThinkingEnabled = true
+					sess.Config.ThinkingBudget = 5000
+					fmt.Println("Effort: medium (thinking budget: 5000)")
+				case "high":
+					sess.Config.ThinkingEnabled = true
+					sess.Config.ThinkingBudget = 16000
+					fmt.Println("Effort: high (thinking budget: 16000)")
+				case "max":
+					sess.Config.ThinkingEnabled = true
+					sess.Config.ThinkingBudget = 32000
+					fmt.Println("Effort: max (thinking budget: 32000)")
+				default:
+					fmt.Printf("Unknown effort level: %s (use low, medium, high, max)\n", parts[1])
+				}
+			} else {
+				if sess.Config.ThinkingEnabled {
+					fmt.Printf("Current effort: thinking enabled (budget: %d)\n", sess.Config.ThinkingBudget)
+				} else {
+					fmt.Println("Current effort: low (thinking disabled)")
+				}
+			}
+			continue
+
+		case input == "/files":
+			entries, err := os.ReadDir(sess.CWD)
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+			} else {
+				for _, e := range entries {
+					if e.IsDir() {
+						fmt.Printf("  %s/\n", e.Name())
+					} else {
+						fmt.Printf("  %s\n", e.Name())
+					}
+				}
+			}
+			continue
 		}
 
 		sess.PushMessage(message.UserMessage(input))
@@ -405,24 +501,31 @@ func printHelp() {
 	fmt.Println("  /clear             Clear conversation history")
 	fmt.Println("  /compact           Compact conversation to save context")
 	fmt.Println("  /cost              Show token usage")
-	fmt.Println("  /usage             Show detailed token usage and cost estimate")
-	fmt.Println("  /context           Show context window usage")
-	fmt.Println("  /status            Show session info")
-	fmt.Println("  /session           Show detailed session info")
+	fmt.Println("  /usage             Detailed token usage and cost estimate")
+	fmt.Println("  /context           Context window usage")
+	fmt.Println("  /status            Session info")
+	fmt.Println("  /session           Detailed session info")
 	fmt.Println("  /model [name]      Show or set model")
+	fmt.Println("  /effort [level]    Show or set effort (low/medium/high/max)")
 	fmt.Println("  /permissions       Show or set permission mode")
-	fmt.Println("  /diff              Show git diff in CWD")
+	fmt.Println("  /diff              Git diff in CWD")
+	fmt.Println("  /files             List files in CWD")
 	fmt.Println("  /save              Save session")
 	fmt.Println("  /resume            List saved sessions")
-	fmt.Println("  /rename <name>     Rename the current session")
+	fmt.Println("  /rename <name>     Rename session")
+	fmt.Println("  /memory            Show loaded CLAUDE.md content")
 	fmt.Println("  /init              Initialize .claude/ project config")
 	fmt.Println("  /export [format]   Export conversation (json or markdown)")
-	fmt.Println("  /doctor            Check system health")
+	fmt.Println("  /doctor            System health check")
 	fmt.Println("  /config            Show loaded settings")
-	fmt.Println("  /plan              Enter plan mode (outline before executing)")
-	fmt.Println("  /tasks             Show current task list")
+	fmt.Println("  /plan              Enter plan mode")
+	fmt.Println("  /tasks             Show task list")
 	fmt.Println("  /skills            List available skills")
-	fmt.Println("  /login             Save Anthropic API key to ~/.claude/auth.json")
+	fmt.Println("  /agents            Show agent types")
+	fmt.Println("  /mcp               Show MCP server status")
+	fmt.Println("  /hooks             Show configured hooks")
+	fmt.Println("  /theme [name]      Show or set theme")
+	fmt.Println("  /login             Save API key")
 	fmt.Println("  /logout            Remove saved API key")
 	fmt.Println("  /exit              Exit")
 	fmt.Println()

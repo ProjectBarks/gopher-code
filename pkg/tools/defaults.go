@@ -70,6 +70,15 @@ func RegisterDefaults(registry *ToolRegistry) *PlanState {
 	// Synthetic output (internal use)
 	registry.Register(&SyntheticOutputTool{})
 
+	// Brief (context sharing between sessions)
+	registry.Register(&BriefTool{})
+
+	// MCP auth
+	registry.Register(&McpAuthTool{})
+
+	// REPL (interactive language sessions)
+	registry.Register(&REPLTool{})
+
 	return planState
 }
 

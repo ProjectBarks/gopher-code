@@ -1,0 +1,72 @@
+{
+  "_source": "Claude Code v2.1.88 — hooks.ts, types/hooks.ts, systemPrompt.ts",
+
+  "hook_events": {
+    "all_event_names": [
+      "PreToolUse", "PostToolUse", "PostToolUseFailure",
+      "UserPromptSubmit", "SessionStart", "Setup", "SubagentStart",
+      "PermissionDenied", "PermissionRequest", "Notification",
+      "Elicitation", "ElicitationResult",
+      "CwdChanged", "FileChanged", "WorktreeCreate"
+    ],
+    "tool_lifecycle_events": ["PreToolUse", "PostToolUse", "PostToolUseFailure"],
+    "permission_events": ["PermissionDenied", "PermissionRequest"],
+    "session_events": ["SessionStart", "Setup", "SubagentStart"],
+    "source": "types/hooks.ts:73-160"
+  },
+
+  "hook_decisions": {
+    "valid_decisions": ["approve", "block"],
+    "approve_sets_allow": true,
+    "block_sets_deny": true,
+    "block_default_message": "Blocked by hook",
+    "unknown_decision_throws": true,
+    "unknown_decision_error": "Unknown hook decision type: {decision}. Valid types are: approve, block",
+    "source": "hooks.ts:527-540"
+  },
+
+  "hook_json_output": {
+    "continue_false_prevents_continuation": true,
+    "stop_reason_optional": true,
+    "system_message_optional": true,
+    "pre_tool_use_can_override_permission": true,
+    "pre_tool_use_can_update_input": true,
+    "post_tool_use_can_update_mcp_output": true,
+    "elicitation_actions": ["accept", "decline", "cancel"],
+    "source": "types/hooks.ts:60-170"
+  },
+
+  "system_prompt_construction": {
+    "priority_order": [
+      "overrideSystemPrompt (if set, replaces everything)",
+      "coordinator mode prompt (if feature enabled)",
+      "agent-specific prompt (if agent definition exists)",
+      "customSystemPrompt (--system-prompt flag)",
+      "defaultSystemPrompt (built-in prompt blocks)",
+      "appendSystemPrompt (--append-system-prompt flag, always added last)"
+    ],
+    "override_replaces_all": true,
+    "append_always_added_unless_override": true,
+    "custom_replaces_default": true,
+    "default_is_array_of_blocks": true,
+    "source": "systemPrompt.ts:41-90"
+  },
+
+  "permission_rule_sources": [
+    "userSettings",
+    "projectSettings",
+    "localSettings",
+    "cliArg",
+    "hook",
+    "session"
+  ],
+
+  "permission_check_order": [
+    "1a. Blanket deny rules (filterToolsByDenyRules)",
+    "1b. Tool-specific allow/deny from settings",
+    "1c. acceptEdits mode auto-approves file tools",
+    "1d. Tool.checkPermissions for command-specific rules",
+    "1e. Content-specific ask rules",
+    "1f. Hook-based permission overrides"
+  ]
+}

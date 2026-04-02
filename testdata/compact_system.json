@@ -1,0 +1,47 @@
+{
+  "_source": "Claude Code v2.1.88 — compact.ts, microCompact.ts, timeBasedMCConfig.ts",
+
+  "autocompact": {
+    "strategy": "LLM-powered summarization (not truncation)",
+    "uses_model_to_summarize": true,
+    "drops_groups_not_individual_messages": true,
+    "default_drop_fraction": 0.2,
+    "min_groups_before_compact": 2,
+    "preserves_at_least_one_group": true,
+    "post_compact_max_files_to_restore": 5,
+    "post_compact_token_budget": 50000,
+    "post_compact_max_tokens_per_file": 5000,
+    "post_compact_max_tokens_per_skill": 5000,
+    "post_compact_skills_token_budget": 25000,
+    "circuit_breaker_max_failures": 3,
+    "source": "compact.ts:122-130,256-290"
+  },
+
+  "microcompact": {
+    "compactable_tools": ["Read", "Bash", "PowerShell", "Grep", "Glob", "WebSearch", "WebFetch", "Edit", "Write"],
+    "keep_recent_default": 5,
+    "keep_recent_minimum": 1,
+    "clears_content_not_removes_message": true,
+    "image_max_token_size": 2000,
+    "operates_on_tool_result_blocks": true,
+    "source": "microCompact.ts:38-55,458-462"
+  },
+
+  "ptl_recovery": {
+    "groups_messages_by_api_round": true,
+    "default_drop_20_percent": true,
+    "token_gap_based_when_available": true,
+    "prepends_user_marker_if_assistant_first": true,
+    "ptl_retry_marker": "synthetic user message",
+    "source": "compact.ts:256-290"
+  },
+
+  "go_parity_gaps": {
+    "go_compact_is_naive_truncation": true,
+    "go_drops_middle_keeps_first_last_2": true,
+    "ts_uses_llm_summarization": true,
+    "ts_groups_by_api_round": true,
+    "ts_drops_20_percent_of_groups": true,
+    "gap": "Go compact is fundamentally different from TS. Go does naive first+last truncation. TS uses LLM-powered summarization with group-based dropping."
+  }
+}

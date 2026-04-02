@@ -60,6 +60,11 @@ func loadClaudeMD(cwd string) string {
 	return strings.Join(parts, "\n\n")
 }
 
+// LoadClaudeMDPublic is the exported version of loadClaudeMD for use by the REPL.
+func LoadClaudeMDPublic(cwd string) string {
+	return loadClaudeMD(cwd)
+}
+
 // buildSystemPrompt combines the base system prompt with memory content.
 func buildSystemPrompt(base, memory string) string {
 	if memory == "" {
