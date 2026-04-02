@@ -91,6 +91,18 @@ func Query(
 			Tools:     registry.ToolDefinitions(),
 		}
 
+		// Add thinking config if enabled
+		if sess.Config.ThinkingEnabled {
+			budget := sess.Config.ThinkingBudget
+			if budget <= 0 {
+				budget = 10000
+			}
+			req.Thinking = &provider.ThinkingConfig{
+				Type:         "enabled",
+				BudgetTokens: budget,
+			}
+		}
+
 		// 4. Call provider.Stream - with error classification for L2
 		ch, err := prov.Stream(ctx, req)
 		if err != nil {

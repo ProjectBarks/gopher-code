@@ -24,6 +24,12 @@ type RequestMessage struct {
 	Content []RequestContent `json:"content"`
 }
 
+// ThinkingConfig controls extended thinking / reasoning effort.
+type ThinkingConfig struct {
+	Type         string `json:"type"`                    // "enabled" or "disabled"
+	BudgetTokens int    `json:"budget_tokens,omitempty"` // token budget for thinking
+}
+
 type ModelRequest struct {
 	Model       string           `json:"model"`
 	System      string           `json:"system,omitempty"`
@@ -31,4 +37,5 @@ type ModelRequest struct {
 	MaxTokens   int              `json:"max_tokens"`
 	Tools       []ToolDefinition `json:"tools,omitempty"`
 	Temperature *float64         `json:"temperature,omitempty"`
+	Thinking    *ThinkingConfig  `json:"thinking,omitempty"`
 }

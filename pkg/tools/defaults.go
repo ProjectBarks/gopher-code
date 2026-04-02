@@ -13,6 +13,10 @@ func RegisterDefaults(registry *ToolRegistry) {
 	registry.Register(&WebFetchTool{})
 	registry.Register(&WebSearchTool{})
 	registry.Register(&AskUserQuestionTool{})
+	registry.Register(&NotebookEditTool{})
+	registry.Register(&ListDirectoryTool{})
+	registry.Register(&SendMessageTool{})
+	registry.Register(NewToolSearchTool(registry))
 
 	todoWrite, todoRead := NewTodoTools()
 	registry.Register(todoWrite)

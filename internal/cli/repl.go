@@ -21,9 +21,12 @@ import (
 )
 
 // RunREPL starts an interactive read-eval-print loop.
-func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.ModelProvider, registry *tools.ToolRegistry, verbose bool) {
+func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.ModelProvider, registry *tools.ToolRegistry, verbose bool, hookRunner tools.HookRunner) {
 	scanner := bufio.NewScanner(os.Stdin)
 	orchestrator := tools.NewOrchestrator(registry)
+	if hookRunner != nil {
+		orchestrator.SetHookRunner(hookRunner)
+	}
 
 	fmt.Println("gopher-code v0.1.0")
 	fmt.Printf("Model: %s | CWD: %s\n", sess.Config.Model, sess.CWD)

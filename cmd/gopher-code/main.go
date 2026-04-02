@@ -12,6 +12,8 @@ import (
 
 	"github.com/projectbarks/gopher-code/internal/cli"
 	"github.com/projectbarks/gopher-code/pkg/compact"
+	"github.com/projectbarks/gopher-code/pkg/config"
+	"github.com/projectbarks/gopher-code/pkg/hooks"
 	"github.com/projectbarks/gopher-code/pkg/mcp"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
@@ -53,7 +55,19 @@ func main() {
 	// Verbose
 	verbose := flag.Bool("verbose", false, "Enable verbose output")
 
+	// Extended thinking
+	thinking := flag.String("thinking", "", "Thinking mode: enabled, disabled")
+
+	// Effort level (maps to thinking budget)
+	effort := flag.String("effort", "", "Effort level: low, medium, high, max")
+
+	// Additional directories
+	addDirs := flag.String("add-dir", "", "Additional allowed directories (comma-separated)")
+
 	flag.Parse()
+
+	// Suppress unused variable warning for addDirs (reserved for future use)
+	_ = addDirs
 
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
@@ -70,14 +84,68 @@ func main() {
 		}
 	}
 
+	// Load settings from global and project config files
+	settings := config.Load(*cwd)
+
+	// Apply settings as defaults (flags override settings)
+	if *model == "claude-sonnet-4-20250514" && settings.Model != "" {
+		*model = settings.Model
+	}
+	if *maxTurns == 100 && settings.MaxTurns > 0 {
+		*maxTurns = settings.MaxTurns
+	}
+
+	// Determine permission mode from settings
+	permMode := permissions.AutoApprove
+	if settings.PermissionMode == "deny" {
+		permMode = permissions.Deny
+	} else if settings.PermissionMode == "interactive" {
+		permMode = permissions.Interactive
+	}
+	if *skipPerms {
+		permMode = permissions.AutoApprove
+	}
+
+	// Resolve thinking / effort configuration
+	thinkingEnabled := false
+	thinkingBudget := 10000
+	switch *effort {
+	case "low":
+		thinkingEnabled = false
+	case "medium":
+		thinkingEnabled = true
+		thinkingBudget = 5000
+	case "high":
+		thinkingEnabled = true
+		thinkingBudget = 16000
+	case "max":
+		thinkingEnabled = true
+		thinkingBudget = 32000
+	}
+	// --thinking flag overrides --effort
+	if *thinking == "enabled" {
+		thinkingEnabled = true
+	} else if *thinking == "disabled" {
+		thinkingEnabled = false
+	}
+
+	// Create hook runner from settings
+	var hookRunner *hooks.HookRunner
+	if len(settings.Hooks) > 0 {
+		hookConfigs := make([]hooks.HookConfig, len(settings.Hooks))
+		for i, h := range settings.Hooks {
+			hookConfigs[i] = hooks.HookConfig{
+				Type:    hooks.HookType(h.Type),
+				Matcher: h.Matcher,
+				Command: h.Command,
+				Timeout: h.Timeout,
+			}
+		}
+		hookRunner = hooks.NewHookRunner(hookConfigs)
+	}
+
 	// Determine system prompt
 	sysPrompt := prompt.BuildSystemPrompt(*systemPrompt, *cwd, *model)
-
-	// Determine permission mode
-	permMode := permissions.AutoApprove
-	if *skipPerms {
-		permMode = permissions.AutoApprove // explicit: skip all checks
-	}
 
 	if *verbose {
 		fmt.Fprintf(os.Stderr, "Model: %s\n", *model)
@@ -137,11 +205,13 @@ func main() {
 
 	if sess == nil {
 		cfg := session.SessionConfig{
-			Model:          *model,
-			SystemPrompt:   sysPrompt,
-			MaxTurns:       *maxTurns,
-			TokenBudget:    compact.DefaultBudget(),
-			PermissionMode: permMode,
+			Model:           *model,
+			SystemPrompt:    sysPrompt,
+			MaxTurns:        *maxTurns,
+			TokenBudget:     compact.DefaultBudget(),
+			PermissionMode:  permMode,
+			ThinkingEnabled: thinkingEnabled,
+			ThinkingBudget:  thinkingBudget,
 		}
 		sess = session.New(cfg, *cwd)
 	}
@@ -168,6 +238,9 @@ func main() {
 
 		sess.PushMessage(message.UserMessage(prompt))
 		orchestrator := tools.NewOrchestrator(registry)
+		if hookRunner != nil {
+			orchestrator.SetHookRunner(hookRunner)
+		}
 
 		// Select callback based on output format
 		var callback query.EventCallback
@@ -199,6 +272,9 @@ func main() {
 	if oneShot != "" {
 		sess.PushMessage(message.UserMessage(oneShot))
 		orchestrator := tools.NewOrchestrator(registry)
+		if hookRunner != nil {
+			orchestrator.SetHookRunner(hookRunner)
+		}
 		err := query.Query(ctx, sess, prov, registry, orchestrator, cli.PrintEvent)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -208,5 +284,5 @@ func main() {
 	}
 
 	// Interactive REPL
-	cli.RunREPL(ctx, sess, prov, registry, *verbose)
+	cli.RunREPL(ctx, sess, prov, registry, *verbose, hookRunner)
 }

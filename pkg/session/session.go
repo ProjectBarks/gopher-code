@@ -12,11 +12,13 @@ import (
 
 // SessionConfig holds configuration for a session.
 type SessionConfig struct {
-	Model          string
-	SystemPrompt   string
-	MaxTurns       int
-	TokenBudget    compact.TokenBudget
-	PermissionMode permissions.PermissionMode
+	Model           string
+	SystemPrompt    string
+	MaxTurns        int
+	TokenBudget     compact.TokenBudget
+	PermissionMode  permissions.PermissionMode
+	ThinkingEnabled bool
+	ThinkingBudget  int // default 10000
 }
 
 // DefaultConfig returns sensible defaults.

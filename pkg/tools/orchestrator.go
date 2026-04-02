@@ -24,7 +24,8 @@ type ToolCallResult struct {
 
 // ToolOrchestrator executes batches of tool calls.
 type ToolOrchestrator struct {
-	registry *ToolRegistry
+	registry   *ToolRegistry
+	hookRunner HookRunner
 }
 
 // NewOrchestrator creates a new orchestrator backed by a registry.
@@ -32,9 +33,19 @@ func NewOrchestrator(registry *ToolRegistry) *ToolOrchestrator {
 	return &ToolOrchestrator{registry: registry}
 }
 
+// SetHookRunner sets the hook runner for pre/post tool execution hooks.
+func (o *ToolOrchestrator) SetHookRunner(hr HookRunner) {
+	o.hookRunner = hr
+}
+
 // ExecuteBatch executes a batch of tool calls. Read-only tools run concurrently,
 // mutating tools run sequentially.
 func (o *ToolOrchestrator) ExecuteBatch(ctx context.Context, calls []ToolCall, tc *ToolContext) []ToolCallResult {
+	// Auto-set hooks from orchestrator if not already set on context
+	if tc.Hooks == nil && o.hookRunner != nil {
+		tc.Hooks = o.hookRunner
+	}
+
 	results := make([]ToolCallResult, 0, len(calls))
 
 	var concurrent, sequential []ToolCall
