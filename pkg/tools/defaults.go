@@ -42,6 +42,9 @@ func RegisterDefaults(registry *ToolRegistry) *PlanState {
 	// Sleep
 	registry.Register(&SleepTool{})
 
+	// LSP
+	registry.Register(&LSPTool{})
+
 	// MCP resources
 	registry.Register(&ListMcpResourcesTool{})
 	registry.Register(&ReadMcpResourceTool{})
