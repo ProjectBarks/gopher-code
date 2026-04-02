@@ -1,6 +1,9 @@
 package message
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 type Role string
 
@@ -75,11 +78,22 @@ func (m Message) ToolUses() []ContentBlock {
 // Source: utils/messages.ts:247
 const SyntheticToolResultPlaceholder = "[Tool result missing due to internal error]"
 
+// SystemReminderPrefix is the XML tag that wraps system-injected context.
+// Source: utils/messages.ts:3097-3098
+const SystemReminderPrefix = "<system-reminder>"
+
+// WrapInSystemReminder wraps content in <system-reminder> tags.
+// Source: utils/messages.ts:3097-3098
+func WrapInSystemReminder(content string) string {
+	return "<system-reminder>\n" + content + "\n</system-reminder>"
+}
+
 // NormalizeForAPI produces API-ready messages matching the TS normalizeMessagesForAPI pipeline:
 // 1. Smoosh consecutive same-role messages
 // 2. Ensure every tool_use has a matching tool_result (synthesize missing ones)
-// 3. Hoist tool_result blocks before text blocks in user messages
-// 4. Join text blocks at seam with \n when merging user messages
+// 3. Smoosh <system-reminder> siblings into adjacent tool_results
+// 4. Filter whitespace-only assistant messages
+// 5. Ensure non-empty assistant content
 // Source: utils/messages.ts:1989
 func NormalizeForAPI(messages []Message) []Message {
 	// Step 1: Smoosh consecutive same-role messages
@@ -88,10 +102,14 @@ func NormalizeForAPI(messages []Message) []Message {
 	// Step 2: Ensure tool_use/tool_result pairing
 	paired := ensureToolResultPairing(smooshed)
 
-	// Step 3: Filter whitespace-only assistant messages
-	filtered := filterWhitespaceOnlyAssistants(paired)
+	// Step 3: Smoosh system-reminder text siblings into tool_results
+	// Source: utils/messages.ts:2334-2338
+	withSR := smooshSystemReminderSiblings(paired)
 
-	// Step 4: Ensure non-empty assistant content
+	// Step 4: Filter whitespace-only assistant messages
+	filtered := filterWhitespaceOnlyAssistants(withSR)
+
+	// Step 5: Ensure non-empty assistant content
 	result := ensureNonEmptyAssistantContent(filtered)
 
 	return result
@@ -303,4 +321,77 @@ func ensureNonEmptyAssistantContent(messages []Message) []Message {
 		}
 	}
 	return messages
+}
+
+// smooshSystemReminderSiblings moves <system-reminder>-prefixed text blocks
+// into the last tool_result of the same user message.
+// Source: utils/messages.ts:1835-1873
+func smooshSystemReminderSiblings(messages []Message) []Message {
+	result := make([]Message, len(messages))
+	for i, msg := range messages {
+		if msg.Role != RoleUser {
+			result[i] = msg
+			continue
+		}
+
+		// Check if this user message has any tool_results
+		hasToolResult := false
+		for _, b := range msg.Content {
+			if b.Type == ContentToolResult {
+				hasToolResult = true
+				break
+			}
+		}
+		if !hasToolResult {
+			result[i] = msg
+			continue
+		}
+
+		// Separate <system-reminder> text blocks from everything else
+		var srTexts []string
+		var kept []ContentBlock
+		for _, b := range msg.Content {
+			if b.Type == ContentText && strings.HasPrefix(b.Text, SystemReminderPrefix) {
+				srTexts = append(srTexts, b.Text)
+			} else {
+				kept = append(kept, b)
+			}
+		}
+		if len(srTexts) == 0 {
+			result[i] = msg
+			continue
+		}
+
+		// Find the LAST tool_result and smoosh SR text into it
+		// Source: utils/messages.ts:1858
+		lastTrIdx := -1
+		for j := len(kept) - 1; j >= 0; j-- {
+			if kept[j].Type == ContentToolResult {
+				lastTrIdx = j
+				break
+			}
+		}
+		if lastTrIdx < 0 {
+			result[i] = msg
+			continue
+		}
+
+		// Append SR text to the tool_result's content
+		tr := kept[lastTrIdx]
+		for _, sr := range srTexts {
+			if tr.Content != "" {
+				tr.Content += "\n"
+			}
+			tr.Content += sr
+		}
+		kept[lastTrIdx] = tr
+
+		result[i] = Message{Role: msg.Role, Content: kept}
+	}
+	return result
+}
+
+// isSystemReminder checks if a text block is a system reminder.
+func isSystemReminder(text string) bool {
+	return strings.HasPrefix(text, SystemReminderPrefix)
 }
