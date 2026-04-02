@@ -187,3 +187,108 @@ func TestTranscriptPathForSession(t *testing.T) {
 		t.Errorf("got %q, want %q", path, expected)
 	}
 }
+
+func TestRestoreSessionFromTranscript(t *testing.T) {
+	// Source: utils/sessionStorage.ts:3818-3896
+
+	t.Run("restores_all_state", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "session.jsonl")
+		w := NewTranscriptWriter(path)
+
+		// Write a full session transcript
+		w.AppendMessage("sess-42", message.UserMessage("hello"))
+		w.Append(TranscriptEntry{Type: "cwd", SessionID: "sess-42", CWD: "/home/user/project"})
+		w.AppendMessage("sess-42", message.Message{
+			Role:    message.RoleAssistant,
+			Content: []message.ContentBlock{message.TextBlock("hi there")},
+		})
+		w.AppendUsage("sess-42", 150, 80, 1)
+		w.AppendMessage("sess-42", message.UserMessage("do something"))
+		w.AppendMessage("sess-42", message.Message{
+			Role:    message.RoleAssistant,
+			Content: []message.ContentBlock{message.TextBlock("done")},
+		})
+		w.AppendUsage("sess-42", 200, 120, 2)
+		w.AppendTitle("sess-42", "My Test Session")
+
+		cfg := DefaultConfig()
+		sess, err := RestoreSessionFromTranscript(path, cfg)
+		if err != nil {
+			t.Fatalf("restore failed: %v", err)
+		}
+
+		// Verify session ID
+		if sess.ID != "sess-42" {
+			t.Errorf("ID = %q, want 'sess-42'", sess.ID)
+		}
+
+		// Verify messages
+		if len(sess.Messages) != 4 {
+			t.Fatalf("expected 4 messages, got %d", len(sess.Messages))
+		}
+		if sess.Messages[0].Role != message.RoleUser {
+			t.Error("first message should be user")
+		}
+
+		// Verify usage (accumulated)
+		if sess.TotalInputTokens != 350 {
+			t.Errorf("TotalInputTokens = %d, want 350", sess.TotalInputTokens)
+		}
+		if sess.TotalOutputTokens != 200 {
+			t.Errorf("TotalOutputTokens = %d, want 200", sess.TotalOutputTokens)
+		}
+
+		// Verify turn count (max from usage entries)
+		if sess.TurnCount != 2 {
+			t.Errorf("TurnCount = %d, want 2", sess.TurnCount)
+		}
+
+		// Verify CWD
+		if sess.CWD != "/home/user/project" {
+			t.Errorf("CWD = %q, want '/home/user/project'", sess.CWD)
+		}
+
+		// Verify name from custom-title
+		if sess.Name != "My Test Session" {
+			t.Errorf("Name = %q, want 'My Test Session'", sess.Name)
+		}
+	})
+
+	t.Run("empty_transcript_errors", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "empty.jsonl")
+		os.WriteFile(path, []byte{}, 0600)
+
+		_, err := RestoreSessionFromTranscript(path, DefaultConfig())
+		if err == nil {
+			t.Error("expected error for empty transcript")
+		}
+	})
+
+	t.Run("missing_file_errors", func(t *testing.T) {
+		_, err := RestoreSessionFromTranscript("/nonexistent/path.jsonl", DefaultConfig())
+		if err == nil {
+			t.Error("expected error for missing file")
+		}
+	})
+
+	t.Run("turn_count_from_messages_when_no_usage", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "no-usage.jsonl")
+		w := NewTranscriptWriter(path)
+		w.AppendMessage("s1", message.UserMessage("q1"))
+		w.AppendMessage("s1", message.Message{Role: message.RoleAssistant, Content: []message.ContentBlock{message.TextBlock("a1")}})
+		w.AppendMessage("s1", message.UserMessage("q2"))
+		w.AppendMessage("s1", message.Message{Role: message.RoleAssistant, Content: []message.ContentBlock{message.TextBlock("a2")}})
+
+		sess, err := RestoreSessionFromTranscript(path, DefaultConfig())
+		if err != nil {
+			t.Fatalf("restore failed: %v", err)
+		}
+		// Should count assistant messages as turns
+		if sess.TurnCount != 2 {
+			t.Errorf("TurnCount = %d, want 2 (counted from assistant messages)", sess.TurnCount)
+		}
+	})
+}
