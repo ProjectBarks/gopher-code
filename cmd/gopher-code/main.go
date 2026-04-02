@@ -33,6 +33,21 @@ import (
 // Version is the current gopher-code version.
 const Version = "0.2.0"
 
+// Model alias mappings
+var modelAliases = map[string]string{
+	"haiku":  "claude-haiku-4-5-20251001",
+	"sonnet": "claude-sonnet-4-6",
+	"opus":   "claude-opus-4-6",
+}
+
+// resolveModelAlias converts model aliases to full model IDs
+func resolveModelAlias(model string) string {
+	if resolved, ok := modelAliases[model]; ok {
+		return resolved
+	}
+	return model
+}
+
 func main() {
 	// Existing flags
 	model := flag.String("model", "claude-sonnet-4-20250514", "Model to use")
@@ -295,8 +310,11 @@ func main() {
 		sysPrompt = string(data)
 	}
 
+	// Resolve model aliases
+	resolvedModel := resolveModelAlias(*model)
+
 	// Build with environment context
-	sysPrompt = prompt.BuildSystemPrompt(sysPrompt, *cwd, *model)
+	sysPrompt = prompt.BuildSystemPrompt(sysPrompt, *cwd, resolvedModel)
 
 	// Append system prompt additions
 	if *appendSystemPrompt != "" {
@@ -326,22 +344,22 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		p := provider.NewAnthropicProvider(apiKey, *model)
+		p := provider.NewAnthropicProvider(apiKey, resolvedModel)
 		if *apiURL != "" {
 			p.SetBaseURL(*apiURL)
 		}
 		prov = p
 	case "bedrock":
-		prov = provider.NewBedrockProvider(os.Getenv("AWS_REGION"), *model)
+		prov = provider.NewBedrockProvider(os.Getenv("AWS_REGION"), resolvedModel)
 	case "vertex":
-		prov = provider.NewVertexProvider(os.Getenv("GOOGLE_PROJECT_ID"), os.Getenv("GOOGLE_REGION"), *model)
+		prov = provider.NewVertexProvider(os.Getenv("GOOGLE_PROJECT_ID"), os.Getenv("GOOGLE_REGION"), resolvedModel)
 	case "openai":
 		apiKey, _ := auth.GetAPIKey()
 		url := *apiURL
 		if url == "" {
 			url = "https://api.openai.com"
 		}
-		prov = provider.NewOpenAICompatProvider(url, apiKey, *model)
+		prov = provider.NewOpenAICompatProvider(url, apiKey, resolvedModel)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown provider: %s\n", *providerFlag)
 		os.Exit(1)
@@ -427,7 +445,7 @@ func main() {
 
 	if sess == nil {
 		cfg := session.SessionConfig{
-			Model:           *model,
+			Model:           resolvedModel,
 			SystemPrompt:    sysPrompt,
 			MaxTurns:        *maxTurns,
 			TokenBudget:     compact.DefaultBudget(),

@@ -26,7 +26,7 @@ func NewOpenAICompatProvider(baseURL, apiKey, model string) *OpenAICompatProvide
 	return &OpenAICompatProvider{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
-		model:   model,
+		model:   resolveModel(model),
 		client:  &http.Client{Timeout: 5 * time.Minute},
 	}
 }

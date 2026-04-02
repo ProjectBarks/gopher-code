@@ -23,7 +23,7 @@ func NewVertexProvider(projectID, region, modelID string) *VertexProvider {
 	return &VertexProvider{
 		projectID: projectID,
 		region:    region,
-		modelID:   modelID,
+		modelID:   resolveModel(modelID),
 		client:    &http.Client{Timeout: 5 * time.Minute},
 	}
 }

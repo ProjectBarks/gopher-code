@@ -21,7 +21,7 @@ type BedrockProvider struct {
 func NewBedrockProvider(region, modelID string) *BedrockProvider {
 	return &BedrockProvider{
 		region:  region,
-		modelID: modelID,
+		modelID: resolveModel(modelID),
 		client:  &http.Client{Timeout: 5 * time.Minute},
 	}
 }
