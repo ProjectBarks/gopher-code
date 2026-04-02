@@ -13,8 +13,8 @@ func TestSchemaConformance(t *testing.T) {
 	}
 
 	t.Run("golden_file_has_expected_tools", func(t *testing.T) {
-		if len(schemas) < 21 {
-			t.Errorf("expected at least 21 tools in golden file, got %d", len(schemas))
+		if len(schemas) < 27 {
+			t.Errorf("expected at least 27 tools in golden file, got %d", len(schemas))
 		}
 	})
 

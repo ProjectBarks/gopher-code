@@ -681,5 +681,137 @@
       "required": ["questions"],
       "additionalProperties": false
     }
+  },
+  {
+    "name": "PowerShell",
+    "description": "Execute PowerShell commands (Windows).",
+    "is_read_only": false,
+    "is_concurrency_safe": false,
+    "max_result_size_chars": 30000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "PowerShell command to execute"
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Timeout in seconds (default 30)"
+        }
+      },
+      "required": ["command"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "TeamCreate",
+    "description": "Create a team of agents for parallel work.",
+    "is_read_only": false,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name for the team"
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of agent descriptions"
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "TeamDelete",
+    "description": "Delete a team.",
+    "is_read_only": false,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the team to delete"
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "Config",
+    "description": "Read or modify configuration settings.",
+    "is_read_only": true,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["get", "set", "list"],
+          "description": "Action to perform"
+        },
+        "key": {
+          "type": "string",
+          "description": "Configuration key (for get/set)"
+        },
+        "value": {
+          "type": "string",
+          "description": "Value to set (for set action)"
+        }
+      },
+      "required": ["action"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "RemoteTrigger",
+    "description": "Trigger a remote agent execution.",
+    "is_read_only": false,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "type": "string",
+          "description": "Name or ID of the remote agent to trigger"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Prompt to send to the remote agent"
+        }
+      },
+      "required": ["agent", "prompt"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "SyntheticOutput",
+    "description": "Generate synthetic output for internal use.",
+    "is_read_only": true,
+    "is_concurrency_safe": true,
+    "max_result_size_chars": 100000,
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Text to return as synthetic output"
+        }
+      },
+      "required": ["text"],
+      "additionalProperties": false
+    }
   }
 ]

@@ -53,6 +53,23 @@ func RegisterDefaults(registry *ToolRegistry) *PlanState {
 	registry.Register(&EnterWorktreeTool{})
 	registry.Register(&ExitWorktreeTool{})
 
+	// PowerShell (Windows / cross-platform pwsh)
+	registry.Register(&PowerShellTool{})
+
+	// Team management
+	for _, t := range NewTeamTools() {
+		registry.Register(t)
+	}
+
+	// Config
+	registry.Register(NewConfigTool())
+
+	// Remote trigger (placeholder)
+	registry.Register(&RemoteTriggerTool{})
+
+	// Synthetic output (internal use)
+	registry.Register(&SyntheticOutputTool{})
+
 	return planState
 }
 

@@ -163,9 +163,9 @@ func TestCrossToolValidation(t *testing.T) {
 		t.Fatalf("failed to load schemas: %v", err)
 	}
 
-	t.Run("tool_count_is_21", func(t *testing.T) {
-		if len(schemas) != 21 {
-			t.Errorf("expected 21 tools, got %d", len(schemas))
+	t.Run("tool_count_is_27", func(t *testing.T) {
+		if len(schemas) != 27 {
+			t.Errorf("expected 27 tools, got %d", len(schemas))
 		}
 	})
 
@@ -204,7 +204,7 @@ func TestCrossToolValidation(t *testing.T) {
 		})
 	}
 
-	extTools := []string{"WebFetch", "WebSearch", "Agent", "Skill", "ToolSearch", "LSP", "NotebookEdit", "TodoWrite", "TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskStop", "TaskOutput", "AskUserQuestion"}
+	extTools := []string{"WebFetch", "WebSearch", "Agent", "Skill", "ToolSearch", "LSP", "NotebookEdit", "TodoWrite", "TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskStop", "TaskOutput", "AskUserQuestion", "PowerShell", "TeamCreate", "TeamDelete", "Config", "RemoteTrigger", "SyntheticOutput"}
 	for _, name := range extTools {
 		name := name
 		t.Run(fmt.Sprintf("extended_tool_%s_present", name), func(t *testing.T) {
@@ -281,6 +281,12 @@ func TestPerToolExpectedValues(t *testing.T) {
 		{"TaskStop", false, true, 100000, 1, 1, []string{"taskId"}},
 		{"TaskOutput", false, true, 100000, 2, 2, []string{"taskId", "output"}},
 		{"AskUserQuestion", true, true, 100000, 4, 1, []string{"questions"}},
+		{"PowerShell", false, false, 30000, 2, 1, []string{"command"}},
+		{"TeamCreate", false, true, 100000, 2, 1, []string{"name"}},
+		{"TeamDelete", false, true, 100000, 1, 1, []string{"name"}},
+		{"Config", true, true, 100000, 3, 1, []string{"action"}},
+		{"RemoteTrigger", false, true, 100000, 2, 2, []string{"agent", "prompt"}},
+		{"SyntheticOutput", true, true, 100000, 1, 1, []string{"text"}},
 	}
 
 	for _, exp := range expectations {
@@ -456,6 +462,23 @@ func TestPropertyTypes(t *testing.T) {
 		{"AskUserQuestion", "answers", "object", false, nil},
 		{"AskUserQuestion", "annotations", "object", false, nil},
 		{"AskUserQuestion", "metadata", "object", false, nil},
+		// PowerShell
+		{"PowerShell", "command", "string", false, nil},
+		{"PowerShell", "timeout", "integer", false, nil},
+		// TeamCreate
+		{"TeamCreate", "name", "string", false, nil},
+		{"TeamCreate", "members", "array", false, nil},
+		// TeamDelete
+		{"TeamDelete", "name", "string", false, nil},
+		// Config
+		{"Config", "action", "string", true, []string{"get", "set", "list"}},
+		{"Config", "key", "string", false, nil},
+		{"Config", "value", "string", false, nil},
+		// RemoteTrigger
+		{"RemoteTrigger", "agent", "string", false, nil},
+		{"RemoteTrigger", "prompt", "string", false, nil},
+		// SyntheticOutput
+		{"SyntheticOutput", "text", "string", false, nil},
 	}
 
 	for _, c := range checks {
