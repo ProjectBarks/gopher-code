@@ -48,3 +48,20 @@ func CheckConcurrencySafe(tool Tool, input json.RawMessage) bool {
 	}
 	return tool.IsReadOnly()
 }
+
+// DestructiveChecker is an optional interface tools can implement
+// to signal that a call performs irreversible operations (delete, overwrite, send).
+// Defaults to false when not implemented.
+// Source: Tool.ts:405-406
+type DestructiveChecker interface {
+	IsDestructive(input json.RawMessage) bool
+}
+
+// CheckDestructive checks if a tool call is destructive (irreversible).
+// Source: Tool.ts:752, 761 — default false
+func CheckDestructive(tool Tool, input json.RawMessage) bool {
+	if checker, ok := tool.(DestructiveChecker); ok {
+		return checker.IsDestructive(input)
+	}
+	return false
+}
