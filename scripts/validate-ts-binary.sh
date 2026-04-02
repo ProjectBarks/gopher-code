@@ -11,7 +11,7 @@ FAIL=0
 pass() { echo -e "  \033[32m✓\033[0m $1"; PASS=$((PASS + 1)); }
 fail() { echo -e "  \033[31m✗\033[0m $1"; FAIL=$((FAIL + 1)); }
 
-echo "=== Claude Code TypeScript Binary Validation ==="
+echo "=== Gopher Code TypeScript Binary Validation ==="
 echo ""
 
 # Check node

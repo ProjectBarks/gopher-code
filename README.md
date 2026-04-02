@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>Claude Code, rewritten from scratch in Go. Zero Node.js. Zero Electron. One binary.</strong>
+  <strong>Gopher Code, rewritten from scratch in Go. Zero Node.js. Zero Electron. One binary.</strong>
 </p>
 
 <p align="center">
@@ -13,7 +13,7 @@
     <source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go&logoColor=white">
     <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go 1.24+">
   </picture>
-  <img src="https://img.shields.io/badge/Claude_Code-v2_Parity-blueviolet?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code v2 Parity">
+  <img src="https://img.shields.io/badge/Gopher_Code-v2_Parity-blueviolet?style=for-the-badge&logo=go&logoColor=white" alt="Gopher Code v2 Parity">
   <img src="https://img.shields.io/badge/Tools-33_Built--In-orange?style=for-the-badge" alt="33 Tools">
   <img src="https://img.shields.io/badge/Binary-Single_Static-success?style=for-the-badge" alt="Single Binary">
   <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT License">
@@ -35,7 +35,7 @@
 
 ## Why This Exists
 
-Claude Code is an incredible tool trapped inside a 500K-line TypeScript monolith that ships
+An incredible tool trapped inside a 500K-line TypeScript monolith that ships
 with Node.js, a bundled Ink/React renderer, native addons for every platform, and a `node_modules`
 tree deeper than the Mariana Trench.
 
@@ -53,8 +53,8 @@ Gopher Code asks: **what if it was just a binary?**
 ## Repository Layout
 
 ```text
-gopher-code/
-├── cmd/gopher-code/       # CLI entry point & REPL
+gopher/
+├── cmd/gopher/       # CLI entry point & REPL
 │   └── main.go
 ├── pkg/                   # Core packages
 │   ├── compact/           # Token budget & context compaction
@@ -85,7 +85,7 @@ The rewrite is structured in phases, each building on the last:
 | 2 | System prompt assembly | **Done** |
 | 3 | Token budget & context compaction | **Done** |
 | 4 | 33 built-in tools (Bash, Read, Edit, Write, Glob, Grep, Agent, ...) | **Done** |
-| 5 | Anthropic API provider with SSE streaming | **Done** |
+| 5 | LLM API provider with SSE streaming | **Done** |
 | 6 | Query loop orchestration (L1-L4 parity tests passing) | **Done** |
 | 7 | CLI entry point & interactive REPL | **Done** |
 | 8 | Session persistence & resume | **In Progress** |
@@ -105,13 +105,13 @@ Gopher Code is built on the modern 2026 Go ecosystem. No legacy. No baggage.
 
 | Concern | Package | Why |
 |---------|---------|-----|
-| Terminal UI | `charm.land/bubbletea/v2` | Elm-architecture TUI — replaces Ink/React |
-| Styling | `charm.land/lipgloss/v2` | ANSI styling & layout — replaces chalk + yoga |
-| Markdown | `charm.land/glamour/v2` | Terminal markdown rendering — replaces shiki |
+| Terminal UI | `charm.land/bubbletea/v2` | Elm-architecture TUI |
+| Styling | `charm.land/lipgloss/v2` | ANSI styling & layout |
+| Markdown | `charm.land/glamour/v2` | Terminal markdown rendering |
 | Components | `charm.land/bubbles/v2` | Spinner, viewport, text input, progress bar |
 | Prompts | `charm.land/huh/v2` | Permission dialogs & interactive forms |
 | Syntax HL | `github.com/alecthomas/chroma/v2` | Code highlighting in terminal output |
-| API streaming | `github.com/tmaxmax/go-sse` | Server-Sent Events for Anthropic API |
+| API streaming | `github.com/tmaxmax/go-sse` | Server-Sent Events for LLM API |
 | HTTP | `github.com/hashicorp/go-retryablehttp` | Resilient HTTP with exponential backoff |
 | MCP | `github.com/mark3labs/mcp-go` | Model Context Protocol client SDK |
 | Shell parsing | `mvdan.cc/sh/v3` | Bash AST for security analysis |
@@ -131,20 +131,20 @@ Gopher Code is built on the modern 2026 Go ecosystem. No legacy. No baggage.
 
 ```bash
 # Clone
-git clone https://github.com/projectbarks/gopher-code.git
-cd gopher-code
+git clone https://github.com/projectbarks/gopher.git
+cd gopher
 
 # Build
-go build -o gopher-code ./cmd/gopher-code
+go build -o gopher ./cmd/gopher
 
 # Run interactive REPL
-./gopher-code
+./gopher
 
 # Run headless
-./gopher-code -p "explain this codebase"
+./gopher -p "explain this codebase"
 
 # Cross-compile for Linux ARM64
-GOOS=linux GOARCH=arm64 go build -o gopher-code-linux-arm64 ./cmd/gopher-code
+GOOS=linux GOARCH=arm64 go build -o gopher-linux-arm64 ./cmd/gopher
 ```
 
 ### CLI Flags
