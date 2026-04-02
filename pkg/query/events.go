@@ -31,6 +31,11 @@ type QueryEvent struct {
 // EventCallback is the function signature for streaming query events.
 type EventCallback func(QueryEvent)
 
+// PostSamplingHook is a callback that runs after model sampling completes,
+// before tool execution. Fire-and-forget — errors are logged but don't fail.
+// Source: utils/hooks/postSamplingHooks.ts:20-22
+type PostSamplingHook func(assistantTexts []string)
+
 // StopHookResult is the result of running stop hooks after a model turn completes.
 // Source: query/stopHooks.ts:60-63
 type StopHookResult struct {

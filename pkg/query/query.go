@@ -304,6 +304,22 @@ func Query(
 
 		sess.PushMessage(message.Message{Role: message.RoleAssistant, Content: contentBlocks})
 
+		// Execute post-sampling hooks (fire-and-forget, before tool execution)
+		// Source: query.ts:999-1009
+		if len(sess.PostSamplingHooks) > 0 {
+			var assistantTexts []string
+			for _, b := range contentBlocks {
+				if b.Type == message.ContentText && b.Text != "" {
+					assistantTexts = append(assistantTexts, b.Text)
+				}
+			}
+			for _, hook := range sess.PostSamplingHooks {
+				if h, ok := hook.(PostSamplingHook); ok {
+					go h(assistantTexts) // Fire-and-forget (void in TS)
+				}
+			}
+		}
+
 		// 8. If no tool calls, check stop reason
 		if len(toolCalls) == 0 {
 			if stopReason == provider.StopReasonMaxTokens {
