@@ -33,13 +33,17 @@ func (r *ToolRegistry) Get(name string) Tool {
 }
 
 // All returns all registered tools, sorted by name for prompt cache stability.
-// Source: tools.ts:362-364
+// All returns all enabled, registered tools, sorted by name.
+// Filters out tools where IsEnabled() returns false.
+// Source: tools.ts:181-182, 362-364
 func (r *ToolRegistry) All() []Tool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	result := make([]Tool, 0, len(r.tools))
 	for _, t := range r.tools {
-		result = append(result, t)
+		if IsToolEnabled(t) {
+			result = append(result, t)
+		}
 	}
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Name() < result[j].Name()
@@ -54,14 +58,17 @@ func (r *ToolRegistry) Unregister(name string) {
 	delete(r.tools, name)
 }
 
-// ToolDefinitions returns tool definitions for the model request, sorted by name
-// for prompt cache stability.
-// Source: tools.ts:354-366
+// ToolDefinitions returns tool definitions for enabled tools, sorted by name.
+// Filters out disabled tools (IsEnabled() == false).
+// Source: tools.ts:181-182, 354-366
 func (r *ToolRegistry) ToolDefinitions() []provider.ToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	defs := make([]provider.ToolDefinition, 0, len(r.tools))
 	for _, t := range r.tools {
+		if !IsToolEnabled(t) {
+			continue
+		}
 		defs = append(defs, provider.ToolDefinition{
 			Name:        t.Name(),
 			Description: t.Description(),
