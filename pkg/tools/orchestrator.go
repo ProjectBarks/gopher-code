@@ -79,6 +79,17 @@ func (o *ToolOrchestrator) executeSingle(ctx context.Context, call ToolCall, tc 
 		}
 	}
 
+	// Pre-tool hook
+	if tc.Hooks != nil {
+		blocked, msg, _ := tc.Hooks.RunForOrchestrator(ctx, "PreToolUse", call.Name, call.Input)
+		if blocked {
+			return ToolCallResult{
+				ToolUseID: call.ID,
+				Output:    *ErrorOutput(fmt.Sprintf("blocked by hook: %s", msg)),
+			}
+		}
+	}
+
 	if !tool.IsReadOnly() && tc.Permissions != nil {
 		decision := tc.Permissions.Check(ctx, call.Name, call.ID)
 		switch d := decision.(type) {
@@ -101,6 +112,11 @@ func (o *ToolOrchestrator) executeSingle(ctx context.Context, call ToolCall, tc 
 			ToolUseID: call.ID,
 			Output:    *ErrorOutput(fmt.Sprintf("tool execution failed: %s", err)),
 		}
+	}
+
+	// Post-tool hook
+	if tc.Hooks != nil {
+		tc.Hooks.RunForOrchestrator(ctx, "PostToolUse", call.Name, call.Input)
 	}
 
 	return ToolCallResult{

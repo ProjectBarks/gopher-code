@@ -9,6 +9,9 @@ import (
 	"runtime"
 	"strings"
 
+	"encoding/json"
+
+	"github.com/projectbarks/gopher-code/pkg/config"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
 	"github.com/projectbarks/gopher-code/pkg/provider"
@@ -203,6 +206,11 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 			fmt.Printf("  [ok] Go %s\n", runtime.Version())
 			fmt.Printf("  [ok] Platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 			continue
+		case input == "/config":
+			cfg := config.Load(sess.CWD)
+			data, _ := json.MarshalIndent(cfg, "", "  ")
+			fmt.Println(string(data))
+			continue
 		}
 
 		sess.PushMessage(message.UserMessage(input))
@@ -241,6 +249,7 @@ func printHelp() {
 	fmt.Println("  /save          Save session")
 	fmt.Println("  /resume        List saved sessions")
 	fmt.Println("  /doctor        Check system health")
+	fmt.Println("  /config        Show loaded settings")
 	fmt.Println("  /exit          Exit")
 	fmt.Println()
 	fmt.Println("  ! <command>    Run a shell command")

@@ -1,0 +1,76 @@
+{
+  "_source": "Behavioral differences between TS source and Go implementation, extracted by comparing code",
+  "_purpose": "TDD test targets — each gap is a test that should FAIL until Go is fixed to match TS",
+
+  "continuation_message": {
+    "ts_message": "Output token limit hit. Resume directly — no apology, no recap of what you were doing. Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
+    "go_message": "Please continue from where you left off.",
+    "ts_source": "query.ts:1224-1228",
+    "gap": "Go uses a generic message, TS uses a specific directive that prevents the model from apologizing or recapping"
+  },
+
+  "retry_constants": {
+    "ts_default_max_retries": 10,
+    "ts_max_529_retries": 3,
+    "ts_base_delay_ms": 500,
+    "ts_floor_output_tokens": 3000,
+    "go_max_retries": 3,
+    "ts_source": "withRetry.ts:52-55",
+    "gap": "Go retries only 3 times for all errors. TS retries up to 10 times for general errors and 3 times specifically for 529 overloaded."
+  },
+
+  "error_529_overloaded": {
+    "ts_handles_529": true,
+    "ts_529_detection": "status === 529 OR message contains '\"type\":\"overloaded_error\"'",
+    "ts_529_max_retries": 3,
+    "ts_529_foreground_only": true,
+    "go_handles_529": false,
+    "ts_source": "withRetry.ts:610-622",
+    "gap": "Go does not handle 529 overloaded errors at all. TS has specific 529 handling with foreground-only retry policy."
+  },
+
+  "context_too_long_detection": {
+    "ts_keywords": ["context_too_long", "prompt is too long"],
+    "go_keywords": ["context_too_long"],
+    "ts_source": "query.ts error handling, withRetry.ts",
+    "gap": "Go only checks for 'context_too_long', TS also checks for 'prompt is too long'"
+  },
+
+  "micro_compact_threshold": {
+    "ts_threshold": "dynamic (varies by tool and context)",
+    "go_threshold": 10000,
+    "ts_source": "microCompact.ts",
+    "gap": "Go uses a fixed 10KB threshold. TS threshold varies based on tool type and caching state."
+  },
+
+  "compact_session_strategy": {
+    "ts_strategy": "LLM-powered summarization of older messages",
+    "go_strategy": "keep first + last 2 messages, drop middle",
+    "ts_source": "autoCompact.ts, compact.ts",
+    "gap": "Go uses naive truncation. TS uses LLM to summarize compacted context."
+  },
+
+  "missing_tool_result_synthesis": {
+    "ts_synthesizes": true,
+    "ts_placeholder": "[Tool result missing due to internal error]",
+    "go_synthesizes": false,
+    "ts_source": "query.ts:138-143, messages.ts:245",
+    "gap": "Go does not synthesize missing tool results. TS creates synthetic tool_result blocks for any tool_use that lacks a result."
+  },
+
+  "tool_use_detection": {
+    "ts_uses_content_blocks": true,
+    "ts_ignores_stop_reason": true,
+    "ts_reason": "stop_reason === 'tool_use' is unreliable",
+    "go_uses_content_blocks": true,
+    "ts_source": "query.ts:554",
+    "gap": "Both use content blocks — Go matches TS here (no gap)"
+  },
+
+  "permission_recreation": {
+    "ts_creates_once": "permission context shared across turns",
+    "go_creates_per_turn": "NewRuleBasedPolicy created each iteration",
+    "ts_source": "query.ts tool execution",
+    "gap": "Go recreates the permission policy every turn. TS shares context across the session."
+  }
+}

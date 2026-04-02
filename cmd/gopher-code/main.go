@@ -12,6 +12,7 @@ import (
 
 	"github.com/projectbarks/gopher-code/internal/cli"
 	"github.com/projectbarks/gopher-code/pkg/compact"
+	"github.com/projectbarks/gopher-code/pkg/mcp"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
 	"github.com/projectbarks/gopher-code/pkg/prompt"
@@ -89,6 +90,17 @@ func main() {
 	registry := tools.NewRegistry()
 	tools.RegisterDefaults(registry)
 	tools.RegisterAgentTool(registry, prov, query.AsQueryFunc())
+
+	// Load MCP servers
+	mcpMgr := mcp.NewManager()
+	mcpCfg, _ := mcp.LoadConfig()
+	for name, serverCfg := range mcpCfg.Servers {
+		if err := mcpMgr.Connect(context.Background(), name, serverCfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: MCP server %s failed: %v\n", name, err)
+		}
+	}
+	mcpMgr.RegisterTools(context.Background(), registry)
+	defer mcpMgr.CloseAll()
 
 	// Try to load an existing session via -c or -r flags
 	var sess *session.SessionState

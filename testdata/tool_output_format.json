@@ -1,0 +1,67 @@
+{
+  "_source": "Claude Code v2.1.88 — tool output formatting rules from mapToolResultToToolResultBlockParam",
+
+  "file_read": {
+    "max_lines_default": 2000,
+    "line_number_format": "cat -n style",
+    "compact_line_format": "{lineNum}\\t{content}",
+    "standard_line_format": "{lineNum padded to 6}→{content}",
+    "line_number_separator_compact": "\\t",
+    "line_number_separator_standard": "→",
+    "line_numbers_1_indexed": true,
+    "empty_content_returns_empty_string": true,
+    "source": "file.ts:288-320, FileReadTool/prompt.ts:10"
+  },
+
+  "glob": {
+    "no_results_text": "No files found",
+    "result_format": "filenames joined by newline",
+    "truncation_appended": true,
+    "truncation_text": "(Results are truncated. Consider using a more specific path or pattern.)",
+    "source": "GlobTool.ts:175-200"
+  },
+
+  "grep": {
+    "content_mode": {
+      "no_results_text": "No matches found",
+      "pagination_suffix": "[Showing results with pagination = {limitInfo}]",
+      "source": "GrepTool.ts:267-277"
+    },
+    "count_mode": {
+      "no_results_text": "No matches found",
+      "summary_format": "Found {N} total occurrence(s) across {M} file(s).",
+      "source": "GrepTool.ts:280-292"
+    },
+    "files_with_matches_mode": {
+      "no_results_text": "No files found",
+      "source": "GrepTool.ts:297-302"
+    }
+  },
+
+  "bash": {
+    "max_result_size_chars": 30000,
+    "output_persisted_when_too_large": true,
+    "persisted_path_pattern": "~/.claude/tool-results/",
+    "source": "BashTool.tsx:424,591-595"
+  },
+
+  "file_edit": {
+    "error_messages": {
+      "code_3": "Cannot create new file - file already exists.",
+      "code_4_pattern": "does not exist",
+      "code_6": "File has not been read yet. Read it first before writing to it.",
+      "code_7": "File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.",
+      "code_8_pattern": "String to replace not found in file.",
+      "code_9_pattern": "Found {N} matches of the string to replace, but replace_all is false."
+    },
+    "source": "FileEditTool.ts:240-343"
+  },
+
+  "common": {
+    "tool_result_block_type": "tool_result",
+    "tool_result_has_tool_use_id": true,
+    "tool_result_content_is_string_or_array": true,
+    "error_results_have_is_error_true": true,
+    "source": "Tool.ts mapToolResultToToolResultBlockParam"
+  }
+}

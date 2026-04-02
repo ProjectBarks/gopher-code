@@ -18,16 +18,17 @@ Bump from `go 1.22` to **`go 1.24`** to get:
 ## Tier 1 — Terminal UI (Charm Stack v2)
 
 The entire Charmbracelet ecosystem shipped a coordinated v2 release in March 2026.
-All import paths require the `/v2` suffix.
+The v2 libs moved to `charm.land` vanity import paths. The `x/` subpackages remain
+at `github.com/charmbracelet/x`.
 
 | Package | Import Path | Version | Purpose |
 |---------|------------|---------|---------|
-| Bubble Tea | `github.com/charmbracelet/bubbletea/v2` | v2.0.2 | Elm-architecture TUI framework. Replaces Ink/React renderer |
-| Lip Gloss | `github.com/charmbracelet/lipgloss/v2` | v2.0.2 | ANSI styling, borders, layout. Replaces chalk + yoga |
-| Glamour | `github.com/charmbracelet/glamour/v2` | v2.0.0 | Markdown rendering in terminal. Code blocks, tables, lists |
-| Bubbles | `github.com/charmbracelet/bubbles/v2` | v2.1.0 | Spinner, text input, viewport, paginator, progress bar |
-| Huh | `github.com/charmbracelet/huh/v2` | v2.0.3 | Interactive forms and prompts (permission dialogs, confirmations) |
-| Log | `github.com/charmbracelet/log/v2` | v2.0.0 | Pretty logging for CLI output |
+| Bubble Tea | `charm.land/bubbletea/v2` | v2.0.2 | Elm-architecture TUI framework. Replaces Ink/React renderer |
+| Lip Gloss | `charm.land/lipgloss/v2` | v2.0.2 | ANSI styling, borders, layout. Replaces chalk + yoga |
+| Glamour | `charm.land/glamour/v2` | v2.0.0 | Markdown rendering in terminal. Code blocks, tables, lists |
+| Bubbles | `charm.land/bubbles/v2` | v2.1.0 | Spinner, text input, viewport, paginator, progress bar |
+| Huh | `charm.land/huh/v2` | v2.0.3 | Interactive forms and prompts (permission dialogs, confirmations) |
+| Log | `charm.land/log/v2` | v2.0.0 | Pretty logging for CLI output |
 | x/ansi | `github.com/charmbracelet/x/ansi` | v0.11.6 | Low-level ANSI escape code utilities |
 | x/term | `github.com/charmbracelet/x/term` | v0.2.2 | Terminal detection, size, capabilities |
 
@@ -197,7 +198,7 @@ JSON-file-based session storage becomes a bottleneck.
 
 **Phase 1 — Walking skeleton:**
 ```
-bubbletea/v2, lipgloss/v2, bubbles/v2, glamour/v2
+charm.land/bubbletea/v2, charm.land/lipgloss/v2, charm.land/bubbles/v2, charm.land/glamour/v2
 net/http, go-retryablehttp, go-sse
 mvdan.cc/sh/v3, doublestar/v4
 google/uuid
