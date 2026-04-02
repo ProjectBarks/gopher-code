@@ -42,6 +42,13 @@ func (r *ToolRegistry) All() []Tool {
 	return result
 }
 
+// Unregister removes a tool from the registry by name.
+func (r *ToolRegistry) Unregister(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.tools, name)
+}
+
 // ToolDefinitions returns tool definitions for the model request.
 func (r *ToolRegistry) ToolDefinitions() []provider.ToolDefinition {
 	r.mu.RLock()

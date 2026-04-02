@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
@@ -9,6 +10,12 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/permissions"
 	"github.com/projectbarks/gopher-code/pkg/provider"
 )
+
+// PermissionPolicyProvider is the interface for permission checking.
+// Duplicated here to avoid import cycles with the tools package.
+type PermissionPolicyProvider interface {
+	Check(ctx context.Context, toolName string, toolID string) permissions.PermissionDecision
+}
 
 // SessionConfig holds configuration for a session.
 type SessionConfig struct {

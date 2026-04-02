@@ -3,7 +3,8 @@ package tools
 import "github.com/projectbarks/gopher-code/pkg/provider"
 
 // RegisterDefaults registers all built-in tools with the given registry.
-func RegisterDefaults(registry *ToolRegistry) {
+// It returns the PlanState so the caller (e.g. REPL) can inspect/set plan mode.
+func RegisterDefaults(registry *ToolRegistry) *PlanState {
 	registry.Register(&BashTool{})
 	registry.Register(&FileReadTool{})
 	registry.Register(&FileWriteTool{})
@@ -21,6 +22,35 @@ func RegisterDefaults(registry *ToolRegistry) {
 	todoWrite, todoRead := NewTodoTools()
 	registry.Register(todoWrite)
 	registry.Register(todoRead)
+
+	// Task management
+	for _, t := range NewTaskTools() {
+		registry.Register(t)
+	}
+
+	// Plan mode
+	planState, planTools := NewPlanModeTools()
+	for _, t := range planTools {
+		registry.Register(t)
+	}
+
+	// Cron / scheduling
+	for _, t := range NewCronTools() {
+		registry.Register(t)
+	}
+
+	// Sleep
+	registry.Register(&SleepTool{})
+
+	// MCP resources
+	registry.Register(&ListMcpResourcesTool{})
+	registry.Register(&ReadMcpResourceTool{})
+
+	// Worktree
+	registry.Register(&EnterWorktreeTool{})
+	registry.Register(&ExitWorktreeTool{})
+
+	return planState
 }
 
 // RegisterAgentTool registers the Agent tool, which needs runtime dependencies

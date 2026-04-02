@@ -26,7 +26,7 @@ import (
 const Version = "0.2.0"
 
 // RunREPL starts an interactive read-eval-print loop.
-func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.ModelProvider, registry *tools.ToolRegistry, verbose bool, hookRunner tools.HookRunner, noSessionPersist bool) {
+func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.ModelProvider, registry *tools.ToolRegistry, verbose bool, hookRunner tools.HookRunner, noSessionPersist bool, prefill string, planState *tools.PlanState) {
 	scanner := bufio.NewScanner(os.Stdin)
 	orchestrator := tools.NewOrchestrator(registry)
 	if hookRunner != nil {
@@ -46,8 +46,17 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 	fmt.Println("Type your message or /help for commands.")
 	fmt.Println()
 
+	// Show prefill if provided (user must press enter to submit)
+	if prefill != "" {
+		fmt.Printf("> %s", prefill)
+	}
+
 	for {
-		fmt.Print("> ")
+		if prefill == "" {
+			fmt.Print("> ")
+		} else {
+			prefill = "" // Only show prefill on the first prompt
+		}
 		if !scanner.Scan() {
 			break
 		}
@@ -315,6 +324,24 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 				fmt.Printf("Session renamed to: %s\n", sess.Name)
 			}
 			continue
+		case input == "/plan":
+			if planState == nil {
+				fmt.Println("Plan mode is not available.")
+			} else if planState.InPlanMode {
+				fmt.Println("Already in plan mode. The assistant will outline a plan before executing.")
+			} else {
+				planState.InPlanMode = true
+				fmt.Println("Entering plan mode. The assistant will outline a plan before executing.")
+			}
+			continue
+		case input == "/tasks":
+			store := tools.GetTaskStoreFromRegistry(registry)
+			if store == nil {
+				fmt.Println("Task tracking is not available.")
+			} else {
+				fmt.Println(tools.FormatTaskList(store))
+			}
+			continue
 		}
 
 		sess.PushMessage(message.UserMessage(input))
@@ -361,6 +388,8 @@ func printHelp() {
 	fmt.Println("  /export [format]   Export conversation (json or markdown)")
 	fmt.Println("  /doctor            Check system health")
 	fmt.Println("  /config            Show loaded settings")
+	fmt.Println("  /plan              Enter plan mode (outline before executing)")
+	fmt.Println("  /tasks             Show current task list")
 	fmt.Println("  /exit              Exit")
 	fmt.Println()
 	fmt.Println("  ! <command>        Run a shell command")

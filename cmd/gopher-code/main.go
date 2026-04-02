@@ -5,8 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -73,6 +75,61 @@ func main() {
 	// Session persistence
 	noSessionPersist := flag.Bool("no-session-persistence", false, "Disable session persistence")
 
+	// System prompt files
+	systemPromptFile := flag.String("system-prompt-file", "", "Read system prompt from file")
+	appendSystemPrompt := flag.String("append-system-prompt", "", "Append to default system prompt")
+	appendSystemPromptFile := flag.String("append-system-prompt-file", "", "Append system prompt from file")
+
+	// Tool control
+	allowedTools := flag.String("allowed-tools", "", "Comma-separated list of allowed tools")
+	disallowedTools := flag.String("disallowed-tools", "", "Comma-separated list of disallowed tools")
+
+	// Session
+	sessionID := flag.String("session-id", "", "Use a specific session ID")
+	sessionName := flag.String("name", "", "Display name for the session")
+	flag.StringVar(sessionName, "n", "", "Display name for the session")
+	prefill := flag.String("prefill", "", "Pre-fill prompt input without submitting")
+
+	// Debug
+	debug := flag.Bool("debug", false, "Enable debug mode")
+	flag.BoolVar(debug, "d", false, "Enable debug mode")
+	debugFile := flag.String("debug-file", "", "Write debug logs to file")
+
+	// Bare mode
+	bare := flag.Bool("bare", false, "Minimal mode (skip hooks, plugins, etc.)")
+
+	// Budget
+	maxBudgetUSD := flag.Float64("max-budget-usd", 0, "Maximum spend on API calls")
+
+	// Provider
+	providerFlag := flag.String("provider", "anthropic", "Provider: anthropic, bedrock, vertex, openai")
+	apiURL := flag.String("api-url", "", "API base URL (for custom providers)")
+
+	// Input format
+	inputFormat := flag.String("input-format", "text", "Input format: text, stream-json")
+
+	// JSON schema
+	jsonSchema := flag.String("json-schema", "", "JSON Schema for structured output validation")
+
+	// Include events
+	includeHookEvents := flag.Bool("include-hook-events", false, "Include hook events in stream output")
+
+	// Worktree
+	worktree := flag.Bool("worktree", false, "Create git worktree for session")
+	flag.BoolVar(worktree, "w", false, "Create git worktree for session")
+
+	// Betas
+	betas := flag.String("betas", "", "Beta headers for API requests (comma-separated)")
+
+	// Init flag (vs /init command)
+	initFlag := flag.Bool("init", false, "Initialize project and exit")
+
+	// Fallback model
+	fallbackModel := flag.String("fallback-model", "", "Automatic fallback model")
+
+	// Permission mode
+	permModeFlag := flag.String("permission-mode", "", "Permission mode: auto, interactive, deny")
+
 	flag.Parse()
 
 	// Handle --version
@@ -81,8 +138,31 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Suppress unused variable warning for addDirs (reserved for future use)
+	// Debug mode
+	if *debug {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+		if *debugFile != "" {
+			f, err := os.OpenFile(*debugFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error opening debug file: %v\n", err)
+				os.Exit(1)
+			}
+			defer f.Close()
+			slog.SetDefault(slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug})))
+		}
+	}
+
+	// Suppress unused variable warnings for flags reserved for future use
 	_ = addDirs
+	_ = maxBudgetUSD
+	_ = providerFlag
+	_ = apiURL
+	_ = inputFormat
+	_ = jsonSchema
+	_ = includeHookEvents
+	_ = worktree
+	_ = betas
+	_ = fallbackModel
 
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
@@ -97,6 +177,24 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: cannot determine working directory: %v\n", err)
 			os.Exit(1)
 		}
+	}
+
+	// Handle --init flag
+	if *initFlag {
+		claudeDir := filepath.Join(*cwd, ".claude")
+		os.MkdirAll(claudeDir, 0755)
+		claudeMD := filepath.Join(*cwd, "CLAUDE.md")
+		if _, err := os.Stat(claudeMD); os.IsNotExist(err) {
+			os.WriteFile(claudeMD, []byte("# Project Instructions\n\nAdd project-specific instructions here.\n"), 0644)
+			fmt.Printf("Created %s\n", claudeMD)
+		}
+		settingsPath := filepath.Join(claudeDir, "settings.json")
+		if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
+			os.WriteFile(settingsPath, []byte("{\n}\n"), 0644)
+			fmt.Printf("Created %s\n", settingsPath)
+		}
+		fmt.Println("Project initialized.")
+		os.Exit(0)
 	}
 
 	// Load settings from global and project config files
@@ -116,6 +214,20 @@ func main() {
 		permMode = permissions.Deny
 	} else if settings.PermissionMode == "interactive" {
 		permMode = permissions.Interactive
+	}
+	// --permission-mode flag overrides settings
+	if *permModeFlag != "" {
+		switch *permModeFlag {
+		case "auto":
+			permMode = permissions.AutoApprove
+		case "interactive":
+			permMode = permissions.Interactive
+		case "deny":
+			permMode = permissions.Deny
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown permission mode: %s (use auto, interactive, deny)\n", *permModeFlag)
+			os.Exit(1)
+		}
 	}
 	if *skipPerms {
 		permMode = permissions.AutoApprove
@@ -144,9 +256,9 @@ func main() {
 		thinkingEnabled = false
 	}
 
-	// Create hook runner from settings
+	// Create hook runner from settings (unless --bare mode)
 	var hookRunner *hooks.HookRunner
-	if len(settings.Hooks) > 0 {
+	if !*bare && len(settings.Hooks) > 0 {
 		hookConfigs := make([]hooks.HookConfig, len(settings.Hooks))
 		for i, h := range settings.Hooks {
 			hookConfigs[i] = hooks.HookConfig{
@@ -160,7 +272,31 @@ func main() {
 	}
 
 	// Determine system prompt
-	sysPrompt := prompt.BuildSystemPrompt(*systemPrompt, *cwd, *model)
+	sysPrompt := *systemPrompt
+	if *systemPromptFile != "" {
+		data, err := os.ReadFile(*systemPromptFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading system prompt file: %v\n", err)
+			os.Exit(1)
+		}
+		sysPrompt = string(data)
+	}
+
+	// Build with environment context
+	sysPrompt = prompt.BuildSystemPrompt(sysPrompt, *cwd, *model)
+
+	// Append system prompt additions
+	if *appendSystemPrompt != "" {
+		sysPrompt += "\n\n" + *appendSystemPrompt
+	}
+	if *appendSystemPromptFile != "" {
+		data, err := os.ReadFile(*appendSystemPromptFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading append prompt file: %v\n", err)
+			os.Exit(1)
+		}
+		sysPrompt += "\n\n" + string(data)
+	}
 
 	if *verbose {
 		fmt.Fprintf(os.Stderr, "Model: %s\n", *model)
@@ -171,19 +307,44 @@ func main() {
 	// Create provider, registry, session
 	prov := provider.NewAnthropicProvider(apiKey, *model)
 	registry := tools.NewRegistry()
-	tools.RegisterDefaults(registry)
+	planState := tools.RegisterDefaults(registry)
 	tools.RegisterAgentTool(registry, prov, query.AsQueryFunc())
 
-	// Load MCP servers
+	// Load MCP servers (unless --bare mode)
 	mcpMgr := mcp.NewManager()
-	mcpCfg, _ := mcp.LoadConfig()
-	for name, serverCfg := range mcpCfg.Servers {
-		if err := mcpMgr.Connect(context.Background(), name, serverCfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: MCP server %s failed: %v\n", name, err)
+	if !*bare {
+		mcpCfg, _ := mcp.LoadConfig()
+		for name, serverCfg := range mcpCfg.Servers {
+			if err := mcpMgr.Connect(context.Background(), name, serverCfg); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: MCP server %s failed: %v\n", name, err)
+			}
+		}
+		mcpMgr.RegisterTools(context.Background(), registry)
+	}
+	defer mcpMgr.CloseAll()
+
+	// Tool filtering
+	if *allowedTools != "" {
+		allowed := strings.Split(*allowedTools, ",")
+		for _, t := range registry.All() {
+			found := false
+			for _, a := range allowed {
+				if strings.TrimSpace(a) == t.Name() {
+					found = true
+					break
+				}
+			}
+			if !found {
+				registry.Unregister(t.Name())
+			}
 		}
 	}
-	mcpMgr.RegisterTools(context.Background(), registry)
-	defer mcpMgr.CloseAll()
+	if *disallowedTools != "" {
+		disallowed := strings.Split(*disallowedTools, ",")
+		for _, name := range disallowed {
+			registry.Unregister(strings.TrimSpace(name))
+		}
+	}
 
 	// Try to load an existing session via -c or -r flags
 	var sess *session.SessionState
@@ -229,6 +390,14 @@ func main() {
 			ThinkingBudget:  thinkingBudget,
 		}
 		sess = session.New(cfg, *cwd)
+	}
+
+	// Apply --session-id and --name overrides
+	if *sessionID != "" {
+		sess.ID = *sessionID
+	}
+	if *sessionName != "" {
+		sess.Name = *sessionName
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -299,5 +468,5 @@ func main() {
 	}
 
 	// Interactive REPL
-	cli.RunREPL(ctx, sess, prov, registry, *verbose, hookRunner, *noSessionPersist)
+	cli.RunREPL(ctx, sess, prov, registry, *verbose, hookRunner, *noSessionPersist, *prefill, planState)
 }
