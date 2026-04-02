@@ -17,6 +17,15 @@ const (
 	MaxBashTimeoutMs     = 600_000 // 10 minutes
 )
 
+// AssistantBlockingBudgetMs is the threshold after which long-running commands
+// are auto-backgrounded in assistant mode.
+// Source: BashTool.tsx:57
+const AssistantBlockingBudgetMs = 15_000 // 15 seconds
+
+// DisallowedAutoBackgroundCommands are commands that should NOT be auto-backgrounded.
+// Source: BashTool.tsx:220
+var DisallowedAutoBackgroundCommands = []string{"sleep"}
+
 // BashTool executes shell commands.
 type BashTool struct{}
 
