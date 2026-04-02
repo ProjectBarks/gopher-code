@@ -125,20 +125,20 @@ func TestL2ErrorRecovery(t *testing.T) {
 			t.Fatalf("expected no error, got: %v", err)
 		}
 
-		// The session should contain a user message with "continue" between
-		// the two assistant messages.
+		// The session should contain the auto-continue user message between
+		// the two assistant messages. Matches TS source query.ts:1226-1227.
 		foundContinue := false
 		for _, m := range sess.Messages {
 			if m.Role == message.RoleUser {
 				for _, b := range m.Content {
-					if b.Type == message.ContentText && strings.Contains(strings.ToLower(b.Text), "continue") {
+					if b.Type == message.ContentText && strings.Contains(b.Text, "Output token limit hit") {
 						foundContinue = true
 					}
 				}
 			}
 		}
 		if !foundContinue {
-			t.Fatal("expected a user message containing 'continue' for auto-continue")
+			t.Fatal("expected a user message containing 'Output token limit hit' for auto-continue")
 		}
 
 		reqs := prov.Requests()

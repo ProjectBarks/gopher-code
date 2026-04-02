@@ -97,7 +97,7 @@ func Query(
 			errStr := strings.ToLower(err.Error())
 
 			// Context too long: compact and retry once
-			if strings.Contains(errStr, "context_too_long") {
+			if strings.Contains(errStr, "context_too_long") || strings.Contains(errStr, "prompt is too long") {
 				if compactedOnce {
 					return &AgentError{Kind: ErrContextTooLong, Wrapped: err}
 				}
@@ -224,8 +224,8 @@ func Query(
 		// 8. If no tool calls, check stop reason
 		if len(toolCalls) == 0 {
 			if stopReason == provider.StopReasonMaxTokens {
-				// L2: Auto-continue
-				sess.PushMessage(message.UserMessage("Please continue from where you left off."))
+				// L2: Auto-continue (matches TS source query.ts:1226-1227)
+				sess.PushMessage(message.UserMessage("Output token limit hit. Resume directly — no apology, no recap of what you were doing. Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces."))
 				continue
 			}
 			emit(onEvent, QueryEvent{Type: QEventTurnComplete, StopReason: stopReason})
@@ -268,9 +268,12 @@ func emit(cb EventCallback, evt QueryEvent) {
 	}
 }
 
-// isRetryable checks if an error message indicates a retryable error (429 or 5xx).
+// isRetryable checks if an error message indicates a retryable error (429, 529, or 5xx).
 func isRetryable(errStr string) bool {
 	if strings.Contains(errStr, "429") || strings.Contains(errStr, "rate") {
+		return true
+	}
+	if strings.Contains(errStr, "529") || strings.Contains(errStr, "overload") {
 		return true
 	}
 	if strings.Contains(errStr, "5xx") ||
