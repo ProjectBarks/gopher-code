@@ -28,6 +28,7 @@ func TestGrepTool(t *testing.T) {
 	})
 
 	t.Run("happy_path", func(t *testing.T) {
+		// Source: GrepTool.ts:316 — default output_mode is files_with_matches
 		dir := t.TempDir()
 		os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nfunc main() {\n}\n"), 0644)
 
@@ -40,8 +41,41 @@ func TestGrepTool(t *testing.T) {
 		if out.IsError {
 			t.Fatalf("unexpected tool error: %s", out.Content)
 		}
+		// Default mode is files_with_matches — returns filenames
+		if !strings.Contains(out.Content, "main.go") {
+			t.Errorf("expected filename in output, got %q", out.Content)
+		}
+	})
+
+	t.Run("content_mode", func(t *testing.T) {
+		// Source: GrepTool.ts:443-476 — content mode shows matching lines
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nfunc main() {\n}\n"), 0644)
+
+		tc := &tools.ToolContext{CWD: dir}
+		input := json.RawMessage(fmt.Sprintf(`{"pattern": "func main", "path": %q, "output_mode": "content"}`, dir))
+		out, err := tool.Execute(context.Background(), tc, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if !strings.Contains(out.Content, "func main") {
-			t.Errorf("expected match output, got %q", out.Content)
+			t.Errorf("expected matching line content, got %q", out.Content)
+		}
+	})
+
+	t.Run("count_mode", func(t *testing.T) {
+		// Source: GrepTool.ts:478-530 — count mode shows file:count
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello\nhello\nworld\n"), 0644)
+
+		tc := &tools.ToolContext{CWD: dir}
+		input := json.RawMessage(fmt.Sprintf(`{"pattern": "hello", "path": %q, "output_mode": "count"}`, dir))
+		out, err := tool.Execute(context.Background(), tc, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(out.Content, ":2") {
+			t.Errorf("expected count of 2, got %q", out.Content)
 		}
 	})
 
@@ -98,8 +132,9 @@ func TestGrepTool(t *testing.T) {
 		if out.IsError {
 			t.Fatalf("unexpected tool error: %s", out.Content)
 		}
-		if !strings.Contains(out.Content, "target") {
-			t.Errorf("expected match, got %q", out.Content)
+		// Default mode: files_with_matches returns filename
+		if !strings.Contains(out.Content, "file.txt") {
+			t.Errorf("expected filename in output, got %q", out.Content)
 		}
 	})
 
@@ -116,8 +151,9 @@ func TestGrepTool(t *testing.T) {
 		if out.IsError {
 			t.Fatalf("unexpected tool error: %s", out.Content)
 		}
-		if !strings.Contains(out.Content, "findme") {
-			t.Errorf("expected match from CWD, got %q", out.Content)
+		// Default mode: files_with_matches returns filename
+		if !strings.Contains(out.Content, "cwd_file.txt") {
+			t.Errorf("expected filename from CWD, got %q", out.Content)
 		}
 	})
 
@@ -165,7 +201,8 @@ func TestGrepToolNative(t *testing.T) {
 		os.WriteFile(filepath.Join(dir, "data.txt"), []byte("abc123\ndef456\nabc789\n"), 0644)
 
 		tc := &tools.ToolContext{CWD: dir}
-		input := json.RawMessage(fmt.Sprintf(`{"pattern": "abc\\d+", "path": %q}`, dir))
+		// Use content mode to see matching lines
+		input := json.RawMessage(fmt.Sprintf(`{"pattern": "abc\\d+", "path": %q, "output_mode": "content"}`, dir))
 		out, err := tool.Execute(context.Background(), tc, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
