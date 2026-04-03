@@ -62,6 +62,27 @@ func hasBinaryExtension(filePath string) bool {
 	return binaryExtensions[ext]
 }
 
+// blockedDevicePaths are device files that would hang the process if read.
+// Source: FileReadTool.ts:98-128
+var blockedDevicePaths = map[string]bool{
+	"/dev/zero":    true,
+	"/dev/null":    true,
+	"/dev/random":  true,
+	"/dev/urandom": true,
+	"/dev/stdin":   true,
+	"/dev/stdout":  true,
+	"/dev/stderr":  true,
+	"/dev/tty":     true,
+	"/dev/fd/0":    true,
+	"/dev/fd/1":    true,
+	"/dev/fd/2":    true,
+}
+
+// isBlockedDevicePath checks if a path is a dangerous device file.
+func isBlockedDevicePath(path string) bool {
+	return blockedDevicePaths[path]
+}
+
 // FileReadTool reads files with line numbers.
 type FileReadTool struct{}
 
@@ -166,8 +187,21 @@ func (f *FileReadTool) Execute(_ context.Context, tc *ToolContext, input json.Ra
 	}
 
 	path := in.FilePath
+	// Expand ~ to home directory.
+	// Source: FileReadTool.ts:389-393 — expandPath()
+	if strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			path = filepath.Join(home, path[2:])
+		}
+	}
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(tc.CWD, path)
+	}
+
+	// Block dangerous device paths that could hang the process.
+	// Source: FileReadTool.ts:98-128 — blockedDevicePaths
+	if isBlockedDevicePath(path) {
+		return ErrorOutput(fmt.Sprintf("Cannot read %s: this path could cause the process to hang.", path)), nil
 	}
 
 	// Validate pages parameter (pure string parsing, no I/O)
@@ -226,7 +260,10 @@ func (f *FileReadTool) Execute(_ context.Context, tc *ToolContext, input json.Ra
 	for scanner.Scan() {
 		lineNum++
 		text := scanner.Text()
-		if lineNum <= in.Offset {
+		// Offset is 1-indexed: offset=2 means "start reading from line 2".
+		// Skip lines before the offset. Source: FileReadTool.ts:497,1020
+		// TS: lineOffset = offset === 0 ? 0 : offset - 1 (converts to 0-based)
+		if in.Offset > 0 && lineNum < in.Offset {
 			continue
 		}
 		if linesRead >= limit {
@@ -252,6 +289,16 @@ func (f *FileReadTool) Execute(_ context.Context, tc *ToolContext, input json.Ra
 	}
 
 	if len(lines) == 0 {
+		// Source: FileReadTool.ts:692-708 — warn about empty files or offset beyond EOF
+		if lineNum == 0 {
+			return SuccessOutput("<system-reminder>Warning: the file exists but the contents are empty.</system-reminder>"), nil
+		}
+		if in.Offset > 0 {
+			return SuccessOutput(fmt.Sprintf(
+				"<system-reminder>Warning: the file exists but is shorter than the provided offset (%d). The file has %d lines.</system-reminder>",
+				in.Offset, lineNum,
+			)), nil
+		}
 		return SuccessOutput(""), nil
 	}
 

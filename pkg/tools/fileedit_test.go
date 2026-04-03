@@ -166,4 +166,66 @@ func TestFileEditTool(t *testing.T) {
 			t.Fatalf("InputSchema() is not valid JSON: %v", err)
 		}
 	})
+
+	t.Run("quote_normalization", func(t *testing.T) {
+		// Source: FileEditTool/utils.ts:73-93 — findActualString
+		// File has curly quotes, model sends straight quotes — should match
+		dir := t.TempDir()
+		filePath := filepath.Join(dir, "quotes.txt")
+		// File contains curly quotes: "hello" 'world'
+		os.WriteFile(filePath, []byte("\u201Chello\u201D \u2018world\u2019\n"), 0644)
+
+		tc := &tools.ToolContext{CWD: dir}
+		// Model sends straight quotes
+		input := json.RawMessage(fmt.Sprintf(
+			`{"file_path": %q, "old_string": "\"hello\" 'world'", "new_string": "replaced"}`,
+			filePath,
+		))
+		out, err := tool.Execute(context.Background(), tc, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.IsError {
+			t.Fatalf("expected success with quote normalization, got error: %s", out.Content)
+		}
+
+		// Verify the file was actually edited
+		data, _ := os.ReadFile(filePath)
+		if string(data) != "replaced\n" {
+			t.Errorf("expected 'replaced\\n', got %q", string(data))
+		}
+	})
+
+	t.Run("deletion_strips_trailing_newline", func(t *testing.T) {
+		// Source: FileEditTool/utils.ts:222-227 — applyEditToFile
+		// When deleting a line (new_string=""), also strip the trailing \n
+		dir := t.TempDir()
+		filePath := filepath.Join(dir, "del.txt")
+		os.WriteFile(filePath, []byte("line1\nline2\nline3\n"), 0644)
+
+		tc := &tools.ToolContext{CWD: dir}
+		input := json.RawMessage(fmt.Sprintf(
+			`{"file_path": %q, "old_string": "line2", "new_string": ""}`,
+			filePath,
+		))
+		out, err := tool.Execute(context.Background(), tc, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.IsError {
+			t.Fatalf("unexpected error: %s", out.Content)
+		}
+
+		data, _ := os.ReadFile(filePath)
+		// Should be "line1\nline3\n" (line2 AND its newline removed)
+		if string(data) != "line1\nline3\n" {
+			t.Errorf("expected 'line1\\nline3\\n', got %q", string(data))
+		}
+	})
+
+	t.Run("max_file_size_1gib", func(t *testing.T) {
+		if tools.MaxEditFileSize != 1024*1024*1024 {
+			t.Errorf("MaxEditFileSize = %d, want 1 GiB (%d)", tools.MaxEditFileSize, 1024*1024*1024)
+		}
+	})
 }
