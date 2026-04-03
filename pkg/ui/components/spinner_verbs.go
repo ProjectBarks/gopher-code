@@ -68,6 +68,14 @@ var SpinnerVerbs = []string{
 	"Zesting", "Zigzagging",
 }
 
+// TurnCompletionVerbs are past tense verbs for turn completion messages.
+// These work naturally with "for [duration]" (e.g., "Worked for 5s").
+// Source: constants/turnCompletionVerbs.ts
+var TurnCompletionVerbs = []string{
+	"Baked", "Brewed", "Churned", "Cogitated",
+	"Cooked", "Crunched", "Sautéed", "Worked",
+}
+
 // Effort level icons (from Claude Code's src/constants/figures.ts).
 const (
 	EffortLow    = "○" // U+25CB WHITE CIRCLE
@@ -190,13 +198,15 @@ func (ts *ThinkingSpinner) View() string {
 			suffixStyle.Render(suffix)
 	}
 
-	// Completed state
+	// Completed state — use random turn completion verb.
+	// Source: constants/turnCompletionVerbs.ts
 	secs := int(ts.elapsed.Seconds())
 	if secs < 1 {
 		secs = 1
 	}
+	completionVerb := TurnCompletionVerbs[rand.Intn(len(TurnCompletionVerbs))]
 	return glyphStyle.Render(glyph) + " " +
-		suffixStyle.Render(fmt.Sprintf("thought for %ds", secs))
+		suffixStyle.Render(fmt.Sprintf("%s for %ds", completionVerb, secs))
 }
 
 // TipView renders the tip line below the spinner.

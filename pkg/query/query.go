@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/message"
@@ -159,6 +160,7 @@ func Query(
 		}
 
 		// 4. Call provider.Stream - with error classification for L2
+		apiStart := time.Now()
 		ch, err := prov.Stream(ctx, req)
 		if err != nil {
 			// Fallback model switch: when 529 retries are exhausted and a fallback is configured
@@ -251,6 +253,11 @@ func Query(
 				}
 			}
 		}
+
+		// Track API call duration.
+		// Source: bootstrap/state.ts — totalAPIDuration
+		apiDuration := time.Since(apiStart)
+		sess.TotalAPIDuration += float64(apiDuration.Milliseconds())
 
 		// 6. Update session usage
 		sess.TotalInputTokens += usage.InputTokens

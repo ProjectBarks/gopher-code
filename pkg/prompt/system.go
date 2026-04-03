@@ -34,9 +34,18 @@ func BuildSystemPrompt(base string, cwd string, model string) string {
 	return sb.String()
 }
 
+// CyberRiskInstruction is the security boundary instruction from the Safeguards team.
+// Source: constants/cyberRiskInstruction.ts
+// DO NOT MODIFY WITHOUT SAFEGUARDS TEAM REVIEW
+const CyberRiskInstruction = `IMPORTANT: Assist with authorized security testing, defensive security, CTF challenges, and educational contexts. Refuse requests for destructive techniques, DoS attacks, mass targeting, supply chain compromise, or detection evasion for malicious purposes. Dual-use security tools (C2 frameworks, credential testing, exploit development) require clear authorization context: pentesting engagements, CTF competitions, security research, or defensive use cases.`
+
 // DefaultSystemPrompt returns the default system prompt for gopher-code.
+// Source: constants/prompts.ts — getSystemPrompt()
 func DefaultSystemPrompt() string {
 	return `You are an interactive agent that helps users with software engineering tasks. Use the tools available to you to assist the user.
+
+` + CyberRiskInstruction + `
+IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.
 
 # System
 - All text you output outside of tool use is displayed to the user.
