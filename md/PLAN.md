@@ -175,18 +175,23 @@ For each batch:
 ---
 
 ## Batch 8 — Mode & Config Tools
-- [ ] `tools/EnterPlanModeTool/`
-- [ ] `tools/ExitPlanModeTool/`
-- [ ] `tools/EnterWorktreeTool/`
-- [ ] `tools/ExitWorktreeTool/`
-- [ ] `tools/ConfigTool/`
-- [ ] `tools/AskUserQuestionTool/`
+- [x] `tools/EnterPlanModeTool/`
+- [x] `tools/ExitPlanModeTool/`
+- [x] `tools/EnterWorktreeTool/`
+- [x] `tools/ExitWorktreeTool/`
+- [x] `tools/ConfigTool/`
+- [x] `tools/AskUserQuestionTool/`
 
 **Fixes applied:**
+- `pkg/tools/askuser.go`: Expanded InputSchema to match TS — added options array (label/description/preview), header, multiSelect. Updated description to match TS. Updated Execute to render options list.
+- `pkg/tools/configtool.go`: Changed schema from action/key/value to setting/value pattern matching TS ConfigTool.ts:36-48. Value now accepts any type (string, boolean, number). Get mode triggered by omitting value.
+- PlanMode/Worktree tools: Reviewed — already at good parity. PlanState tracks enter/exit transitions, mode restoration, and exit attachment state correctly.
 
 **Tests added:**
+- `pkg/tools/askuser_test.go`: question_with_options, multiselect_question (replaced non_interactive_disclaimer)
+- `pkg/tools/configtool_test.go`: Rewrote all tests for new setting/value API (valid_schema, get_unset_setting, set_and_get, set_boolean_value, missing_setting_param, invalid_json)
 
-**Notes written:**
+**Notes written:** `md/batch-08-notes.md`
 
 ---
 
@@ -635,7 +640,7 @@ For each batch:
 | 5 | Agent & Team Tools | [x] | 1 file | existing tests pass | batch-05-notes.md |
 | 6 | Task & Todo Tools | [x] | 1 file | 1 test file (1 new test) | batch-06-notes.md |
 | 7 | Web & MCP Tools | [x] | 0 files | existing tests pass | batch-07-notes.md |
-| 8 | Mode & Config Tools | [ ] | | | |
+| 8 | Mode & Config Tools | [x] | 2 files | 2 test files (8 tests) | batch-08-notes.md |
 | 9 | Utility Tools | [ ] | | | |
 | 10 | Core Services | [ ] | | | |
 | 11 | Memory & Dream Services | [ ] | | | |
