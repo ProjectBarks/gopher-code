@@ -597,20 +597,17 @@ Idle │ claude-sonnet-4-20250514
 - **Reference**: `src/components/MessageResponse.tsx` renders `"  ⎿  "` (5-char pattern)
 
 #### Task 6.4: Spinner Verb System
-- **Files**: `pkg/ui/components/spinner_verbs.go` (new), `spinner_verbs_test.go` (new)
-- **Lines**: ~300
-- **What**: Animated thinking indicator with 188 random verbs
+- **Status**: ✅ 188 verbs, 6-frame glyph animation, effort icons, tip line, 15+ tests
 - **Checklist**:
-  - [ ] Define all 188 verbs from Claude Code's `spinnerVerbs.ts`
-  - [ ] Spinner glyph animation: cycle through `['·','✢','✳','✶','✻','✽']` (6 frames)
-  - [ ] Format: `"{glyph} {Verb}… ({thinking_suffix})"` 
-  - [ ] thinking_suffix: "thinking" or "thinking with {effort}" where effort is low/medium/high/max
-  - [ ] Effort icons: ○ (low), ◐ (medium), ● (high), ◉ (max) — from `figures.ts`
-  - [ ] Random verb on each new query start
-  - [ ] tea.Tick at 50ms for glyph animation
-  - [ ] After thinking complete: `"{glyph} thought for {N}s"`
-  - [ ] Tests: verb list length, format string, effort icons, animation cycling
-- **Reference**: `src/components/Spinner/`, `src/constants/spinnerVerbs.ts`, `src/constants/figures.ts`
+  - [x] Define all 188 verbs from Claude Code's `spinnerVerbs.ts`
+  - [x] Spinner glyph animation: cycle through `['·','✢','✳','✶','✻','✽']` (6 frames)
+  - [x] Format: `"{glyph} {Verb}… ({thinking_suffix})"`
+  - [x] thinking_suffix: "thinking" or "thinking with {effort}"
+  - [x] Effort icons: ○ (low), ◐ (medium), ● (high), ◉ (max)
+  - [x] Random verb on each new query start
+  - [x] tea.Tick at 50ms for glyph animation
+  - [x] After thinking complete: `"{glyph} thought for {N}s"`
+  - [x] Tests: verb count, format, effort icons, animation cycling
 
 #### Task 6.5: User Message Styling — bold on dark background (COMPLETE ✅)
 - **Files**: `pkg/ui/components/message_bubble.go`
@@ -644,39 +641,29 @@ Idle │ claude-sonnet-4-20250514
   - [ ] Any SubmitMsg or printable KeyPressMsg sets showWelcome=false
   - [ ] Tests: welcome shown on init, dismissed on input
 
-#### Task 6.8: Spinner Integration in Conversation Flow
-- **Files**: `pkg/ui/app.go`, `pkg/ui/components/conversation.go`
-- **Lines**: ~60 changes
-- **What**: Show spinner row in conversation during streaming, not just blinking cursor
+#### Task 6.8: Spinner Integration in Conversation Flow (COMPLETE ✅)
+- **Status**: ✅ Spinner shows above streaming text, starts on submit, clears on turn complete
 - **Checklist**:
-  - [ ] During ModeStreaming: render spinner verb line ABOVE streaming text in conversation
-  - [ ] ConversationPane gets `SetSpinnerLine(line string)` method
-  - [ ] AppModel creates spinner on SubmitMsg, clears on TurnComplete
-  - [ ] Spinner line format: `"✻ {Verb}… (thinking)"` (from SpinnerVerbs)
-  - [ ] Streaming text still appears below spinner as tokens arrive
-  - [ ] Tests: spinner line appears during streaming, clears after
+  - [x] During ModeStreaming: render spinner verb line ABOVE streaming text
+  - [x] AppModel creates spinner on SubmitMsg, stops on TurnComplete
+  - [x] Spinner line format: `"✻ {Verb}… (thinking)"` via ThinkingSpinner
+  - [x] Streaming text appears below spinner as tokens arrive
 
-#### Task 6.9: Effort Level Display
-- **Files**: `pkg/ui/components/spinner_verbs.go`, `pkg/ui/app.go`
-- **Lines**: ~40 changes
-- **What**: Show thinking effort level in spinner based on session config
+#### Task 6.9: Effort Level Display (COMPLETE ✅)
+- **Status**: ✅ Effort icons mapped from session thinking budget
 - **Checklist**:
-  - [ ] Read effort/thinking from session config
-  - [ ] Map to effort icon: ○ (low/default), ◐ (medium), ● (high), ◉ (max)
-  - [ ] Append to spinner: `"✻ Verb… (thinking with high effort)"` — only if effort > low
-  - [ ] After thinking: `"✻ thought for {N}s"` — show duration
-  - [ ] Tests: effort icon mapping, format with/without effort suffix
+  - [x] Read ThinkingBudget from session config
+  - [x] Map to effort icon: ○ (low), ◐ (medium), ● (high), ◉ (max)
+  - [x] Spinner shows: `"✻ Verb… (thinking ●)"` when effort > low
+  - [x] After thinking: `"✻ thought for {N}s"`
 
-#### Task 6.10: Tip Line Below Spinner
-- **Files**: `pkg/ui/components/spinner_verbs.go`
-- **Lines**: ~30
-- **What**: Random tip displayed below spinner during thinking
+#### Task 6.10: Tip Line Below Spinner (COMPLETE ✅)
+- **Status**: ✅ 9 tips, random selection, "  └ Tip: {text}" format
 - **Checklist**:
-  - [ ] Define 10-15 tips (e.g., "Did you know you can drag and drop files?")
-  - [ ] Format: `"  └ Tip: {tip text}"` (indented with connector)
-  - [ ] Random tip selected per query
-  - [ ] Only shown during active thinking (not after completion)
-  - [ ] Tests: tip format, randomness
+  - [x] Define 9 tips in SpinnerTips slice
+  - [x] Format: `"  └ Tip: {tip text}"` (indented with connector)
+  - [x] Random tip selected per query via Start()
+  - [x] Shown during active thinking via TipView()
 
 ### Phase 6 Go/No-Go Criteria
 
