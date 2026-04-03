@@ -727,11 +727,11 @@ Ensure the UI looks functions nearly identical to claude
 ---
 
 ## Batch 33 — Plugins, Skills & Data
-- [ ] `plugins/`
-- [ ] `skills/`
-- [ ] `memdir/`
-- [ ] `migrations/`
-- [ ] `keybindings/`
+- [x] `plugins/`
+- [x] `skills/`
+- [x] `memdir/`
+- [x] `migrations/`
+- [x] `keybindings/`
 
 **Fixes applied:**
 
@@ -742,11 +742,11 @@ Ensure the UI looks functions nearly identical to claude
 ---
 
 ## Batch 34 — Native, Output & Extras
-- [ ] `native-ts/`
-- [ ] `outputStyles/`
-- [ ] `moreright/`
-- [ ] `vim/`
-- [ ] `voice/`
+- [x] `native-ts/`
+- [x] `outputStyles/`
+- [x] `moreright/`
+- [x] `vim/`
+- [x] `voice/`
 
 **Fixes applied:**
 
@@ -798,5 +798,5 @@ Ensure the UI looks functions nearly identical to claude
 | 30 | Commands | [x] | 0 files | existing tests pass | |
 | 31 | Commands | [x] | 0 files | existing tests pass | |
 | 32 | Commands | [x] | 0 files | existing tests pass | |
-| 33 | Plugins, Skills & Data | [ ] | | | |
-| 34 | Native, Output & Extras | [ ] | | | |
+| 33 | Data & Extras | [x] | 0 files | existing tests pass | |
+| 34 | Data & Extras | [x] | 0 files | existing tests pass | |
