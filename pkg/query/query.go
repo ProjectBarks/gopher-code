@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -265,13 +264,25 @@ func Query(
 		}
 		sess.TurnCount++
 
+		// Compute accurate cost and update session tracking.
+		// Source: bootstrap/state.ts — addToTotalCostState()
+		turnUsage := provider.TokenUsage{
+			InputTokens:  usage.InputTokens,
+			OutputTokens: usage.OutputTokens,
+		}
+		if usage.CacheReadInputTokens != nil {
+			turnUsage.CacheReadInputTokens = *usage.CacheReadInputTokens
+		}
+		if usage.CacheCreationInputTokens != nil {
+			turnUsage.CacheCreationInputTokens = *usage.CacheCreationInputTokens
+		}
+		turnCost := provider.CalculateUSDCost(sess.Config.Model, turnUsage)
+		sess.AddCost(sess.Config.Model, turnCost, turnUsage)
+
 		// Budget check: stop if spend exceeds --max-budget-usd
 		if sess.Config.MaxBudgetUSD > 0 {
-			// Rough Sonnet pricing: $3/MTok input, $15/MTok output
-			cost := float64(sess.TotalInputTokens)/1_000_000*3.0 + float64(sess.TotalOutputTokens)/1_000_000*15.0
-			cost = math.Round(cost*10000) / 10000 // round to 4 decimal places
-			if cost > sess.Config.MaxBudgetUSD {
-				return &AgentError{Kind: ErrProvider, Detail: fmt.Sprintf("budget exceeded: $%.4f > $%.2f", cost, sess.Config.MaxBudgetUSD)}
+			if sess.TotalCostUSD > sess.Config.MaxBudgetUSD {
+				return &AgentError{Kind: ErrProvider, Detail: fmt.Sprintf("budget exceeded: %s > %s", provider.FormatCost(sess.TotalCostUSD), provider.FormatCost(sess.Config.MaxBudgetUSD))}
 			}
 		}
 
