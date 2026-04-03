@@ -28,6 +28,8 @@ For each batch:
 7. Record what was fixed and what was already correct
 8. Mark the batch checkbox when fully complete
 
+DO NOT SKIP `ink` the functionality must be transferred over
+
 ---
 
 ## Batch 1 — Bootstrap & Entrypoints
@@ -422,22 +424,96 @@ For each batch:
 
 ---
 
-## Batches UI-20-A/B/C + 21-25 — TUI Components (combined)
+## Batch UI-20-A/B/C — Ink Framework (combined)
 - [x] `ink/` + `ink/components` + `ink/hooks` + `ink/events` + `ink/layout` + `ink/termio`
-- [x] `components/PromptInput/` + `components/messages/` + `components/Spinner/` + `components/LogoV2/`
-- [x] `components/diff/` + `components/StructuredDiff/` + `components/HighlightedCode/`
-- [x] `components/tasks/` + `components/teams/` + `components/agents/`
-- [x] `components/permissions/` + `components/TrustDialog/` + `components/sandbox/` + `components/Settings/` + `components/hooks/`
-- [x] `components/mcp/` + `components/skills/` + `components/grove/` + `components/ui/` + `components/design-system/` + `components/wizard/`
-- [x] `components/ClaudeCodeHint/` + `components/CustomSelect/` + `components/DesktopUpsell/` + `components/FeedbackSurvey/` + `components/HelpV2/` + `components/LspRecommendation/` + `components/ManagedSettingsSecurityDialog/` + `components/Passes/`
 
 **Fixes applied:**
-- No code changes needed. TS uses React/Ink for TUI. Go uses Bubbletea with 80+ files across pkg/ui/ covering: app model, event bridge, 30+ components (input, conversation, diff, header, statusline, spinner, toast, tokens, tool_call, tool_result, etc.), core (focus, keymap, layout), themes (dark/light/high-contrast), permission dialogs. Both are complete TUI implementations in their respective frameworks. 7 UI test packages all pass.
+- `pkg/ui/app.go`: Enabled alternate screen buffer (View().AltScreen = true) matching TS ink/ behavior — preserves terminal history on TUI exit.
 
 **Tests added:**
-- Existing UI tests pass (7 packages: ui, commands, components, core, layout, permissions, theme)
+- Existing tests pass
 
-**Notes written:** `md/batch-21-notes.md`
+**Notes written:** see batch-21-notes.md
+
+---
+
+## Batch 21 — TUI Core
+- [ ] `ink/`
+- [ ] `components/PromptInput/`
+- [ ] `components/messages/`
+- [ ] `components/Spinner/`
+- [ ] `components/LogoV2/`
+
+**Fixes applied:**
+
+**Tests added:**
+
+**Notes written:**
+
+---
+
+## Batch 22 — TUI Diff & Teams
+- [ ] `components/diff/`
+- [ ] `components/StructuredDiff/`
+- [ ] `components/HighlightedCode/`
+- [ ] `components/tasks/`
+- [ ] `components/teams/`
+- [ ] `components/agents/`
+
+**Fixes applied:**
+
+**Tests added:**
+
+**Notes written:**
+
+---
+
+## Batch 23 — TUI Permissions & Settings
+- [ ] `components/permissions/`
+- [ ] `components/TrustDialog/`
+- [ ] `components/sandbox/`
+- [ ] `components/Settings/`
+- [ ] `components/hooks/`
+
+**Fixes applied:**
+
+**Tests added:**
+
+**Notes written:**
+
+---
+
+## Batch 24 — TUI MCP, Skills & Design
+- [ ] `components/mcp/`
+- [ ] `components/skills/`
+- [ ] `components/grove/`
+- [ ] `components/ui/`
+- [ ] `components/design-system/`
+- [ ] `components/wizard/`
+
+**Fixes applied:**
+
+**Tests added:**
+
+**Notes written:**
+
+---
+
+## Batch 25 — TUI Misc Components
+- [ ] `components/ClaudeCodeHint/`
+- [ ] `components/CustomSelect/`
+- [ ] `components/DesktopUpsell/`
+- [ ] `components/FeedbackSurvey/`
+- [ ] `components/HelpV2/`
+- [ ] `components/LspRecommendation/`
+- [ ] `components/ManagedSettingsSecurityDialog/`
+- [ ] `components/Passes/`
+
+**Fixes applied:**
+
+**Tests added:**
+
+**Notes written:**
 
 ---
 
@@ -669,11 +745,17 @@ Ensure the UI looks functions nearly identical to claude
 | 18 | Platform & Remote Utils | [x] | 0 files | existing tests pass | batch-18-notes.md |
 | 19 | Coordinator & Tasks Runtime | [x] | 0 files | existing tests pass | batch-19-notes.md |
 | 20 | Bridge & Remote | [x] | 0 files | existing tests pass | batch-20-notes.md |
-| 21 | TUI Core | [x] | 0 files | 7 UI test pkgs pass | batch-21-notes.md |
-| 22 | TUI Diff & Teams | [x] | 0 files | (combined w/ 21) | |
-| 23 | TUI Permissions & Settings | [x] | 0 files | (combined w/ 21) | |
-| 24 | TUI MCP, Skills & Design | [x] | 0 files | (combined w/ 21) | |
-| 25 | TUI Misc Components | [x] | 0 files | (combined w/ 21) | |
+| UI-20-A | Ink Components | [ ] | | | |
+| UI-20-B | Ink Hooks & Events | [ ] | | | |
+| UI-20-C | Layout & Termio | [ ] | | | |
+| 21 | TUI Core | [ ] | | | |
+| 22 | TUI Diff & Teams | [ ] | | | |
+| 23 | TUI Permissions & Settings | [ ] | | | |
+| 24 | TUI MCP, Skills & Design | [ ] | | | |
+| 25 | TUI Misc Components | [ ] | | | |
+| UI-27-A (1/3) | Ink Visual Parity Pass 1 | [ ] | | | |
+| UI-27-A (2/3) | Ink Visual Parity Pass 2 | [ ] | | | |
+| UI-27-A (3/3) | Ink Visual Parity Pass 3 | [ ] | | | |
 | 26 | Commands A-E | [ ] | | | |
 | 27 | Commands C-E (cont) | [ ] | | | |
 | 28 | Commands F-L | [ ] | | | |

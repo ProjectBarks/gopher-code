@@ -35,7 +35,9 @@ func RunTUIV2(
 		return query.Query(qctx, qsess, prov, registry, orchestrator, onEvent)
 	})
 
-	// Create the Bubbletea program
+	// Create the Bubbletea program.
+	// Alternate screen is enabled via View().AltScreen = true in AppModel.
+	// Source: ink/ink.tsx — TS Ink uses alternate screen buffer.
 	p := tea.NewProgram(appModel)
 
 	// Wire the bridge to the program (must happen before any queries)

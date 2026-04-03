@@ -292,7 +292,12 @@ func (a *AppModel) View() tea.View {
 	// Status line (always visible)
 	sections = append(sections, a.statusLine.View().Content)
 
-	return tea.NewView(strings.Join(sections, "\n"))
+	v := tea.NewView(strings.Join(sections, "\n"))
+	// Enable alternate screen buffer so the user's terminal history is
+	// preserved when the TUI exits.
+	// Source: ink/ink.tsx — TS Ink uses alternate screen
+	v.AltScreen = true
+	return v
 }
 
 // --- Message handlers ---
