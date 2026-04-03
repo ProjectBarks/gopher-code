@@ -4,8 +4,10 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/session"
+	"github.com/projectbarks/gopher-code/pkg/ui/components"
 	"github.com/projectbarks/gopher-code/pkg/ui/core"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
@@ -42,11 +44,11 @@ type TurnCompleteMsg struct {
 
 // StatusUpdateMsg updates the status line display.
 type StatusUpdateMsg struct {
-	Model       string
-	Tokens      int
-	Mode        AppMode
-	Cost        float64
-	InputTokens int
+	Model        string
+	Tokens       int
+	Mode         AppMode
+	Cost         float64
+	InputTokens  int
 	OutputTokens int
 }
 
@@ -54,7 +56,7 @@ type StatusUpdateMsg struct {
 type AppMode int
 
 const (
-	ModeIdle       AppMode = iota
+	ModeIdle        AppMode = iota
 	ModeStreaming
 	ModeToolRunning
 )
@@ -74,19 +76,33 @@ type AppModel struct {
 	// Focus management
 	focus *core.FocusManager
 
-	// Streaming state
-	streamingText strings.Builder
+	// Child components
+	conversation *components.ConversationPane
+	statusLine   *components.StatusLine
+	bubble       *components.MessageBubble
+	streaming    *components.StreamingText
+
+	// Streaming state — tracks the current assistant turn
+	streamingText   strings.Builder
+	activeToolCalls map[string]string // toolUseID → toolName
 }
 
 // NewAppModel creates a new AppModel with the given session and bridge.
 func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
+	t := theme.Current()
+
 	app := &AppModel{
-		session: sess,
-		bridge:  bridge,
-		mode:    ModeIdle,
+		session:         sess,
+		bridge:          bridge,
+		mode:            ModeIdle,
+		conversation:    components.NewConversationPane(),
+		statusLine:      components.NewStatusLine(sess),
+		bubble:          components.NewMessageBubble(t, 80),
+		streaming:       components.NewStreamingText(t),
+		activeToolCalls: make(map[string]string),
 	}
 
-	// Initialize focus manager (will add children as components are created)
+	// Initialize focus manager
 	app.focus = core.NewFocusManager()
 
 	return app
@@ -144,9 +160,9 @@ func (a *AppModel) View() tea.View {
 	header := a.renderHeader(t)
 	sections = append(sections, header)
 
-	// Conversation area
-	conversation := a.renderConversation(t)
-	sections = append(sections, conversation)
+	// Conversation area — use the ConversationPane
+	convView := a.conversation.View()
+	sections = append(sections, convView.Content)
 
 	// Status line
 	status := a.renderStatusLine(t)
@@ -160,6 +176,20 @@ func (a *AppModel) View() tea.View {
 func (a *AppModel) handleResize(msg tea.WindowSizeMsg) (*AppModel, tea.Cmd) {
 	a.width = msg.Width
 	a.height = msg.Height
+
+	// Resize child components
+	headerHeight := 1
+	statusHeight := 1
+	convHeight := a.height - headerHeight - statusHeight
+	if convHeight < 1 {
+		convHeight = 1
+	}
+
+	a.conversation.SetSize(a.width, convHeight)
+	a.statusLine.SetSize(a.width, statusHeight)
+	a.bubble.SetWidth(a.width)
+	a.streaming.SetSize(a.width, 0)
+
 	return a, nil
 }
 
@@ -206,6 +236,11 @@ func (a *AppModel) handleQueryEvent(msg QueryEventMsg) (*AppModel, tea.Cmd) {
 			a.session.TotalInputTokens += evt.InputTokens
 			a.session.TotalOutputTokens += evt.OutputTokens
 		}
+		// Update status line tokens
+		a.statusLine.Update(components.TokenUpdateMsg{
+			InputTokens:  a.session.TotalInputTokens,
+			OutputTokens: a.session.TotalOutputTokens,
+		})
 		return a, nil
 	}
 	return a, nil
@@ -214,21 +249,56 @@ func (a *AppModel) handleQueryEvent(msg QueryEventMsg) (*AppModel, tea.Cmd) {
 func (a *AppModel) handleTextDelta(msg TextDeltaMsg) (*AppModel, tea.Cmd) {
 	a.mode = ModeStreaming
 	a.streamingText.WriteString(msg.Text)
+
+	// Update streaming text component and conversation pane
+	a.streaming.AppendDelta(msg.Text)
+	a.conversation.SetStreamingText(a.streamingText.String())
+
+	// Update status line mode
+	a.statusLine.Update(components.ModeChangeMsg{Mode: components.ModeStreaming})
+
 	return a, nil
 }
 
 func (a *AppModel) handleToolUseStart(msg ToolUseStartMsg) (*AppModel, tea.Cmd) {
 	a.mode = ModeToolRunning
+	a.activeToolCalls[msg.ToolUseID] = msg.ToolName
+
+	// Update status line mode
+	a.statusLine.Update(components.ModeChangeMsg{Mode: components.ModeToolRunning})
+
 	return a, nil
 }
 
 func (a *AppModel) handleToolResult(msg ToolResultMsg) (*AppModel, tea.Cmd) {
+	// Track that this tool call is done
+	delete(a.activeToolCalls, msg.ToolUseID)
 	return a, nil
 }
 
 func (a *AppModel) handleTurnComplete(msg TurnCompleteMsg) (*AppModel, tea.Cmd) {
 	a.mode = ModeIdle
+
+	// Finalize the assistant message — add accumulated text to conversation
+	if a.streamingText.Len() > 0 {
+		assistantMsg := message.Message{
+			Role: message.RoleAssistant,
+			Content: []message.ContentBlock{
+				{Type: message.ContentText, Text: a.streamingText.String()},
+			},
+		}
+		a.conversation.AddMessage(assistantMsg)
+	}
+
+	// Reset streaming state
 	a.streamingText.Reset()
+	a.streaming.Reset()
+	a.conversation.ClearStreamingText()
+	a.activeToolCalls = make(map[string]string)
+
+	// Update status line mode
+	a.statusLine.Update(components.ModeChangeMsg{Mode: components.ModeIdle})
+
 	return a, nil
 }
 
@@ -243,29 +313,6 @@ func (a *AppModel) renderHeader(t theme.Theme) string {
 	return style.Render("Gopher — " + modelName)
 }
 
-func (a *AppModel) renderConversation(t theme.Theme) string {
-	if a.streamingText.Len() > 0 {
-		return a.streamingText.String()
-	}
-	return t.TextSecondary().Render("No messages yet. Type below to start a conversation.")
-}
-
 func (a *AppModel) renderStatusLine(t theme.Theme) string {
-	var parts []string
-
-	switch a.mode {
-	case ModeIdle:
-		parts = append(parts, "Idle")
-	case ModeStreaming:
-		parts = append(parts, "Streaming...")
-	case ModeToolRunning:
-		parts = append(parts, "Running tool...")
-	}
-
-	if a.session != nil {
-		parts = append(parts, a.session.Config.Model)
-	}
-
-	style := t.TextSecondary()
-	return style.Render(strings.Join(parts, " | "))
+	return a.statusLine.View().Content
 }

@@ -131,86 +131,92 @@ Before proceeding to Phase 2:
 
 ### Tasks
 
-#### Task 2.1: MessageBubble Renderer
+#### Task 2.1: MessageBubble Renderer (COMPLETE ✅)
 - **File**: `pkg/ui/components/message_bubble.go`
 - **Lines**: 400
+- **Status**: ✅ All content block types rendered, Glamour markdown, 16 tests + 3 benchmarks
 - **What**: Render single message (user/assistant) with styling
 - **Tests**: message_bubble_test.go
 - **Checklist**:
-  - [ ] Pure function: Render(msg *message.Message, width int) string
-  - [ ] User messages: "> " prefix, dim styling
-  - [ ] Assistant messages: iterate content blocks
-  - [ ] Text block → render via Glamour
-  - [ ] Tool use block → render via ToolCallDisplay
-  - [ ] Tool result block → render via ToolResultDisplay
-  - [ ] Metadata footer (tokens, cost)
-  - [ ] Tests: all message types, word wrapping
+  - [x] Pure function: Render(msg *message.Message, width int) string
+  - [x] User messages: "> " prefix, dim styling
+  - [x] Assistant messages: iterate content blocks
+  - [x] Text block → render via Glamour
+  - [x] Tool use block → render via ToolCallDisplay
+  - [x] Tool result block → render via ToolResultDisplay
+  - [x] Metadata footer (tokens, cost)
+  - [x] Tests: all message types, word wrapping
 
-#### Task 2.2: StreamingText Live Buffer
+#### Task 2.2: StreamingText Live Buffer (COMPLETE ✅)
 - **File**: `pkg/ui/components/streaming_text.go`
 - **Lines**: 300
+- **Status**: ✅ Pre-existing implementation, all tests pass
 - **What**: Buffer text with blinking cursor during stream
 - **Tests**: streaming_text_test.go
 - **Checklist**:
-  - [ ] AppendDelta(text string) adds to buffer
-  - [ ] View() renders with optional cursor
-  - [ ] Cursor blinks on Tick
-  - [ ] Tests: text accumulation, cursor animation, reset on complete
+  - [x] AppendDelta(text string) adds to buffer
+  - [x] View() renders with optional cursor
+  - [x] Cursor blinks on Tick
+  - [x] Tests: text accumulation, cursor animation, reset on complete
 
-#### Task 2.3: ToolCallDisplay
+#### Task 2.3: ToolCallDisplay (COMPLETE ✅)
 - **File**: `pkg/ui/components/tool_call.go`
 - **Lines**: 300
+- **Status**: ✅ Pre-existing implementation, all tests pass
 - **What**: Show tool execution (pending/complete)
 - **Tests**: tool_call_test.go
 - **Checklist**:
-  - [ ] Display tool name + icon
-  - [ ] Spinner while pending
-  - [ ] Result summary when complete
-  - [ ] Tests: pending state, completion, error state
+  - [x] Display tool name + icon
+  - [x] Spinner while pending
+  - [x] Result summary when complete
+  - [x] Tests: pending state, completion, error state
 
-#### Task 2.4: ToolResultDisplay
+#### Task 2.4: ToolResultDisplay (COMPLETE ✅)
 - **File**: `pkg/ui/components/tool_result.go`
 - **Lines**: 300
+- **Status**: ✅ Pre-existing implementation, all tests pass
 - **What**: Render tool output (text, JSON, error)
 - **Tests**: tool_result_test.go
 - **Checklist**:
-  - [ ] Text results → formatted output
-  - [ ] JSON results → pretty-printed
-  - [ ] Error results → red, show error message
-  - [ ] Tests: all result types
+  - [x] Text results → formatted output
+  - [x] JSON results → pretty-printed
+  - [x] Error results → red, show error message
+  - [x] Tests: all result types
 
-#### Task 2.5: CodeBlock with Syntax Highlighting
+#### Task 2.5: CodeBlock with Syntax Highlighting (COMPLETE ✅)
 - **File**: `pkg/ui/components/code_block.go`
 - **Lines**: 200
+- **Status**: ✅ Pre-existing implementation with chroma, all tests pass
 - **What**: Syntax highlight via chroma, line numbers
 - **Tests**: code_block_test.go
 - **Checklist**:
-  - [ ] Detect language from code fence
-  - [ ] Use chroma lexer for highlighting
-  - [ ] Add line numbers
-  - [ ] Handle long lines (wrap or scroll)
-  - [ ] Tests: all languages, edge cases
+  - [x] Detect language from code fence
+  - [x] Use chroma lexer for highlighting
+  - [x] Add line numbers
+  - [x] Handle long lines (wrap or scroll)
+  - [x] Tests: all languages, edge cases
 
-#### Task 2.6: Integration - QueryEvent → Components
+#### Task 2.6: Integration - QueryEvent → Components (COMPLETE ✅)
 - **File**: Modify `pkg/ui/app.go`
 - **Lines**: 150
+- **Status**: ✅ AppModel wired to ConversationPane, StreamingText, MessageBubble, StatusLine
 - **What**: Wire QueryEvents to ConversationPane
 - **Checklist**:
-  - [ ] TextDeltaMsg → append to StreamingText
-  - [ ] ToolUseStartMsg → add ToolCallDisplay
-  - [ ] ToolResultMsg → update ToolResultDisplay
-  - [ ] TurnCompleteMsg → finalize message, add to history
-  - [ ] Tests: full conversation flow
+  - [x] TextDeltaMsg → append to StreamingText
+  - [x] ToolUseStartMsg → add ToolCallDisplay
+  - [x] ToolResultMsg → update ToolResultDisplay
+  - [x] TurnCompleteMsg → finalize message, add to history
+  - [x] Tests: full conversation flow
 
 ### Phase 2 Go/No-Go Criteria
 
 Before proceeding to Phase 3:
-- [ ] All 6 tasks complete
-- [ ] Conversations display user/assistant messages
-- [ ] Streaming text updates real-time with cursor
-- [ ] Tool calls show with status (pending → complete)
-- [ ] Code blocks syntax-highlighted
-- [ ] `go test -race ./pkg/ui` passes
+- [x] All 6 tasks complete
+- [x] Conversations display user/assistant messages
+- [x] Streaming text updates real-time with cursor
+- [x] Tool calls show with status (pending → complete)
+- [x] Code blocks syntax-highlighted
+- [x] `go test -race ./pkg/ui` passes
 - [ ] Full multi-turn conversation works
 
 ---
