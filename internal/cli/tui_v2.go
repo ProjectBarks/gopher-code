@@ -52,10 +52,11 @@ func RunTUIV2(
 	return err
 }
 
-// UseNewUI returns true if the GOPHER_NEW_UI env var is set.
+// UseNewUI returns true unless GOPHER_OLD_UI is explicitly set.
+// The new Bubbletea TUI is the default. Set GOPHER_OLD_UI=1 for the legacy REPL.
 func UseNewUI() bool {
-	v := os.Getenv("GOPHER_NEW_UI")
-	return v == "1" || v == "true"
+	v := os.Getenv("GOPHER_OLD_UI")
+	return v != "1" && v != "true"
 }
 
 func init() {
