@@ -160,6 +160,110 @@ func TestHorizontalStackSetSize(t *testing.T) {
 	}
 }
 
+// TestHorizontalStackInit tests initialization of children.
+func TestHorizontalStackInit(t *testing.T) {
+	c1 := &MockComponent{}
+	c2 := &MockComponent{}
+
+	hs := NewHorizontalStack(c1, c2)
+	hs.Init()
+
+	if !c1.init || !c2.init {
+		t.Errorf("Init routing failed: c1=%v, c2=%v", c1.init, c2.init)
+	}
+}
+
+// TestHorizontalStackUpdate tests message routing to children.
+func TestHorizontalStackUpdate(t *testing.T) {
+	c1 := &MockComponent{}
+	c2 := &MockComponent{}
+
+	hs := NewHorizontalStack(c1, c2)
+	hs.Update(nil)
+
+	if c1.updates != 1 || c2.updates != 1 {
+		t.Errorf("Update routing failed: c1=%d, c2=%d", c1.updates, c2.updates)
+	}
+}
+
+// TestHorizontalStackView tests rendering.
+func TestHorizontalStackView(t *testing.T) {
+	c1 := &testRenderComponent{text: "Left"}
+	c2 := &testRenderComponent{text: "Right"}
+
+	hs := NewHorizontalStack(c1, c2)
+	view := hs.View()
+
+	if view.Content != "LeftRight" {
+		t.Errorf("Expected 'LeftRight', got %q", view.Content)
+	}
+}
+
+// TestHorizontalStackAdd tests adding children.
+func TestHorizontalStackAdd(t *testing.T) {
+	hs := NewHorizontalStack()
+	c1 := &MockComponent{}
+	hs.Add(c1)
+	if len(hs.children) != 1 {
+		t.Error("Add should append child")
+	}
+}
+
+// TestVerticalStackAdd tests adding children.
+func TestVerticalStackAdd(t *testing.T) {
+	vs := NewVerticalStack()
+	c1 := &MockComponent{}
+	vs.Add(c1)
+	if len(vs.children) != 1 {
+		t.Error("Add should append child")
+	}
+}
+
+// TestVerticalStackEmptySetSize tests SetSize with no children.
+func TestVerticalStackEmptySetSize(t *testing.T) {
+	vs := NewVerticalStack()
+	// Should not panic
+	vs.SetSize(80, 24)
+}
+
+// TestHorizontalStackEmptySetSize tests SetSize with no children.
+func TestHorizontalStackEmptySetSize(t *testing.T) {
+	hs := NewHorizontalStack()
+	// Should not panic
+	hs.SetSize(80, 24)
+}
+
+// TestHorizontalStackFlexibleWeights tests flex width distribution.
+func TestHorizontalStackFlexibleWeights(t *testing.T) {
+	c1 := &MockComponent{}
+	c2 := &MockComponent{}
+
+	hs := NewHorizontalStack()
+	hs.AddFlexible(c1, 1)
+	hs.AddFlexible(c2, 3)
+	hs.SetSize(40, 10)
+
+	// 1:3 ratio = 10:30
+	if c1.width != 10 {
+		t.Errorf("c1 width: got %d, want 10", c1.width)
+	}
+	if c2.width != 30 {
+		t.Errorf("c2 width: got %d, want 30", c2.width)
+	}
+}
+
+// TestFocusManagerModalActive tests ModalActive method.
+func TestFocusManagerModalActiveMethod(t *testing.T) {
+	fm := NewFocusManager(&MockComponent{})
+	if fm.ModalActive() {
+		t.Error("Should not have active modal initially")
+	}
+	fm.PushModal(&MockComponent{})
+	if !fm.ModalActive() {
+		t.Error("Should have active modal after PushModal")
+	}
+}
+
 // testRenderComponent is a test component that renders a specific text.
 type testRenderComponent struct {
 	text string
