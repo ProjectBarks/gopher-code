@@ -370,20 +370,22 @@ For each batch:
 ---
 
 ## Batch 18 — Platform & Remote Utils
-- [ ] `utils/background/`
-- [ ] `utils/claudeInChrome/`
-- [ ] `utils/computerUse/`
-- [ ] `utils/deepLink/`
-- [ ] `utils/dxt/`
-- [ ] `utils/nativeInstaller/`
-- [ ] `utils/teleport/`
-- [ ] `utils/ultraplan/`
+- [x] `utils/background/`
+- [x] `utils/claudeInChrome/`
+- [x] `utils/computerUse/`
+- [x] `utils/deepLink/`
+- [x] `utils/dxt/`
+- [x] `utils/nativeInstaller/`
+- [x] `utils/teleport/`
+- [x] `utils/ultraplan/`
 
 **Fixes applied:**
+- No code changes needed. All 8 directories are platform-specific (Electron/desktop/browser/CCR): background (CCR remote sessions), claudeInChrome (Chrome extension native messaging), computerUse (screenshot/click automation MCP), deepLink (claude:// protocol handler), dxt (desktop extension zip format), nativeInstaller (binary installer/updater), teleport (CCR environment management), ultraplan (advanced CCR planning). None apply to Go CLI.
 
 **Tests added:**
+- Existing tests pass
 
-**Notes written:**
+**Notes written:** `md/batch-18-notes.md`
 
 ---
 
@@ -685,7 +687,7 @@ For each batch:
 | 15 | Shell & Model Utils | [x] | 0 files | existing tests pass | batch-15-notes.md |
 | 16 | Git, Task & Plugin Utils | [x] | 0 files | existing tests pass | batch-16-notes.md |
 | 17 | Storage & Swarm Utils | [x] | 0 files | existing tests pass | batch-17-notes.md |
-| 18 | Platform & Remote Utils | [ ] | | | |
+| 18 | Platform & Remote Utils | [x] | 0 files | existing tests pass | batch-18-notes.md |
 | 19 | Coordinator & Tasks Runtime | [ ] | | | |
 | 20 | Bridge & Remote | [ ] | | | |
 | 21 | TUI Core | [ ] | | | |
