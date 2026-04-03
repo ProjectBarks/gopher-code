@@ -530,11 +530,15 @@ DO NOT SKIP `ink` the functionality must be transferred over
 
 ## Batch UI-27-A — Ink - Ink Pass 1 of 3 
 Ensure the UI looks functions nearly identical to claude
-- [ ] `ink/`
+- [x] `ink/`
 
 **Fixes applied:**
+- `pkg/ui/components/header.go`: Branding "🐿 Gopher" → "✻ Claude" matching TS
+- `pkg/ui/components/welcome.go`: Title "── Gopher" → "── Claude Code" matching TS
+- `pkg/ui/components/statusline.go`: Added cost display to idle status bar
 
 **Tests added:**
+- Updated app_test.go, visual_parity_test.go, header_test.go, welcome_test.go for Claude branding
 
 **Notes written:**
 

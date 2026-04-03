@@ -35,7 +35,7 @@ func TestVisualParity_StartupShowsWelcome(t *testing.T) {
 	if !strings.Contains(plain, "Welcome") {
 		t.Error("Startup should show Welcome screen")
 	}
-	if !strings.Contains(plain, "Gopher") {
+	if !strings.Contains(plain, "Claude") {
 		t.Error("Startup should show Gopher branding")
 	}
 	if !strings.Contains(plain, "Tips") {
@@ -69,7 +69,7 @@ func TestVisualParity_WelcomeDismissOnSubmit(t *testing.T) {
 		t.Error("Welcome screen should be dismissed after submit")
 	}
 	// Header should now show
-	if !strings.Contains(plain, "Gopher") {
+	if !strings.Contains(plain, "Claude") {
 		t.Error("Header should show after welcome dismiss")
 	}
 }

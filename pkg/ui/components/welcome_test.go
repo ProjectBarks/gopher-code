@@ -22,8 +22,8 @@ func TestWelcomeScreenView(t *testing.T) {
 	if !strings.Contains(plain, "Welcome") {
 		t.Error("Expected 'Welcome' in view")
 	}
-	if !strings.Contains(plain, "Gopher") {
-		t.Error("Expected 'Gopher' in view")
+	if !strings.Contains(plain, "Claude Code") {
+		t.Error("Expected 'Claude Code' in view")
 	}
 }
 

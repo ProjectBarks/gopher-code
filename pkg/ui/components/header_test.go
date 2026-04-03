@@ -46,8 +46,8 @@ func TestHeaderView(t *testing.T) {
 	h.SetSize(80, 1)
 	view := h.View()
 	plain := stripANSI(view.Content)
-	if !strings.Contains(plain, "Gopher") {
-		t.Error("Expected logo in header")
+	if !strings.Contains(plain, "Claude") {
+		t.Error("Expected Claude logo in header")
 	}
 	if !strings.Contains(plain, "opus") {
 		t.Error("Expected model name in header")
