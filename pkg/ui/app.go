@@ -100,6 +100,7 @@ type AppModel struct {
 	// Streaming state — tracks the current assistant turn
 	streamingText   strings.Builder
 	activeToolCalls map[string]string // toolUseID → toolName
+	spinner         *components.ThinkingSpinner
 
 	// Query execution
 	queryFunc   QueryFunc
@@ -133,6 +134,7 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 		statusLine:      components.NewStatusLine(sess),
 		bubble:          components.NewMessageBubble(t, 80),
 		streaming:       components.NewStreamingText(t),
+		spinner:         components.NewThinkingSpinner(t),
 		activeToolCalls: make(map[string]string),
 	}
 
@@ -166,6 +168,13 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case components.SubmitMsg:
 		return a.handleSubmit(msg)
+
+	case components.SpinnerTickMsg:
+		a.spinner.Update(msg)
+		if a.spinner.IsActive() {
+			return a, a.spinner.Tick()
+		}
+		return a, nil
 
 	case QueryEventMsg:
 		return a.handleQueryEvent(msg)
@@ -349,11 +358,30 @@ func (a *AppModel) handleSubmit(msg components.SubmitMsg) (*AppModel, tea.Cmd) {
 	}
 	a.conversation.AddMessage(userMsg)
 
-	// Dispatch query in background goroutine
-	if a.queryFunc != nil {
-		a.mode = ModeStreaming
-		a.statusLine.Update(components.ModeChangeMsg{Mode: components.ModeStreaming})
+	// Start spinner and dispatch query in background goroutine
+	a.mode = ModeStreaming
+	a.statusLine.Update(components.ModeChangeMsg{Mode: components.ModeStreaming})
+	a.spinner.Start()
 
+	// Set spinner effort from thinking config if available
+	if a.session != nil && a.session.Config.ThinkingEnabled {
+		budget := a.session.Config.ThinkingBudget
+		switch {
+		case budget >= 30000:
+			a.spinner.SetEffort("max")
+		case budget >= 15000:
+			a.spinner.SetEffort("high")
+		case budget >= 5000:
+			a.spinner.SetEffort("medium")
+		default:
+			a.spinner.SetEffort("low")
+		}
+	}
+
+	// Show spinner in conversation
+	a.conversation.SetStreamingText(a.spinner.View() + "\n" + a.spinner.TipView())
+
+	if a.queryFunc != nil {
 		ctx, cancel := context.WithCancel(context.Background())
 		a.queryCtx = ctx
 		a.cancelQuery = cancel
@@ -361,17 +389,17 @@ func (a *AppModel) handleSubmit(msg components.SubmitMsg) (*AppModel, tea.Cmd) {
 		queryFunc := a.queryFunc
 		sess := a.session
 
-		return a, func() tea.Msg {
+		return a, tea.Batch(a.spinner.Tick(), func() tea.Msg {
 			var onEvent query.EventCallback
 			if a.bridge != nil {
 				onEvent = a.bridge.BridgeCallback()
 			}
 			err := queryFunc(ctx, sess, onEvent)
 			return queryDoneMsg{err: err}
-		}
+		})
 	}
 
-	return a, nil
+	return a, a.spinner.Tick()
 }
 
 func (a *AppModel) handleQueryEvent(msg QueryEventMsg) (*AppModel, tea.Cmd) {
@@ -411,8 +439,13 @@ func (a *AppModel) handleTextDelta(msg TextDeltaMsg) (*AppModel, tea.Cmd) {
 	a.streamingText.WriteString(msg.Text)
 
 	// Update streaming text component and conversation pane
+	// Show spinner line above the streaming text
 	a.streaming.AppendDelta(msg.Text)
-	a.conversation.SetStreamingText(a.streamingText.String())
+	streamContent := a.streamingText.String()
+	if a.spinner.IsActive() {
+		streamContent = a.spinner.View() + "\n" + streamContent
+	}
+	a.conversation.SetStreamingText(streamContent)
 
 	a.statusLine.Update(components.ModeChangeMsg{Mode: components.ModeStreaming})
 
@@ -435,6 +468,7 @@ func (a *AppModel) handleToolResult(msg ToolResultMsg) (*AppModel, tea.Cmd) {
 
 func (a *AppModel) handleTurnComplete(msg TurnCompleteMsg) (*AppModel, tea.Cmd) {
 	a.mode = ModeIdle
+	a.spinner.Stop()
 
 	// Finalize the assistant message — add accumulated text to conversation
 	if a.streamingText.Len() > 0 {
