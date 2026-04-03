@@ -293,17 +293,19 @@ For each batch:
 ---
 
 ## Batch 14 — Permission & Settings Utils
-- [ ] `utils/permissions/`
-- [ ] `utils/settings/`
-- [ ] `utils/hooks/`
-- [ ] `utils/mcp/`
-- [ ] `utils/memory/`
+- [x] `utils/permissions/`
+- [x] `utils/settings/`
+- [x] `utils/hooks/`
+- [x] `utils/mcp/`
+- [x] `utils/memory/`
 
 **Fixes applied:**
+- No code changes needed. Go has comprehensive implementations: permissions (15 files, rule parsing, waterfall evaluation, mode-based policies), config (10 files, 5 source types matching TS), hooks (4 files, 27 events, 4 command types). utils/mcp and utils/memory are small TS utilities covered by Go's pkg/mcp and pkg/session/memory.
 
 **Tests added:**
+- Existing tests pass (40+ tests across permissions, config, hooks)
 
-**Notes written:**
+**Notes written:** `md/batch-14-notes.md`
 
 ---
 
@@ -667,7 +669,7 @@ For each batch:
 | 11 | Memory & Dream Services | [x] | 0 files | existing tests pass | batch-11-notes.md |
 | 12 | Auxiliary Services | [x] | 0 files | existing tests pass | batch-12-notes.md |
 | 13 | Remaining Services | [x] | 0 files | existing tests pass | batch-13-notes.md |
-| 14 | Permission & Settings Utils | [ ] | | | |
+| 14 | Permission & Settings Utils | [x] | 0 files | 40+ existing tests pass | batch-14-notes.md |
 | 15 | Shell & Model Utils | [ ] | | | |
 | 16 | Git, Task & Plugin Utils | [ ] | | | |
 | 17 | Storage & Swarm Utils | [ ] | | | |
