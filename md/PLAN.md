@@ -97,17 +97,23 @@ For each batch:
 ---
 
 ## Batch 4 — Shell & Code Tools
-- [ ] `tools/BashTool/`
-- [ ] `tools/PowerShellTool/`
-- [ ] `tools/REPLTool/`
-- [ ] `tools/LSPTool/`
-- [ ] `tools/NotebookEditTool/`
+- [x] `tools/BashTool/`
+- [x] `tools/PowerShellTool/`
+- [x] `tools/REPLTool/`
+- [x] `tools/LSPTool/`
+- [x] `tools/NotebookEditTool/`
 
 **Fixes applied:**
+- `pkg/tools/bash.go`: **BUG FIX** — non-zero exit codes now return success output with "Exit code N" appended (matching TS), not tool error. Changed shell from `/bin/sh` to user's `$SHELL` (falls back to bash). Added output truncation at 30K chars (configurable via BASH_MAX_OUTPUT_LENGTH, max 150K). Added `stripEmptyLines()` for cleaner output. Added `getUserShell()`, `getExitCode()`, `getMaxBashOutputLength()`, `truncateBashOutput()`.
+- PowerShellTool: Go has basic version — TS additions are Windows-specific (edition detection, encoding, registry paths). No Go changes needed.
+- REPLTool: TS "REPL mode" is internal tool-visibility batching (ANT-only). Go REPLTool is a language executor — different concept. No Go changes needed.
+- LSPTool: TS has full LSP server protocol (9 operations). Go uses shell heuristics (diagnostics via go vet/tsc, symbols via regex). Architectural difference, not fixable in one batch.
+- NotebookEditTool: TS and Go both support replace/insert/delete. TS has cell-ID addressing and read-before-edit enforcement. Go uses index-based addressing. Minor gaps.
 
 **Tests added:**
+- `pkg/tools/bash_test.go`: command_failure_exit_code, command_failure_with_output, output_truncation, uses_user_shell, strip_empty_lines (5 new tests, 1 updated)
 
-**Notes written:**
+**Notes written:** `md/batch-04-notes.md`
 
 ---
 
@@ -617,7 +623,7 @@ For each batch:
 | 1 | Bootstrap & Entrypoints | [x] | 5 files | 2 test files (11 tests) | batch-01-notes.md |
 | 2 | Query Loop & Core Types | [x] | 5 files | 3 test files (8 tests) | batch-02-notes.md |
 | 3 | File Tools | [x] | 3 files | 2 test files (9 new tests) | batch-03-notes.md |
-| 4 | Shell & Code Tools | [ ] | | | |
+| 4 | Shell & Code Tools | [x] | 1 file | 1 test file (6 tests) | batch-04-notes.md |
 | 5 | Agent & Team Tools | [ ] | | | |
 | 6 | Task & Todo Tools | [ ] | | | |
 | 7 | Web & MCP Tools | [ ] | | | |
