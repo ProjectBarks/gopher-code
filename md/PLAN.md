@@ -310,18 +310,20 @@ For each batch:
 ---
 
 ## Batch 15 — Shell & Model Utils
-- [ ] `utils/bash/`
-- [ ] `utils/shell/`
-- [ ] `utils/powershell/`
-- [ ] `utils/sandbox/`
-- [ ] `utils/model/`
-- [ ] `utils/messages/`
+- [x] `utils/bash/`
+- [x] `utils/shell/`
+- [x] `utils/powershell/`
+- [x] `utils/sandbox/`
+- [x] `utils/model/`
+- [x] `utils/messages/`
 
 **Fixes applied:**
+- No code changes needed. Comprehensive Go implementations: model (11 configs, 4 providers, aliases, canonical names), shell (AST parsing, 70+ read-only commands), sandbox (seatbelt+bwrap), messages (NormalizeForAPI).
 
 **Tests added:**
+- Existing tests pass
 
-**Notes written:**
+**Notes written:** `md/batch-15-notes.md`
 
 ---
 
@@ -670,7 +672,7 @@ For each batch:
 | 12 | Auxiliary Services | [x] | 0 files | existing tests pass | batch-12-notes.md |
 | 13 | Remaining Services | [x] | 0 files | existing tests pass | batch-13-notes.md |
 | 14 | Permission & Settings Utils | [x] | 0 files | 40+ existing tests pass | batch-14-notes.md |
-| 15 | Shell & Model Utils | [ ] | | | |
+| 15 | Shell & Model Utils | [x] | 0 files | existing tests pass | batch-15-notes.md |
 | 16 | Git, Task & Plugin Utils | [ ] | | | |
 | 17 | Storage & Swarm Utils | [ ] | | | |
 | 18 | Platform & Remote Utils | [ ] | | | |
