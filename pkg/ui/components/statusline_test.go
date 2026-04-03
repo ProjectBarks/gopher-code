@@ -23,15 +23,16 @@ func TestStatusLineInit(t *testing.T) {
 	_ = cmd
 }
 
-func TestStatusLineView(t *testing.T) {
+func TestStatusLineViewIdle(t *testing.T) {
 	config := session.DefaultConfig()
 	sess := session.New(config, "/tmp")
 	sl := NewStatusLine(sess)
 	sl.SetSize(80, 1)
 	view := sl.View()
 	plain := stripANSI(view.Content)
-	if !strings.Contains(plain, "Idle") {
-		t.Error("Expected 'Idle' in initial status")
+	// Idle mode shows model name
+	if !strings.Contains(plain, sess.Config.Model) {
+		t.Errorf("Expected model name in idle status, got %q", plain)
 	}
 }
 
@@ -48,40 +49,55 @@ func TestStatusLineViewWithModel(t *testing.T) {
 	}
 }
 
-func TestStatusLineModeChange(t *testing.T) {
+func TestStatusLineStreamingShowsEscHint(t *testing.T) {
 	sl := NewStatusLine(nil)
 	sl.SetSize(80, 1)
-
 	sl.Update(ModeChangeMsg{Mode: ModeStreaming})
 	view := sl.View()
 	plain := stripANSI(view.Content)
-	if !strings.Contains(plain, "Streaming") {
-		t.Error("Expected 'Streaming' after mode change")
+	if !strings.Contains(plain, "esc to interrupt") {
+		t.Errorf("Expected 'esc to interrupt' during streaming, got %q", plain)
 	}
+}
 
+func TestStatusLineToolRunningShowsEscHint(t *testing.T) {
+	sl := NewStatusLine(nil)
+	sl.SetSize(80, 1)
 	sl.Update(ModeChangeMsg{Mode: ModeToolRunning})
-	view = sl.View()
-	plain = stripANSI(view.Content)
-	if !strings.Contains(plain, "Tool Running") {
-		t.Error("Expected 'Tool Running' after mode change")
+	view := sl.View()
+	plain := stripANSI(view.Content)
+	if !strings.Contains(plain, "esc to interrupt") {
+		t.Errorf("Expected 'esc to interrupt' during tool running, got %q", plain)
 	}
+}
 
+func TestStatusLineBackToIdleShowsModel(t *testing.T) {
+	config := session.DefaultConfig()
+	config.Model = "test-model"
+	sess := session.New(config, "/tmp")
+	sl := NewStatusLine(sess)
+	sl.SetSize(80, 1)
+
+	// Go streaming then back to idle
+	sl.Update(ModeChangeMsg{Mode: ModeStreaming})
 	sl.Update(ModeChangeMsg{Mode: ModeIdle})
-	view = sl.View()
-	plain = stripANSI(view.Content)
-	if !strings.Contains(plain, "Idle") {
-		t.Error("Expected 'Idle' after mode change")
+	view := sl.View()
+	plain := stripANSI(view.Content)
+	if !strings.Contains(plain, "test-model") {
+		t.Errorf("Expected model name after return to idle, got %q", plain)
 	}
 }
 
 func TestStatusLineTokenUpdate(t *testing.T) {
-	sl := NewStatusLine(nil)
+	config := session.DefaultConfig()
+	sess := session.New(config, "/tmp")
+	sl := NewStatusLine(sess)
 	sl.SetSize(80, 1)
 	sl.Update(TokenUpdateMsg{InputTokens: 1500, OutputTokens: 500})
 	view := sl.View()
 	plain := stripANSI(view.Content)
-	if !strings.Contains(plain, "1500") && !strings.Contains(plain, "tokens") {
-		// Just verify it renders without panic
+	if !strings.Contains(plain, "1500") {
+		t.Error("Expected token count in idle status")
 	}
 }
 

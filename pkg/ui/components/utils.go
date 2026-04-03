@@ -2,6 +2,23 @@ package components
 
 import "strings"
 
+// UI characters matching Claude Code's visual language.
+const (
+	// PromptPrefix is the "›" (U+203A) character used for input prompts and user messages.
+	// Claude Code uses figures.pointer from the npm figures package.
+	PromptPrefix = "› "
+
+	// ResponseConnector is the "└" (U+2514) box-drawing character for tool results/responses.
+	// Rendered with 2-space indent: "  └ "
+	ResponseConnector = "  └ "
+
+	// ResponseContinuation is the indent for continuation lines under a connector.
+	ResponseContinuation = "    "
+
+	// DividerChar is the heavy horizontal line (U+2501) for section dividers.
+	DividerChar = "━"
+)
+
 // FuzzyMatch returns true if needle is a subsequence of haystack.
 func FuzzyMatch(needle, haystack string) bool {
 	if needle == "" {

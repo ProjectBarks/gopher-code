@@ -307,9 +307,19 @@ func TestAppModelViewHasInputPane(t *testing.T) {
 	app := newTestApp()
 	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	view := app.View()
-	// Input pane renders the prompt character ">"
-	if !strings.Contains(view.Content, ">") {
-		t.Error("View should contain input pane prompt")
+	// Input pane renders the prompt character "›" (U+203A)
+	if !strings.Contains(view.Content, "›") {
+		t.Error("View should contain input pane prompt ›")
+	}
+}
+
+func TestAppModelViewHasDivider(t *testing.T) {
+	app := newTestApp()
+	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	view := app.View()
+	// Should have heavy horizontal divider ━
+	if !strings.Contains(view.Content, "━") {
+		t.Error("View should contain divider line ━")
 	}
 }
 

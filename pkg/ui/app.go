@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/session"
@@ -244,6 +245,8 @@ func (a *AppModel) View() tea.View {
 		return tea.NewView("Initializing...")
 	}
 
+	t := theme.Current()
+	cs := t.Colors()
 	var sections []string
 
 	// Header (1 line)
@@ -251,6 +254,11 @@ func (a *AppModel) View() tea.View {
 
 	// Conversation area (fills remaining space)
 	sections = append(sections, a.conversation.View().Content)
+
+	// Heavy divider line ━━━ separating conversation from input
+	dividerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(cs.BorderSubtle))
+	sections = append(sections, dividerStyle.Render(strings.Repeat(components.DividerChar, a.width)))
 
 	// Input pane (1-3 lines)
 	sections = append(sections, a.input.View().Content)
@@ -267,11 +275,12 @@ func (a *AppModel) handleResize(msg tea.WindowSizeMsg) (*AppModel, tea.Cmd) {
 	a.width = msg.Width
 	a.height = msg.Height
 
-	// Layout: header(1) + conversation(flex) + input(3) + status(1)
+	// Layout: header(1) + conversation(flex) + divider(1) + input(3) + status(1)
 	headerHeight := 1
+	dividerHeight := 1
 	inputHeight := 3
 	statusHeight := 1
-	convHeight := a.height - headerHeight - inputHeight - statusHeight
+	convHeight := a.height - headerHeight - dividerHeight - inputHeight - statusHeight
 	if convHeight < 1 {
 		convHeight = 1
 	}

@@ -90,11 +90,16 @@ func (mb *MessageBubble) renderUserMessage(msg *message.Message) string {
 	cs := mb.theme.Colors()
 	var parts []string
 
+	// User messages: bold primary text on subtle background (matching Claude Code)
 	userStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(cs.TextSecondary))
+		Foreground(lipgloss.Color(cs.TextPrimary)).
+		Bold(true)
 	promptStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(cs.Accent)).
 		Bold(true)
+	// Full-width background row
+	rowStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(cs.Surface))
 
 	for _, block := range msg.Content {
 		switch block.Type {
@@ -103,13 +108,20 @@ func (mb *MessageBubble) renderUserMessage(msg *message.Message) string {
 			if mb.width > 4 {
 				text = wrapText(text, mb.width-4)
 			}
-			// User messages: "> " prefix with accent color
+			// User messages: "› " prefix with accent color
 			lines := strings.Split(text, "\n")
 			for i, line := range lines {
+				var styledLine string
 				if i == 0 {
-					lines[i] = promptStyle.Render("> ") + userStyle.Render(line)
+					styledLine = promptStyle.Render(PromptPrefix) + userStyle.Render(line)
 				} else {
-					lines[i] = promptStyle.Render("  ") + userStyle.Render(line)
+					styledLine = promptStyle.Render("  ") + userStyle.Render(line)
+				}
+				// Apply background to full width
+				if mb.width > 0 {
+					lines[i] = rowStyle.Width(mb.width).Render(styledLine)
+				} else {
+					lines[i] = styledLine
 				}
 			}
 			parts = append(parts, strings.Join(lines, "\n"))
@@ -197,23 +209,22 @@ func (mb *MessageBubble) renderToolResultBlock(block message.ContentBlock) strin
 		content = block.Text
 	}
 
+	connectorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(cs.TextSecondary))
+
 	if block.IsError {
 		errorStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(cs.Error))
-		connectorStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(cs.TextSecondary))
 
 		errMsg := content
 		if len(errMsg) > 300 {
 			errMsg = errMsg[:300] + "…"
 		}
-		return connectorStyle.Render("⎿ ") + errorStyle.Render(errMsg)
+		return connectorStyle.Render(ResponseConnector) + errorStyle.Render(errMsg)
 	}
 
-	// Successful result: show with connector
+	// Successful result: show with "  └ " connector
 	resultStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(cs.TextSecondary))
-	connectorStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(cs.TextSecondary))
 
 	result := content
@@ -227,16 +238,16 @@ func (mb *MessageBubble) renderToolResultBlock(block message.ContentBlock) strin
 	}
 
 	if result == "" {
-		return connectorStyle.Render("⎿ ") + resultStyle.Render("(no output)")
+		return connectorStyle.Render(ResponseConnector) + resultStyle.Render("(no content)")
 	}
 
-	// Indent each line with the connector
+	// Indent each line with connector or continuation
 	resultLines := strings.Split(result, "\n")
 	for i, line := range resultLines {
 		if i == 0 {
-			resultLines[i] = connectorStyle.Render("⎿ ") + resultStyle.Render(line)
+			resultLines[i] = connectorStyle.Render(ResponseConnector) + resultStyle.Render(line)
 		} else {
-			resultLines[i] = connectorStyle.Render("  ") + resultStyle.Render(line)
+			resultLines[i] = connectorStyle.Render(ResponseContinuation) + resultStyle.Render(line)
 		}
 	}
 

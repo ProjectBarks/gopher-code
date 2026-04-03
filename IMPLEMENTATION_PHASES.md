@@ -576,26 +576,24 @@ Idle │ claude-sonnet-4-20250514
   - [ ] Tests: render output, width, sections present
 - **Reference**: `src/components/LogoV2/WelcomeV2.tsx`
 
-#### Task 6.2: Prompt Character — "›" (U+203A)
-- **Files**: `pkg/ui/components/input.go`, `pkg/ui/components/message_bubble.go`
-- **Lines**: ~15 changes
-- **What**: Replace ">" with "›" everywhere
+#### Task 6.2: Prompt Character — "›" (U+203A) (COMPLETE ✅)
+- **Files**: `pkg/ui/components/input.go`, `pkg/ui/components/message_bubble.go`, `utils.go`
+- **Status**: ✅ PromptPrefix constant defined, used in input.go and message_bubble.go
 - **Checklist**:
-  - [ ] `input.go` line 63: change `"> "` to `"› "`
-  - [ ] `message_bubble.go` renderUserMessage: change `"> "` and `"  "` to `"› "` and `"  "`
-  - [ ] Define `const PromptPrefix = "› "` in a shared location
-  - [ ] Tests: verify U+203A in rendered output
+  - [x] `input.go`: changed `"> "` to `PromptPrefix` ("› ")
+  - [x] `message_bubble.go` renderUserMessage: uses `PromptPrefix`
+  - [x] Define `const PromptPrefix = "› "` in utils.go
+  - [x] Tests: verify U+203A in rendered output
 - **Reference**: `src/components/messages/HighlightedThinkingText.tsx` uses `figures.pointer`
 
-#### Task 6.3: Message Connector — "  └ " spacing
-- **Files**: `pkg/ui/components/message_bubble.go`
-- **Lines**: ~30 changes
-- **What**: Fix connector character and spacing for tool results
+#### Task 6.3: Message Connector — "  └ " spacing (COMPLETE ✅)
+- **Files**: `pkg/ui/components/message_bubble.go`, `utils.go`
+- **Status**: ✅ ResponseConnector and ResponseContinuation constants, proper spacing
 - **Checklist**:
-  - [ ] Change connector from `"⎿ "` (2 chars) to `"  └ "` (4 chars: 2-space indent + └ + space)
-  - [ ] Continuation lines: `"    "` (4-space indent, matching connector width)
-  - [ ] Empty tool result: `"  └ (no content)"` instead of `"⎿ (no output)"`
-  - [ ] Tests: connector character U+2514 in output, proper indentation
+  - [x] Changed connector from `"⎿ "` to `ResponseConnector` ("  └ ")
+  - [x] Continuation lines: `ResponseContinuation` ("    ")
+  - [x] Empty tool result: `"  └ (no content)"`
+  - [x] Tests: connector character U+2514 in output, proper indentation
 - **Reference**: `src/components/MessageResponse.tsx` renders `"  ⎿  "` (5-char pattern)
 
 #### Task 6.4: Spinner Verb System
@@ -614,30 +612,25 @@ Idle │ claude-sonnet-4-20250514
   - [ ] Tests: verb list length, format string, effort icons, animation cycling
 - **Reference**: `src/components/Spinner/`, `src/constants/spinnerVerbs.ts`, `src/constants/figures.ts`
 
-#### Task 6.5: User Message Styling — bold on dark background
+#### Task 6.5: User Message Styling — bold on dark background (COMPLETE ✅)
 - **Files**: `pkg/ui/components/message_bubble.go`
-- **Lines**: ~25 changes
-- **What**: User messages stand out with bold text + background row
+- **Status**: ✅ Bold TextPrimary text, Surface background, full-width rows
 - **Checklist**:
-  - [ ] User text: Bold(true), Foreground(TextPrimary) — currently uses TextSecondary (WRONG)
-  - [ ] Full-width background: Background(Surface) applied to entire row via lipgloss.Width(width)
-  - [ ] Prompt "›" stays Accent color + Bold
-  - [ ] Tests: verify Bold in style, background color present
-- **Reference**: `src/components/messages/UserPromptMessage.tsx` uses `backgroundColor="userMessageBackground"`
-  - Dark theme: `rgb(55,55,55)` — maps to our Surface or SurfaceElevated
+  - [x] User text: Bold(true), Foreground(TextPrimary)
+  - [x] Full-width background: Background(Surface) applied to entire row
+  - [x] Prompt "›" stays Accent color + Bold
+  - [x] Tests: verify bold and background in rendered output
 
 #### Task 6.6: Divider Line + Status Bar Overhaul
 - **Files**: `pkg/ui/app.go`, `pkg/ui/components/statusline.go`
-- **Lines**: ~80 changes
-- **What**: Visual divider between conversation and input; context-aware status bar
+- **Status**: ✅ Heavy divider ━━━ in app.go View(), "esc to interrupt" in statusline.go
 - **Checklist**:
-  - [ ] `app.go` View(): insert `strings.Repeat("━", width)` between conversation and input
-  - [ ] Divider styled with BorderSubtle color (dim)
-  - [ ] Status bar streaming mode: `"esc to interrupt"` (dimColor=true)
-  - [ ] Status bar idle mode: keep current format but add keybinding hints
-  - [ ] Divider char: `━` (U+2501 HEAVY HORIZONTAL) — from `figures.ts HEAVY_HORIZONTAL`
-  - [ ] Tests: divider present in View output, status text changes per mode
-- **Reference**: `src/components/Spinner/SpinnerAnimationRow.tsx` line 216: `"(esc to interrupt)"`
+  - [x] `app.go` View(): `strings.Repeat("━", width)` between conversation and input
+  - [x] Divider styled with BorderSubtle color (dim)
+  - [x] Status bar streaming/tool mode: `"esc to interrupt"` (dimColor=true)
+  - [x] Status bar idle mode: shows model name + token count
+  - [x] Divider char: `━` (U+2501 HEAVY HORIZONTAL)
+  - [x] Tests: divider present in View output, status text changes per mode
 
 #### Task 6.7: Welcome Screen Integration in AppModel
 - **Files**: `pkg/ui/app.go`

@@ -117,8 +117,8 @@ func TestMessageBubbleToolResultSuccess(t *testing.T) {
 	if !strings.Contains(result, "file1.go") {
 		t.Errorf("Expected result content in output, got %q", result)
 	}
-	if !strings.Contains(result, "⎿") {
-		t.Errorf("Expected connector character in output, got %q", result)
+	if !strings.Contains(result, "└") {
+		t.Errorf("Expected connector character └ in output, got %q", result)
 	}
 }
 
@@ -145,8 +145,8 @@ func TestMessageBubbleToolResultEmpty(t *testing.T) {
 	}
 	result := mb.RenderContent(block)
 
-	if !strings.Contains(result, "no output") {
-		t.Errorf("Expected '(no output)' for empty result, got %q", result)
+	if !strings.Contains(result, "no content") {
+		t.Errorf("Expected '(no content)' for empty result, got %q", result)
 	}
 }
 
