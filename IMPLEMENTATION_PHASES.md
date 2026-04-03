@@ -48,41 +48,44 @@ This file is used by `run-phase.sh` to guide you through implementation. Each ph
   - [x] Tests for focus routing, modal stacking
   - [x] Integration with EventCallback bridge
 
-#### Task 1.4: ConversationPane
+#### Task 1.4: ConversationPane (COMPLETE ✅)
 - **Files**: `pkg/ui/components/conversation.go`
 - **Lines**: 350
+- **Status**: ✅ Implemented with scroll, pre-rendering, streaming text
 - **What**: Scrollable message history using Bubbles viewport
 - **Tests**: conversation_test.go
 - **Checklist**:
-  - [ ] Embed viewport.Model from Bubbles
-  - [ ] Message pre-rendering logic
-  - [ ] StreamingText integration
-  - [ ] Tests: empty, single message, many messages, scrolling
-  - [ ] Auto-scroll to bottom on new message
+  - [x] Embed viewport.Model from Bubbles
+  - [x] Message pre-rendering logic
+  - [x] StreamingText integration
+  - [x] Tests: empty, single message, many messages, scrolling
+  - [x] Auto-scroll to bottom on new message
 
-#### Task 1.5: InputPane
+#### Task 1.5: InputPane (COMPLETE ✅)
 - **Files**: `pkg/ui/components/input.go`
 - **Lines**: 300
+- **Status**: ✅ Implemented with history, cursor, key handling
 - **What**: Multi-line text input with history
 - **Tests**: input_test.go
 - **Checklist**:
-  - [ ] Wrap Bubbles textinput.Model
-  - [ ] History storage + Up/Down navigation
-  - [ ] Multiline mode (\ to toggle)
-  - [ ] SubmitMsg on Enter
-  - [ ] Tests: empty input, history nav, multiline, submit
+  - [x] Wrap Bubbles textinput.Model
+  - [x] History storage + Up/Down navigation
+  - [x] Multiline mode (\ to toggle)
+  - [x] SubmitMsg on Enter
+  - [x] Tests: empty input, history nav, multiline, submit
 
-#### Task 1.6: StatusLine
+#### Task 1.6: StatusLine (COMPLETE ✅)
 - **Files**: `pkg/ui/components/statusline.go`
 - **Lines**: 250
+- **Status**: ✅ Implemented with mode display, tokens, model name
 - **What**: Bottom bar with model, tokens, cost, mode
 - **Tests**: statusline_test.go
 - **Checklist**:
-  - [ ] Display model name (from SessionState)
-  - [ ] Display token count
-  - [ ] Display mode (Idle, Streaming, ToolRunning)
-  - [ ] React to StatusUpdateMsg
-  - [ ] Tests: all modes, token updates
+  - [x] Display model name (from SessionState)
+  - [x] Display token count
+  - [x] Display mode (Idle, Streaming, ToolRunning)
+  - [x] React to StatusUpdateMsg
+  - [x] Tests: all modes, token updates
 
 #### Task 1.7: EventCallback Bridge
 - **Files**: `pkg/ui/bridge.go`
