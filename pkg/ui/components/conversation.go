@@ -1,7 +1,6 @@
 package components
 
 import (
-	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -18,10 +17,12 @@ type AddMessageMsg struct {
 type ClearMessagesMsg struct{}
 
 // ConversationPane displays scrollable message history.
-// It wraps a simple viewport and renders messages with role-based styling.
+// It uses MessageBubble for rendering individual messages with Glamour
+// markdown, tool call styling, and role-based formatting.
 type ConversationPane struct {
 	messages []message.Message
-	rendered []string // Pre-rendered message strings
+	rendered []string // Pre-rendered message strings (via MessageBubble)
+	bubble   *MessageBubble
 	width    int
 	height   int
 	focused  bool
@@ -36,9 +37,11 @@ type ConversationPane struct {
 
 // NewConversationPane creates a new empty conversation pane.
 func NewConversationPane() *ConversationPane {
+	t := theme.Current()
 	return &ConversationPane{
 		messages:   make([]message.Message, 0),
 		rendered:   make([]string, 0),
+		bubble:     NewMessageBubble(t, 80),
 		autoScroll: true,
 	}
 }
@@ -123,6 +126,7 @@ func (cp *ConversationPane) View() tea.View {
 func (cp *ConversationPane) SetSize(width, height int) {
 	cp.width = width
 	cp.height = height
+	cp.bubble.SetWidth(width)
 	// Re-render all messages with new width
 	cp.rerenderAll()
 }
@@ -142,10 +146,10 @@ func (cp *ConversationPane) Focused() bool {
 	return cp.focused
 }
 
-// AddMessage adds a message to the conversation and renders it.
+// AddMessage adds a message to the conversation and renders it via MessageBubble.
 func (cp *ConversationPane) AddMessage(msg message.Message) {
 	cp.messages = append(cp.messages, msg)
-	cp.rendered = append(cp.rendered, cp.renderMessage(msg))
+	cp.rendered = append(cp.rendered, cp.bubble.Render(&msg))
 	if cp.autoScroll {
 		cp.scrollOffset = 0
 	}
@@ -199,77 +203,9 @@ func (cp *ConversationPane) scrollDown() {
 	}
 }
 
-func (cp *ConversationPane) renderMessage(msg message.Message) string {
-	t := theme.Current()
-	var parts []string
-
-	switch msg.Role {
-	case message.RoleUser:
-		for _, block := range msg.Content {
-			if block.Type == message.ContentText {
-				styled := t.TextAccent().Render("> " + wrapText(block.Text, cp.width-2))
-				parts = append(parts, styled)
-			}
-		}
-	case message.RoleAssistant:
-		for _, block := range msg.Content {
-			switch block.Type {
-			case message.ContentText:
-				parts = append(parts, wrapText(block.Text, cp.width))
-			case message.ContentToolUse:
-				header := t.ToolCallHeader().Render(fmt.Sprintf("⚡ %s", block.Name))
-				parts = append(parts, header)
-			case message.ContentToolResult:
-				if block.IsError {
-					parts = append(parts, t.ToolResultError().Render(block.Content))
-				} else {
-					result := truncateLines(block.Content, 10)
-					parts = append(parts, t.ToolResultSuccess().Render(result))
-				}
-			}
-		}
-	}
-
-	if len(parts) == 0 {
-		return ""
-	}
-	return strings.Join(parts, "\n")
-}
-
 func (cp *ConversationPane) rerenderAll() {
 	cp.rendered = make([]string, len(cp.messages))
-	for i, msg := range cp.messages {
-		cp.rendered[i] = cp.renderMessage(msg)
+	for i := range cp.messages {
+		cp.rendered[i] = cp.bubble.Render(&cp.messages[i])
 	}
-}
-
-// wrapText wraps text to fit within width.
-func wrapText(text string, width int) string {
-	if width <= 0 {
-		return text
-	}
-	var lines []string
-	for _, line := range strings.Split(text, "\n") {
-		if len(line) <= width {
-			lines = append(lines, line)
-			continue
-		}
-		// Simple word-wrap
-		words := strings.Fields(line)
-		current := ""
-		for _, word := range words {
-			if current == "" {
-				current = word
-			} else if len(current)+1+len(word) <= width {
-				current += " " + word
-			} else {
-				lines = append(lines, current)
-				current = word
-			}
-		}
-		if current != "" {
-			lines = append(lines, current)
-		}
-	}
-	return strings.Join(lines, "\n")
 }
