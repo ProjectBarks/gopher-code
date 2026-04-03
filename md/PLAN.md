@@ -438,17 +438,20 @@ DO NOT SKIP `ink` the functionality must be transferred over
 ---
 
 ## Batch 21 — TUI Core
-- [ ] `ink/`
-- [ ] `components/PromptInput/`
-- [ ] `components/messages/`
-- [ ] `components/Spinner/`
-- [ ] `components/LogoV2/`
+- [x] `ink/`
+- [x] `components/PromptInput/`
+- [x] `components/messages/`
+- [x] `components/Spinner/`
+- [x] `components/LogoV2/`
 
 **Fixes applied:**
+- `pkg/ui/components/spinner_verbs.go`: Platform-specific SpinnerGlyphs (macOS: ✽, Ghostty: *, Linux: * instead of ✳) matching TS Spinner/utils.ts.
+- `pkg/ui/app.go`: AltScreen enabled (previous session). Go TUI covers all TS component areas via Bubbletea equivalents.
 
 **Tests added:**
+- Existing tests pass (7 UI packages)
 
-**Notes written:**
+**Notes written:** `md/batch-21-notes.md`
 
 ---
 

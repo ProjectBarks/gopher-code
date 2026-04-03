@@ -3,6 +3,8 @@ package components
 import (
 	"fmt"
 	"math/rand"
+	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -12,8 +14,19 @@ import (
 )
 
 // Spinner glyph animation frames (from Claude Code's src/components/Spinner/utils.ts).
-// These cycle to create a spinning star animation.
-var SpinnerGlyphs = []string{"·", "✢", "✳", "✶", "✻", "✽"}
+// Platform-specific: macOS uses ✽, Ghostty uses *, others use * instead of ✳.
+// Source: components/Spinner/utils.ts:4-11
+var SpinnerGlyphs = getSpinnerGlyphs()
+
+func getSpinnerGlyphs() []string {
+	if os.Getenv("TERM") == "xterm-ghostty" {
+		return []string{"·", "✢", "✳", "✶", "✻", "*"}
+	}
+	if runtime.GOOS == "darwin" {
+		return []string{"·", "✢", "✳", "✶", "✻", "✽"}
+	}
+	return []string{"·", "✢", "*", "✶", "✻", "✽"}
+}
 
 // SpinnerVerbs are random action words shown during thinking.
 // Complete list from Claude Code's src/constants/spinnerVerbs.ts (188 verbs).
