@@ -137,19 +137,22 @@ For each batch:
 ---
 
 ## Batch 6 — Task & Todo Tools
-- [ ] `tools/TaskCreateTool/`
-- [ ] `tools/TaskGetTool/`
-- [ ] `tools/TaskListTool/`
-- [ ] `tools/TaskOutputTool/`
-- [ ] `tools/TaskStopTool/`
-- [ ] `tools/TaskUpdateTool/`
-- [ ] `tools/TodoWriteTool/`
+- [x] `tools/TaskCreateTool/`
+- [x] `tools/TaskGetTool/`
+- [x] `tools/TaskListTool/`
+- [x] `tools/TaskOutputTool/`
+- [x] `tools/TaskStopTool/`
+- [x] `tools/TaskUpdateTool/`
+- [x] `tools/TodoWriteTool/`
 
 **Fixes applied:**
+- `pkg/tools/tasks.go`: Fixed metadata null deletion — setting a metadata key to null now deletes it from the map (matching TS TaskUpdateTool.ts:200-210). Changed task ID format from "task_N" to "N" (numeric strings matching TS utils/tasks.ts:297).
+- TodoWriteTool: Reviewed — Go implementation matches TS behavior (replace-entire-list semantics, status validation, shared state between read/write tools).
 
 **Tests added:**
+- `pkg/tools/tasks_test.go`: metadata_null_deletes_key (verifies null values delete keys). Updated all task ID references from "task_N" to "N" format.
 
-**Notes written:**
+**Notes written:** `md/batch-06-notes.md`
 
 ---
 
@@ -628,7 +631,7 @@ For each batch:
 | 3 | File Tools | [x] | 3 files | 2 test files (9 new tests) | batch-03-notes.md |
 | 4 | Shell & Code Tools | [x] | 1 file | 1 test file (6 tests) | batch-04-notes.md |
 | 5 | Agent & Team Tools | [x] | 1 file | existing tests pass | batch-05-notes.md |
-| 6 | Task & Todo Tools | [ ] | | | |
+| 6 | Task & Todo Tools | [x] | 1 file | 1 test file (1 new test) | batch-06-notes.md |
 | 7 | Web & MCP Tools | [ ] | | | |
 | 8 | Mode & Config Tools | [ ] | | | |
 | 9 | Utility Tools | [ ] | | | |
