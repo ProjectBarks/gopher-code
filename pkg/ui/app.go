@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -350,10 +351,15 @@ func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
 		a.focus.Prev()
 		return a, nil
 
-	// Escape closes modal
+	// Escape: cancel running query OR close modal
+	// Source: screens/REPL.tsx — Escape cancels running queries
 	case msg.Code == tea.KeyEscape:
 		if a.focus.ModalActive() {
 			a.focus.PopModal()
+			return a, nil
+		}
+		if a.mode != ModeIdle && a.cancelQuery != nil {
+			a.cancelQuery()
 			return a, nil
 		}
 	}
@@ -486,13 +492,44 @@ func (a *AppModel) handleToolUseStart(msg ToolUseStartMsg) (*AppModel, tea.Cmd) 
 	a.mode = ModeToolRunning
 	a.activeToolCalls[msg.ToolUseID] = msg.ToolName
 
+	// Show tool name in streaming area (matching TS inline tool display).
+	// Source: components/messages/AssistantToolUseMessage.tsx
+	toolLine := fmt.Sprintf("\n⚙ %s", msg.ToolName)
+	a.streamingText.WriteString(toolLine)
+	streamContent := a.streamingText.String()
+	if a.spinner.IsActive() {
+		streamContent = a.spinner.View() + "\n" + streamContent
+	}
+	a.conversation.SetStreamingText(streamContent)
+
 	a.statusLine.Update(components.ModeChangeMsg{Mode: components.ModeToolRunning})
 
 	return a, nil
 }
 
 func (a *AppModel) handleToolResult(msg ToolResultMsg) (*AppModel, tea.Cmd) {
+	toolName := a.activeToolCalls[msg.ToolUseID]
 	delete(a.activeToolCalls, msg.ToolUseID)
+
+	// Show brief result indicator in streaming area.
+	// Source: components/messages/UserToolResultMessage — shows ✓/✗ with truncated content
+	if msg.IsError {
+		a.streamingText.WriteString(fmt.Sprintf("\n  ✗ %s error", toolName))
+	} else {
+		content := msg.Content
+		if len(content) > 100 {
+			content = content[:100] + "..."
+		}
+		if content != "" {
+			a.streamingText.WriteString(fmt.Sprintf("\n  ✓ %s", toolName))
+		}
+	}
+	streamContent := a.streamingText.String()
+	if a.spinner.IsActive() {
+		streamContent = a.spinner.View() + "\n" + streamContent
+	}
+	a.conversation.SetStreamingText(streamContent)
+
 	return a, nil
 }
 

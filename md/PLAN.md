@@ -546,11 +546,15 @@ Ensure the UI looks functions nearly identical to claude
 
 ## Batch UI-27-A — Ink - Ink Pass 2 of 3 
 Ensure the UI looks functions nearly identical to claude
-- [ ] `ink/`
+- [x] `ink/`
 
 **Fixes applied:**
+- `pkg/ui/app.go`: Escape key now cancels running queries (matching TS REPL.tsx onCancel behavior). Previously only closed modals.
+- `pkg/ui/app.go`: Tool use start shows "⚙ ToolName" inline in streaming area (matching TS AssistantToolUseMessage display).
+- `pkg/ui/app.go`: Tool result shows "✓ ToolName" or "✗ ToolName error" inline (matching TS UserToolResultMessage display).
 
 **Tests added:**
+- Existing tests pass
 
 **Notes written:**
 
