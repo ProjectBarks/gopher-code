@@ -346,18 +346,26 @@ For each batch:
 ---
 
 ## Batch 17 — Storage & Swarm Utils
-- [ ] `utils/secureStorage/`
-- [ ] `utils/filePersistence/`
-- [ ] `utils/processUserInput/`
-- [ ] `utils/suggestions/`
-- [ ] `utils/swarm/`
-- [ ] `utils/telemetry/`
+- [x] `utils/secureStorage/`
+- [x] `utils/filePersistence/`
+- [x] `utils/processUserInput/`
+- [x] `utils/suggestions/`
+- [x] `utils/swarm/`
+- [x] `utils/telemetry/`
 
 **Fixes applied:**
+- No code changes needed. Go has equivalents for the critical areas:
+  - secureStorage → pkg/auth/auth.go (env var → keyring → plaintext, matches TS 3-tier pattern exactly)
+  - swarm → pkg/session/team.go + teammate.go + mailbox.go (1032 lines of team/teammate infrastructure)
+  - filePersistence: BYOC/cloud file upload — enterprise feature
+  - processUserInput: Slash commands, image pastes, IDE selections — UI/REPL feature
+  - suggestions: TUI autocomplete (directory, shell history, command) — UI feature
+  - telemetry: OpenTelemetry, BigQuery, session tracing — platform infrastructure
 
 **Tests added:**
+- Existing tests pass (auth, team_test.go, teammate_test.go, mailbox_test.go)
 
-**Notes written:**
+**Notes written:** `md/batch-17-notes.md`
 
 ---
 
@@ -676,7 +684,7 @@ For each batch:
 | 14 | Permission & Settings Utils | [x] | 0 files | 40+ existing tests pass | batch-14-notes.md |
 | 15 | Shell & Model Utils | [x] | 0 files | existing tests pass | batch-15-notes.md |
 | 16 | Git, Task & Plugin Utils | [x] | 0 files | existing tests pass | batch-16-notes.md |
-| 17 | Storage & Swarm Utils | [ ] | | | |
+| 17 | Storage & Swarm Utils | [x] | 0 files | existing tests pass | batch-17-notes.md |
 | 18 | Platform & Remote Utils | [ ] | | | |
 | 19 | Coordinator & Tasks Runtime | [ ] | | | |
 | 20 | Bridge & Remote | [ ] | | | |
