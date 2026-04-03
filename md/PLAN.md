@@ -259,18 +259,20 @@ For each batch:
 ---
 
 ## Batch 12 — Auxiliary Services
-- [ ] `services/AgentSummary/`
-- [ ] `services/lsp/`
-- [ ] `services/MagicDocs/`
-- [ ] `services/plugins/`
-- [ ] `services/policyLimits/`
-- [ ] `services/PromptSuggestion/`
+- [x] `services/AgentSummary/`
+- [x] `services/lsp/`
+- [x] `services/MagicDocs/`
+- [x] `services/plugins/`
+- [x] `services/policyLimits/`
+- [x] `services/PromptSuggestion/`
 
 **Fixes applied:**
+- No code changes needed. All 6 services are higher-level features depending on infrastructure not in Go: AgentSummary (coordinator mode summarization), lsp (plugin-based LSP server management), MagicDocs (auto-doc maintenance), plugins (full plugin ecosystem), policyLimits (enterprise API restrictions), PromptSuggestion (UI follow-up suggestions).
 
 **Tests added:**
+- Existing tests pass
 
-**Notes written:**
+**Notes written:** `md/batch-12-notes.md`
 
 ---
 
@@ -661,7 +663,7 @@ For each batch:
 | 9 | Utility Tools | [x] | 1 file | 1 test file updated | batch-09-notes.md |
 | 10 | Core Services | [x] | 1 file | existing tests pass | batch-10-notes.md |
 | 11 | Memory & Dream Services | [x] | 0 files | existing tests pass | batch-11-notes.md |
-| 12 | Auxiliary Services | [ ] | | | |
+| 12 | Auxiliary Services | [x] | 0 files | existing tests pass | batch-12-notes.md |
 | 13 | Remaining Services | [ ] | | | |
 | 14 | Permission & Settings Utils | [ ] | | | |
 | 15 | Shell & Model Utils | [ ] | | | |
