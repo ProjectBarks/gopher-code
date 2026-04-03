@@ -57,7 +57,9 @@ func (s *TaskStore) create(subject, description, activeForm string, metadata map
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nextID++
-	id := fmt.Sprintf("task_%d", s.nextID)
+	// TS uses numeric string IDs ("1", "2", "3"...).
+	// Source: utils/tasks.ts:297 — const id = String(highestId + 1)
+	id := fmt.Sprintf("%d", s.nextID)
 	now := time.Now()
 	task := &TaskItem{
 		ID:          id,
@@ -402,8 +404,14 @@ func (t *TaskUpdateTool) Execute(_ context.Context, _ *ToolContext, input json.R
 		if task.Metadata == nil {
 			task.Metadata = make(map[string]interface{})
 		}
+		// Merge metadata: setting a key to null deletes it.
+		// Source: TaskUpdateTool.ts:200-210
 		for k, v := range in.Metadata {
-			task.Metadata[k] = v
+			if v == nil {
+				delete(task.Metadata, k)
+			} else {
+				task.Metadata[k] = v
+			}
 		}
 	}
 	task.UpdatedAt = time.Now()

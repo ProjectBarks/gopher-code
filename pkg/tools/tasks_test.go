@@ -56,7 +56,7 @@ func TestTaskCreateTool(t *testing.T) {
 		if out.IsError {
 			t.Fatalf("unexpected tool error: %s", out.Content)
 		}
-		if !strings.Contains(out.Content, "task_") {
+		if !strings.Contains(out.Content, "Task 1") {
 			t.Errorf("expected task ID in output, got %q", out.Content)
 		}
 		if !strings.Contains(out.Content, "Build feature") {
@@ -69,11 +69,11 @@ func TestTaskCreateTool(t *testing.T) {
 		c := findTool(ts2, "TaskCreate")
 		out1, _ := c.Execute(context.Background(), nil, json.RawMessage(`{"subject": "A", "description": "first"}`))
 		out2, _ := c.Execute(context.Background(), nil, json.RawMessage(`{"subject": "B", "description": "second"}`))
-		if !strings.Contains(out1.Content, "task_1") {
-			t.Errorf("first task should be task_1, got %q", out1.Content)
+		if !strings.Contains(out1.Content, "Task 1") {
+			t.Errorf("first task should have ID 1, got %q", out1.Content)
 		}
-		if !strings.Contains(out2.Content, "task_2") {
-			t.Errorf("second task should be task_2, got %q", out2.Content)
+		if !strings.Contains(out2.Content, "Task 2") {
+			t.Errorf("second task should have ID 2, got %q", out2.Content)
 		}
 	})
 
@@ -181,7 +181,7 @@ func TestTaskGetTool(t *testing.T) {
 
 	t.Run("get_existing_task", func(t *testing.T) {
 		create.Execute(context.Background(), nil, json.RawMessage(`{"subject": "My task", "description": "details"}`))
-		out, err := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_1"}`))
+		out, err := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1"}`))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -246,7 +246,7 @@ func TestTaskUpdateTool(t *testing.T) {
 
 	t.Run("update_status_pending_to_in_progress", func(t *testing.T) {
 		create.Execute(context.Background(), nil, json.RawMessage(`{"subject": "Status test", "description": "d"}`))
-		out, err := update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_1", "status": "in_progress"}`))
+		out, err := update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1", "status": "in_progress"}`))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -254,7 +254,7 @@ func TestTaskUpdateTool(t *testing.T) {
 			t.Fatalf("unexpected tool error: %s", out.Content)
 		}
 
-		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_1"}`))
+		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1"}`))
 		var task map[string]interface{}
 		json.Unmarshal([]byte(gout.Content), &task)
 		if task["status"] != "in_progress" {
@@ -263,7 +263,7 @@ func TestTaskUpdateTool(t *testing.T) {
 	})
 
 	t.Run("update_status_to_completed", func(t *testing.T) {
-		out, err := update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_1", "status": "completed"}`))
+		out, err := update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1", "status": "completed"}`))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -271,7 +271,7 @@ func TestTaskUpdateTool(t *testing.T) {
 			t.Fatalf("unexpected tool error: %s", out.Content)
 		}
 
-		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_1"}`))
+		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1"}`))
 		var task map[string]interface{}
 		json.Unmarshal([]byte(gout.Content), &task)
 		if task["status"] != "completed" {
@@ -281,9 +281,9 @@ func TestTaskUpdateTool(t *testing.T) {
 
 	t.Run("update_subject", func(t *testing.T) {
 		create.Execute(context.Background(), nil, json.RawMessage(`{"subject": "Old subject", "description": "d"}`))
-		update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_2", "subject": "New subject"}`))
+		update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "2", "subject": "New subject"}`))
 
-		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_2"}`))
+		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "2"}`))
 		var task map[string]interface{}
 		json.Unmarshal([]byte(gout.Content), &task)
 		if task["subject"] != "New subject" {
@@ -292,8 +292,8 @@ func TestTaskUpdateTool(t *testing.T) {
 	})
 
 	t.Run("update_description", func(t *testing.T) {
-		update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_2", "description": "New desc"}`))
-		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_2"}`))
+		update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "2", "description": "New desc"}`))
+		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "2"}`))
 		var task map[string]interface{}
 		json.Unmarshal([]byte(gout.Content), &task)
 		if task["description"] != "New desc" {
@@ -302,8 +302,8 @@ func TestTaskUpdateTool(t *testing.T) {
 	})
 
 	t.Run("update_owner", func(t *testing.T) {
-		update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_2", "owner": "agent-1"}`))
-		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_2"}`))
+		update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "2", "owner": "agent-1"}`))
+		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "2"}`))
 		var task map[string]interface{}
 		json.Unmarshal([]byte(gout.Content), &task)
 		if task["owner"] != "agent-1" {
@@ -313,8 +313,8 @@ func TestTaskUpdateTool(t *testing.T) {
 
 	t.Run("add_blocks", func(t *testing.T) {
 		create.Execute(context.Background(), nil, json.RawMessage(`{"subject": "Blocker", "description": "blocks others"}`))
-		update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_3", "addBlocks": ["task_1", "task_2"]}`))
-		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_3"}`))
+		update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "3", "addBlocks": ["1", "2"]}`))
+		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "3"}`))
 		var task map[string]interface{}
 		json.Unmarshal([]byte(gout.Content), &task)
 		blocks, ok := task["blocks"].([]interface{})
@@ -324,8 +324,8 @@ func TestTaskUpdateTool(t *testing.T) {
 	})
 
 	t.Run("add_blocked_by", func(t *testing.T) {
-		update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_1", "addBlockedBy": ["task_3"]}`))
-		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_1"}`))
+		update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1", "addBlockedBy": ["3"]}`))
+		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1"}`))
 		var task map[string]interface{}
 		json.Unmarshal([]byte(gout.Content), &task)
 		blockedBy, ok := task["blockedBy"].([]interface{})
@@ -336,7 +336,7 @@ func TestTaskUpdateTool(t *testing.T) {
 
 	t.Run("delete_via_update", func(t *testing.T) {
 		create.Execute(context.Background(), nil, json.RawMessage(`{"subject": "To delete", "description": "d"}`))
-		update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_4", "status": "deleted"}`))
+		update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "4", "status": "deleted"}`))
 
 		lout, _ := list.Execute(context.Background(), nil, json.RawMessage(`{}`))
 		if strings.Contains(lout.Content, "To delete") {
@@ -345,7 +345,7 @@ func TestTaskUpdateTool(t *testing.T) {
 	})
 
 	t.Run("invalid_status", func(t *testing.T) {
-		out, err := update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_1", "status": "invalid"}`))
+		out, err := update.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1", "status": "invalid"}`))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -367,6 +367,38 @@ func TestTaskUpdateTool(t *testing.T) {
 		}
 		if !strings.Contains(out.Content, "not found") {
 			t.Errorf("expected 'not found' in error, got %q", out.Content)
+		}
+	})
+
+	t.Run("metadata_null_deletes_key", func(t *testing.T) {
+		// Source: TaskUpdateTool.ts:200-210 — setting a metadata key to null deletes it
+		ts2 := tools.NewTaskTools()
+		c := findTool(ts2, "TaskCreate")
+		u := findTool(ts2, "TaskUpdate")
+		g := findTool(ts2, "TaskGet")
+
+		// Create a task with metadata
+		c.Execute(context.Background(), nil, json.RawMessage(`{"subject": "Meta test", "description": "d", "metadata": {"keep": "yes", "remove": "please"}}`))
+
+		// Update: set "remove" to null to delete it, add "new" key
+		u.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1", "metadata": {"remove": null, "new": "added"}}`))
+
+		// Get and verify
+		gout, _ := g.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1"}`))
+		var task map[string]interface{}
+		json.Unmarshal([]byte(gout.Content), &task)
+		meta, ok := task["metadata"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected metadata map, got %v", task["metadata"])
+		}
+		if meta["keep"] != "yes" {
+			t.Errorf("expected keep=yes, got %v", meta["keep"])
+		}
+		if _, exists := meta["remove"]; exists {
+			t.Error("expected 'remove' key to be deleted when set to null")
+		}
+		if meta["new"] != "added" {
+			t.Errorf("expected new=added, got %v", meta["new"])
 		}
 	})
 }
@@ -396,7 +428,7 @@ func TestTaskStopTool(t *testing.T) {
 
 	t.Run("stop_sets_deleted", func(t *testing.T) {
 		create.Execute(context.Background(), nil, json.RawMessage(`{"subject": "Running task", "description": "d"}`))
-		out, err := stop.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_1"}`))
+		out, err := stop.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1"}`))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -408,7 +440,7 @@ func TestTaskStopTool(t *testing.T) {
 		}
 
 		// Verify status is deleted via get
-		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_1"}`))
+		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1"}`))
 		var task map[string]interface{}
 		json.Unmarshal([]byte(gout.Content), &task)
 		if task["status"] != "deleted" {
@@ -459,7 +491,7 @@ func TestTaskOutputTool(t *testing.T) {
 
 	t.Run("stores_output_in_metadata", func(t *testing.T) {
 		createTool.Execute(context.Background(), nil, json.RawMessage(`{"subject": "Output test", "description": "d"}`))
-		out, err := output.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_1", "output": "Build succeeded"}`))
+		out, err := output.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1", "output": "Build succeeded"}`))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -471,7 +503,7 @@ func TestTaskOutputTool(t *testing.T) {
 		}
 
 		// Verify output in metadata
-		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_1"}`))
+		gout, _ := get.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1"}`))
 		var task map[string]interface{}
 		json.Unmarshal([]byte(gout.Content), &task)
 		meta, ok := task["metadata"].(map[string]interface{})
@@ -494,7 +526,7 @@ func TestTaskOutputTool(t *testing.T) {
 	})
 
 	t.Run("missing_output", func(t *testing.T) {
-		out, err := output.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "task_1", "output": ""}`))
+		out, err := output.Execute(context.Background(), nil, json.RawMessage(`{"taskId": "1", "output": ""}`))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
