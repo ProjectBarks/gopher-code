@@ -76,18 +76,23 @@ For each batch:
 ---
 
 ## Batch 3 — File Tools
-- [ ] `tools/FileReadTool/`
-- [ ] `tools/FileWriteTool/`
-- [ ] `tools/FileEditTool/`
-- [ ] `tools/GlobTool/`
-- [ ] `tools/GrepTool/`
-- [ ] `tools/shared/`
+- [x] `tools/FileReadTool/`
+- [x] `tools/FileWriteTool/`
+- [x] `tools/FileEditTool/`
+- [x] `tools/GlobTool/`
+- [x] `tools/GrepTool/`
+- [x] `tools/shared/`
 
 **Fixes applied:**
+- `pkg/tools/fileread.go`: **BUG FIX** — offset semantics changed from "skip N lines" to "start from line N" (1-indexed) matching TS exactly. Added blocked device paths (/dev/zero, /dev/stdin, etc.) to prevent hangs. Added tilde expansion for ~/paths. Added empty file warning and offset-beyond-EOF warning matching TS system-reminder format.
+- `pkg/tools/fileedit.go`: Increased MaxEditFileSize from 10MB to 1GiB matching TS. Added quote normalization (curly→straight via findActualString/normalizeQuotes). Added applyEditToFile with special deletion handling (strips trailing newline when deleting a line).
+- `pkg/tools/grep.go`: Added missing .bzr to VCS directory exclusions (6 dirs now matching TS).
 
 **Tests added:**
+- `pkg/tools/fileread_test.go`: Updated offset_and_limit test for correct TS semantics, added offset_1_reads_from_start, offset_beyond_eof, blocked_device_path, tilde_expansion, empty_file warning test
+- `pkg/tools/fileedit_test.go`: Added quote_normalization, deletion_strips_trailing_newline, max_file_size_1gib
 
-**Notes written:**
+**Notes written:** `md/batch-03-notes.md`
 
 ---
 
@@ -611,7 +616,7 @@ For each batch:
 |-------|------|--------|-------|-------|-------|
 | 1 | Bootstrap & Entrypoints | [x] | 5 files | 2 test files (11 tests) | batch-01-notes.md |
 | 2 | Query Loop & Core Types | [x] | 5 files | 3 test files (8 tests) | batch-02-notes.md |
-| 3 | File Tools | [ ] | | | |
+| 3 | File Tools | [x] | 3 files | 2 test files (9 new tests) | batch-03-notes.md |
 | 4 | Shell & Code Tools | [ ] | | | |
 | 5 | Agent & Team Tools | [ ] | | | |
 | 6 | Task & Todo Tools | [ ] | | | |
