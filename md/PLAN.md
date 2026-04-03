@@ -157,18 +157,20 @@ For each batch:
 ---
 
 ## Batch 7 — Web & MCP Tools
-- [ ] `tools/WebFetchTool/`
-- [ ] `tools/WebSearchTool/`
-- [ ] `tools/MCPTool/`
-- [ ] `tools/McpAuthTool/`
-- [ ] `tools/ListMcpResourcesTool/`
-- [ ] `tools/ReadMcpResourceTool/`
+- [x] `tools/WebFetchTool/`
+- [x] `tools/WebSearchTool/`
+- [x] `tools/MCPTool/`
+- [x] `tools/McpAuthTool/`
+- [x] `tools/ListMcpResourcesTool/`
+- [x] `tools/ReadMcpResourceTool/`
 
 **Fixes applied:**
+- No code changes needed. WebFetch constants (MaxURLLength=2000, MaxHTTPContentLength=10MB, FetchTimeoutMs=60s, MaxRedirects=10, MaxMarkdownLength=100K) all match TS exactly. Preapproved hosts list matches. URL validation, redirect handling, HTML→Markdown conversion all at parity. MCP tools are stubs matching their TS equivalent's basic structure.
 
 **Tests added:**
+- Existing test suites pass (webfetch_test.go, websearch_test.go, mcpresources_test.go)
 
-**Notes written:**
+**Notes written:** `md/batch-07-notes.md`
 
 ---
 
@@ -632,7 +634,7 @@ For each batch:
 | 4 | Shell & Code Tools | [x] | 1 file | 1 test file (6 tests) | batch-04-notes.md |
 | 5 | Agent & Team Tools | [x] | 1 file | existing tests pass | batch-05-notes.md |
 | 6 | Task & Todo Tools | [x] | 1 file | 1 test file (1 new test) | batch-06-notes.md |
-| 7 | Web & MCP Tools | [ ] | | | |
+| 7 | Web & MCP Tools | [x] | 0 files | existing tests pass | batch-07-notes.md |
 | 8 | Mode & Config Tools | [ ] | | | |
 | 9 | Utility Tools | [ ] | | | |
 | 10 | Core Services | [ ] | | | |
