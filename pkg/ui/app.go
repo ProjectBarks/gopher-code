@@ -563,6 +563,24 @@ func (a *AppModel) handleQueryDone(msg queryDoneMsg) (*AppModel, tea.Cmd) {
 	a.cancelQuery = nil
 	a.queryCtx = nil
 
+	// Stop spinner and clean up streaming state.
+	// Source: screens/REPL.tsx — error paths must reset UI state
+	a.spinner.Stop()
+	if a.streamingText.Len() > 0 {
+		// Finalize any partial streaming text before showing error
+		assistantMsg := message.Message{
+			Role: message.RoleAssistant,
+			Content: []message.ContentBlock{
+				{Type: message.ContentText, Text: a.streamingText.String()},
+			},
+		}
+		a.conversation.AddMessage(assistantMsg)
+	}
+	a.streamingText.Reset()
+	a.streaming.Reset()
+	a.conversation.ClearStreamingText()
+	a.activeToolCalls = make(map[string]string)
+
 	if msg.err != nil {
 		// Show error as a system message in conversation
 		errMsg := message.Message{

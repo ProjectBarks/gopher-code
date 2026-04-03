@@ -562,11 +562,13 @@ Ensure the UI looks functions nearly identical to claude
 
 ## Batch UI-27-A — Ink - Ink Pass 3 of 3 
 Ensure the UI looks functions nearly identical to claude
-- [ ] `ink/`
+- [x] `ink/`
 
 **Fixes applied:**
+- `pkg/ui/app.go`: Fixed handleQueryDone to properly reset spinner and streaming state on error. Previously, if a query errored mid-stream, the spinner kept running and stale streaming text remained visible. Now stops spinner, finalizes partial text, clears streaming state before showing error.
 
 **Tests added:**
+- All existing tests pass (full suite green)
 
 **Notes written:**
 
