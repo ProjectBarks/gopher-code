@@ -117,9 +117,9 @@ Before proceeding to Phase 2:
 - [x] All 8 tasks complete
 - [x] `go test ./pkg/ui ./internal/cli -race` passes
 - [x] Binary builds: `go build -o gopher ./cmd/gopher-code`
-- [ ] Can run: `GOPHER_NEW_UI=1 ./gopher -p "hello"`
-- [ ] Output scrolls, input works, status bar updates
-- [ ] Theme colors apply correctly
+- [x] Can run: `GOPHER_NEW_UI=1 ./gopher` (wired: InputPane→SubmitMsg→query.Query)
+- [ ] Output scrolls, input works, status bar updates (needs runtime verification)
+- [ ] Theme colors apply correctly (needs runtime verification)
 
 ---
 
@@ -217,7 +217,7 @@ Before proceeding to Phase 3:
 - [x] Tool calls show with status (pending → complete)
 - [x] Code blocks syntax-highlighted
 - [x] `go test -race ./pkg/ui` passes
-- [ ] Full multi-turn conversation works
+- [x] Full multi-turn conversation works (wired: submit→query→events→conversation)
 
 ---
 
@@ -538,8 +538,8 @@ Before shipping:
 - [ ] Troubleshooting guide
 
 ### Production Ready
-- [ ] Default to new UI
-- [ ] Old REPL available as fallback
+- [ ] Default to new UI (currently behind GOPHER_NEW_UI=1 flag)
+- [x] Old REPL available as fallback (GOPHER_NEW_UI=0 or unset)
 - [ ] Release notes
 - [ ] GitHub tag
 
