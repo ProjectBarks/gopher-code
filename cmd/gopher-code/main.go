@@ -577,6 +577,13 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Interactive REPL
-	cli.RunREPL(ctx, sess, prov, registry, *verbose, hookRunner, *noSessionPersist, *prefill, planState)
+	// Interactive mode: new TUI or legacy REPL
+	if cli.UseNewUI() {
+		if err := cli.RunTUIV2(ctx, sess, prov, registry); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	} else {
+		cli.RunREPL(ctx, sess, prov, registry, *verbose, hookRunner, *noSessionPersist, *prefill, planState)
+	}
 }
