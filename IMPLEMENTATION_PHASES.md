@@ -361,68 +361,73 @@ Before proceeding to Phase 4:
 
 ### Tasks
 
-#### Task 4.1: SlashCommandInput
+#### Task 4.1: SlashCommandInput (COMPLETE ✅)
 - **File**: `pkg/ui/components/slash_input.go`
 - **Lines**: 300
+- **Status**: ✅ Fuzzy autocomplete, navigation, selection, 9 tests
 - **What**: Autocomplete for /command
 - **Checklist**:
-  - [ ] Detect "/" and trigger autocomplete
-  - [ ] Suggest `/model`, `/session`, `/clear`, etc.
-  - [ ] Fuzzy match commands
-  - [ ] Tests: autocomplete matching
+  - [x] Detect "/" and trigger autocomplete
+  - [x] Suggest `/model`, `/session`, `/clear`, etc.
+  - [x] Fuzzy match commands
+  - [x] Tests: autocomplete matching
 
-#### Task 4.2: SessionPicker
+#### Task 4.2: SessionPicker (COMPLETE ✅)
 - **File**: `pkg/ui/components/session_picker.go`
 - **Lines**: 300
+- **Status**: ✅ Fuzzy search, keyboard nav, modal-ready, 7 tests
 - **What**: Fuzzy search + select prior sessions
 - **Checklist**:
-  - [ ] Load session list from disk
-  - [ ] Fuzzy search sessions
-  - [ ] Modal presentation
-  - [ ] Load selected session
-  - [ ] Tests: session loading
+  - [x] Load session list from disk
+  - [x] Fuzzy search sessions
+  - [x] Modal presentation
+  - [x] Load selected session
+  - [x] Tests: session loading
 
-#### Task 4.3: Header
+#### Task 4.3: Header (COMPLETE ✅)
 - **File**: `pkg/ui/components/header.go`
 - **Lines**: 100
+- **Status**: ✅ Model/session/CWD display with path abbreviation, 7 tests
 - **What**: Top bar with model/session/cwd
 - **Checklist**:
-  - [ ] Display model name
-  - [ ] Display session name
-  - [ ] Display current working directory
-  - [ ] Update on context changes
-  - [ ] Tests: header updates
+  - [x] Display model name
+  - [x] Display session name
+  - [x] Display current working directory
+  - [x] Update on context changes
+  - [x] Tests: header updates
 
-#### Task 4.4: Command Dispatch & Handlers
+#### Task 4.4: Command Dispatch & Handlers (COMPLETE ✅)
 - **File**: `pkg/ui/commands/handlers.go`
 - **Lines**: 200
+- **Status**: ✅ 7 default commands, custom handler support, 10 tests
 - **What**: Route slash commands to handlers
 - **Checklist**:
-  - [ ] `/model` → switch model, update SessionState
-  - [ ] `/session` → show SessionPicker
-  - [ ] `/clear` → clear ConversationPane
-  - [ ] `/help` → show command list
-  - [ ] Tests: all commands
+  - [x] `/model` → switch model, update SessionState
+  - [x] `/session` → show SessionPicker
+  - [x] `/clear` → clear ConversationPane
+  - [x] `/help` → show command list
+  - [x] Tests: all commands
 
-#### Task 4.5: Integration - Slash Commands
+#### Task 4.5: Integration - Slash Commands (COMPLETE ✅)
 - **File**: Modify `pkg/ui/components/input.go`
 - **Lines**: 100
+- **Status**: ✅ InputPane handles SubmitMsg, SlashCommandInput wired, Dispatcher routes
 - **What**: Wire slash command input to handlers
 - **Checklist**:
-  - [ ] Detect "/" in input
-  - [ ] Show autocomplete suggestions
-  - [ ] Route to handler on Enter
-  - [ ] Tests: command dispatch
+  - [x] Detect "/" in input
+  - [x] Show autocomplete suggestions
+  - [x] Route to handler on Enter
+  - [x] Tests: command dispatch
 
 ### Phase 4 Go/No-Go Criteria
 
 Before proceeding to Phase 5:
-- [ ] All 5 tasks complete
-- [ ] Slash commands autocomplete
-- [ ] `/model`, `/session`, `/clear` work
-- [ ] Header shows model, session, cwd
-- [ ] Session history navigable
-- [ ] `go test -race ./pkg/ui` passes
+- [x] All 5 tasks complete
+- [x] Slash commands autocomplete
+- [x] `/model`, `/session`, `/clear` work
+- [x] Header shows model, session, cwd
+- [x] Session history navigable
+- [x] `go test -race ./pkg/ui` passes
 
 ---
 
