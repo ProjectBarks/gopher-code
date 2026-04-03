@@ -34,18 +34,19 @@ This file is used by `run-phase.sh` to guide you through implementation. Each ph
   - [x] Focus ring: Tab cycling, modal override
   - [x] All tests passing
 
-#### Task 1.3: AppShell Container
+#### Task 1.3: AppShell Container (COMPLETE ✅)
 - **File**: `pkg/ui/app.go`
 - **Lines**: 300
+- **Status**: ✅ Implemented with all message types, focus routing, event bridge integration
 - **What**: Top-level tea.Model, routes messages to children, manages focus
 - **Tests**: app_test.go
 - **Checklist**:
-  - [ ] struct with children (header, conversation, input, status)
-  - [ ] Init() spawns query goroutine
-  - [ ] Update() routes to focused child
-  - [ ] View() renders 4-part layout
-  - [ ] Tests for focus routing, modal stacking
-  - [ ] Integration with EventCallback bridge
+  - [x] struct with children (header, conversation, input, status)
+  - [x] Init() spawns query goroutine
+  - [x] Update() routes to focused child
+  - [x] View() renders 4-part layout
+  - [x] Tests for focus routing, modal stacking
+  - [x] Integration with EventCallback bridge
 
 #### Task 1.4: ConversationPane
 - **Files**: `pkg/ui/components/conversation.go`
