@@ -691,7 +691,7 @@ Before shipping:
 - [ ] Linting: `golangci-lint run`
 
 ### Production Ready
-- [ ] Default to new UI (currently behind GOPHER_NEW_UI=1 flag)
+- [x] Default to new UI (now default; set GOPHER_OLD_UI=1 for legacy REPL)
 - [x] Old REPL available as fallback (GOPHER_NEW_UI=0 or unset)
 - [ ] Release notes
 - [ ] GitHub tag
