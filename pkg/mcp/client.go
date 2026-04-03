@@ -23,12 +23,7 @@ type MCPClient struct {
 	pending  map[int64]chan *jsonRPCResponse
 }
 
-// ServerConfig describes how to start an MCP server.
-type ServerConfig struct {
-	Command string            `json:"command"`
-	Args    []string          `json:"args,omitempty"`
-	Env     map[string]string `json:"env,omitempty"`
-}
+// ServerConfig is defined in config.go with full transport support.
 
 // ToolInfo describes a tool provided by the MCP server.
 type ToolInfo struct {
