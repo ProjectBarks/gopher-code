@@ -1,12 +1,15 @@
 package ui
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/session"
+	"github.com/projectbarks/gopher-code/pkg/ui/components"
 )
 
 func newTestApp() *AppModel {
@@ -23,8 +26,14 @@ func TestAppModelCreation(t *testing.T) {
 	if app.mode != ModeIdle {
 		t.Error("Initial mode should be Idle")
 	}
+	if app.header == nil {
+		t.Error("Header should be initialized")
+	}
 	if app.conversation == nil {
 		t.Error("ConversationPane should be initialized")
+	}
+	if app.input == nil {
+		t.Error("InputPane should be initialized")
 	}
 	if app.statusLine == nil {
 		t.Error("StatusLine should be initialized")
@@ -217,4 +226,102 @@ func TestAppModelNilSession(t *testing.T) {
 	if view.Content == "" {
 		t.Error("View should work with nil session")
 	}
+}
+
+func TestAppModelInputPaneFocused(t *testing.T) {
+	app := newTestApp()
+	if !app.input.Focused() {
+		t.Error("InputPane should have initial focus")
+	}
+}
+
+func TestAppModelSubmitAddsUserMessage(t *testing.T) {
+	app := newTestApp()
+	app.Update(components.SubmitMsg{Text: "hello"})
+	if app.conversation.MessageCount() != 1 {
+		t.Errorf("Expected 1 message after submit, got %d", app.conversation.MessageCount())
+	}
+}
+
+func TestAppModelSubmitAddsToSession(t *testing.T) {
+	app := newTestApp()
+	app.Update(components.SubmitMsg{Text: "test query"})
+	if len(app.session.Messages) != 1 {
+		t.Errorf("Expected 1 session message, got %d", len(app.session.Messages))
+	}
+}
+
+func TestAppModelSubmitEmptyIgnored(t *testing.T) {
+	app := newTestApp()
+	app.Update(components.SubmitMsg{Text: ""})
+	if app.conversation.MessageCount() != 0 {
+		t.Error("Empty submit should be ignored")
+	}
+}
+
+func TestAppModelSubmitWhitespaceIgnored(t *testing.T) {
+	app := newTestApp()
+	app.Update(components.SubmitMsg{Text: "   "})
+	if app.conversation.MessageCount() != 0 {
+		t.Error("Whitespace-only submit should be ignored")
+	}
+}
+
+func TestAppModelCtrlCQuits(t *testing.T) {
+	app := newTestApp()
+	_, cmd := app.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if cmd == nil {
+		t.Fatal("Ctrl+C should produce a command")
+	}
+	// Should be a quit command
+	msg := cmd()
+	if _, ok := msg.(tea.QuitMsg); !ok {
+		t.Errorf("Expected QuitMsg, got %T", msg)
+	}
+}
+
+func TestAppModelQueryDoneResetsMode(t *testing.T) {
+	app := newTestApp()
+	app.mode = ModeStreaming
+	app.Update(queryDoneMsg{err: nil})
+	if app.mode != ModeIdle {
+		t.Error("queryDone should reset mode to Idle")
+	}
+}
+
+func TestAppModelQueryDoneWithError(t *testing.T) {
+	app := newTestApp()
+	app.mode = ModeStreaming
+	app.Update(queryDoneMsg{err: fmt.Errorf("test error")})
+	if app.mode != ModeIdle {
+		t.Error("queryDone with error should reset mode to Idle")
+	}
+	// Should add error message to conversation
+	if app.conversation.MessageCount() != 1 {
+		t.Error("queryDone with error should add error to conversation")
+	}
+}
+
+func TestAppModelViewHasInputPane(t *testing.T) {
+	app := newTestApp()
+	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	view := app.View()
+	// Input pane renders the prompt character ">"
+	if !strings.Contains(view.Content, ">") {
+		t.Error("View should contain input pane prompt")
+	}
+}
+
+func TestAppModelSetQueryFunc(t *testing.T) {
+	app := newTestApp()
+	called := false
+	app.SetQueryFunc(func(ctx context.Context, sess *session.SessionState, onEvent query.EventCallback) error {
+		called = true
+		return nil
+	})
+	if app.queryFunc == nil {
+		t.Error("queryFunc should be set")
+	}
+	// We don't call it here — that requires Bubbletea runtime for Cmd execution
+	_ = called
 }
