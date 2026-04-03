@@ -8,12 +8,22 @@ import (
 	"sync"
 )
 
+// DefaultMaxAgeDays is the auto-expiry window for recurring cron jobs.
+// Source: ScheduleCronTool/prompt.ts — DEFAULT_MAX_AGE_DAYS
+const DefaultMaxAgeDays = 7
+
+// MaxCronJobs is the maximum number of concurrent cron jobs.
+// Source: ScheduleCronTool/CronCreateTool.ts:25
+const MaxCronJobs = 50
+
 // CronEntry represents a scheduled cron job.
 type CronEntry struct {
-	ID     string `json:"id"`
-	Cron   string `json:"cron"`
-	Prompt string `json:"prompt"`
-	Active bool   `json:"active"`
+	ID        string `json:"id"`
+	Cron      string `json:"cron"`
+	Prompt    string `json:"prompt"`
+	Active    bool   `json:"active"`
+	Recurring bool   `json:"recurring"`
+	Durable   bool   `json:"durable"`
 }
 
 // CronStore is the in-memory store for cron entries.
@@ -32,24 +42,28 @@ func (t *CronCreateTool) Name() string        { return "CronCreate" }
 func (t *CronCreateTool) Description() string { return "Schedule a prompt to run on a cron schedule" }
 func (t *CronCreateTool) IsReadOnly() bool    { return false }
 
+// Source: ScheduleCronTool/CronCreateTool.ts:27-42
 func (t *CronCreateTool) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
 		"properties": {
-			"cron": {"type": "string", "description": "Cron expression (e.g. '*/5 * * * *')"},
-			"prompt": {"type": "string", "description": "The prompt to execute on schedule"},
-			"recurring": {"type": "boolean", "description": "Whether the job recurs (default true)"}
+			"cron": {"type": "string", "description": "Standard 5-field cron expression in local time: \"M H DoM Mon DoW\" (e.g. \"*/5 * * * *\" = every 5 minutes, \"30 14 28 2 *\" = Feb 28 at 2:30pm local once)."},
+			"prompt": {"type": "string", "description": "The prompt to enqueue at each fire time."},
+			"recurring": {"type": "boolean", "description": "true (default) = fire on every cron match until deleted or auto-expired after 7 days. false = fire once at the next match, then auto-delete."},
+			"durable": {"type": "boolean", "description": "true = persist to .claude/scheduled_tasks.json and survive restarts. false (default) = in-memory only, dies when this Claude session ends."}
 		},
 		"required": ["cron", "prompt"],
 		"additionalProperties": false
 	}`)
 }
 
+// Source: ScheduleCronTool/CronCreateTool.ts:117-141
 func (t *CronCreateTool) Execute(_ context.Context, _ *ToolContext, input json.RawMessage) (*ToolOutput, error) {
 	var params struct {
 		Cron      string `json:"cron"`
 		Prompt    string `json:"prompt"`
 		Recurring *bool  `json:"recurring"`
+		Durable   *bool  `json:"durable"`
 	}
 	if err := json.Unmarshal(input, &params); err != nil {
 		return ErrorOutput(fmt.Sprintf("invalid input: %s", err)), nil
@@ -61,18 +75,51 @@ func (t *CronCreateTool) Execute(_ context.Context, _ *ToolContext, input json.R
 		return ErrorOutput("prompt is required"), nil
 	}
 
+	// Defaults: recurring=true, durable=false
+	// Source: CronCreateTool.ts:117
+	recurring := true
+	if params.Recurring != nil {
+		recurring = *params.Recurring
+	}
+	durable := false
+	if params.Durable != nil {
+		durable = *params.Durable
+	}
+
 	t.store.mu.Lock()
+	// Max jobs check — Source: CronCreateTool.ts:97-103
+	if len(t.store.entries) >= MaxCronJobs {
+		t.store.mu.Unlock()
+		return ErrorOutput(fmt.Sprintf("Too many scheduled jobs (max %d). Cancel one first.", MaxCronJobs)), nil
+	}
 	t.store.nextID++
 	id := fmt.Sprintf("cron-%d", t.store.nextID)
 	t.store.entries[id] = &CronEntry{
-		ID:     id,
-		Cron:   params.Cron,
-		Prompt: params.Prompt,
-		Active: true,
+		ID:        id,
+		Cron:      params.Cron,
+		Prompt:    params.Prompt,
+		Active:    true,
+		Recurring: recurring,
+		Durable:   durable,
 	}
 	t.store.mu.Unlock()
 
-	return SuccessOutput(fmt.Sprintf("Created cron job %s: %s", id, params.Cron)), nil
+	// Build response matching TS format
+	// Source: CronCreateTool.ts:143-156
+	where := "Session-only (not written to disk, dies when Claude exits)"
+	if durable {
+		where = "Persisted to .claude/scheduled_tasks.json"
+	}
+	if recurring {
+		return SuccessOutput(fmt.Sprintf(
+			"Scheduled recurring job %s (%s). %s. Auto-expires after %d days. Use CronDelete to cancel sooner.",
+			id, params.Cron, where, DefaultMaxAgeDays,
+		)), nil
+	}
+	return SuccessOutput(fmt.Sprintf(
+		"Scheduled one-shot task %s (%s). %s. It will fire once then auto-delete.",
+		id, params.Cron, where,
+	)), nil
 }
 
 // CronDeleteTool deletes a cron entry.

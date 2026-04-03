@@ -95,17 +95,17 @@ func TestCronTools(t *testing.T) {
 		if out.IsError {
 			t.Fatalf("unexpected tool error: %s", out.Content)
 		}
-		if !strings.Contains(out.Content, "Created cron job") {
+		if !strings.Contains(out.Content, "Scheduled recurring job") {
 			t.Errorf("expected creation message, got %q", out.Content)
 		}
 
 		// Extract the ID from the output
-		// Format: "Created cron job cron-N: ..."
+		// Format: "Scheduled recurring job cron-N ..."
 		parts := strings.Fields(out.Content)
 		var createdID string
 		for i, p := range parts {
 			if p == "job" && i+1 < len(parts) {
-				createdID = strings.TrimSuffix(parts[i+1], ":")
+				createdID = parts[i+1]
 				break
 			}
 		}
