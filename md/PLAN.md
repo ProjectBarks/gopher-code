@@ -390,11 +390,27 @@ For each batch:
 ---
 
 ## Batch 19 — Coordinator & Tasks Runtime
-- [ ] `hooks/`
-- [ ] `coordinator/`
-- [ ] `tasks/`
-- [ ] `buddy/`
-- [ ] `assistant/`
+- [x] `hooks/`
+- [x] `coordinator/`
+- [x] `tasks/`
+- [x] `buddy/`
+- [x] `assistant/`
+
+**Fixes applied:**
+- No code changes needed. hooks/ (104 React hooks — Bubbletea uses different architecture), coordinator/ (enterprise worker management), tasks/ (background execution runtime), buddy/ (cosmetic mascot), assistant/ (CCR session history API).
+
+**Tests added:**
+- Existing tests pass
+
+**Notes written:** `md/batch-19-notes.md`
+
+---
+
+## Batch 20 — Bridge & Remote
+- [ ] `bridge/`
+- [ ] `remote/`
+- [ ] `server/`
+- [ ] `upstreamproxy/`
 
 **Fixes applied:**
 
@@ -404,11 +420,9 @@ For each batch:
 
 ---
 
-## Batch 20 — Bridge & Remote
-- [ ] `bridge/`
-- [ ] `remote/`
-- [ ] `server/`
-- [ ] `upstreamproxy/`
+## Batch UI-20-A — TUI Core
+- [ ] `ink/components`
+- [ ] `ink/events`
 
 **Fixes applied:**
 
@@ -688,7 +702,7 @@ For each batch:
 | 16 | Git, Task & Plugin Utils | [x] | 0 files | existing tests pass | batch-16-notes.md |
 | 17 | Storage & Swarm Utils | [x] | 0 files | existing tests pass | batch-17-notes.md |
 | 18 | Platform & Remote Utils | [x] | 0 files | existing tests pass | batch-18-notes.md |
-| 19 | Coordinator & Tasks Runtime | [ ] | | | |
+| 19 | Coordinator & Tasks Runtime | [x] | 0 files | existing tests pass | batch-19-notes.md |
 | 20 | Bridge & Remote | [ ] | | | |
 | 21 | TUI Core | [ ] | | | |
 | 22 | TUI Diff & Teams | [ ] | | | |
