@@ -67,6 +67,7 @@ require (
 
 require (
 	github.com/creack/pty v1.1.24
+	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	golang.org/x/net v0.47.0
 	golang.org/x/text v0.31.0
 )

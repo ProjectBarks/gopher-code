@@ -1,5 +1,6 @@
-// capture-tui captures a TUI application's terminal output by running it in a
-// real PTY, scripting interactions, and saving text snapshots at each stage.
+// capture-tui captures a TUI application's rendered screen by running it in a
+// real PTY and feeding output through a VT100 terminal emulator. This gives
+// you the actual screen content (what your eyes see), not the raw ANSI stream.
 //
 // Usage:
 //
@@ -17,47 +18,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/creack/pty"
+	"github.com/hinshun/vt10x"
 )
 
-// cursorMoveRe matches cursor-forward sequences like \x1b[1C (move right 1)
-var cursorMoveRe = regexp.MustCompile(`\x1b\[(\d*)C`)
-var ansiRe = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b>[0-9]*[a-zA-Z]|\x1b\[[<>=][^\n]*`)
-
-func stripANSI(b []byte) string {
-	s := string(b)
-	// Replace cursor-forward moves with spaces (e.g. \x1b[1C → " ", \x1b[3C → "   ")
-	s = cursorMoveRe.ReplaceAllStringFunc(s, func(match string) string {
-		sub := cursorMoveRe.FindStringSubmatch(match)
-		n := 1
-		if len(sub) > 1 && sub[1] != "" {
-			fmt.Sscanf(sub[1], "%d", &n)
-		}
-		return strings.Repeat(" ", n)
-	})
-	// Strip remaining ANSI sequences
-	s = ansiRe.ReplaceAllString(s, "")
-	var sb strings.Builder
-	for _, r := range s {
-		if r == '\r' || r == 0 {
-			continue
-		}
-		sb.WriteRune(r)
-	}
-	return sb.String()
-}
-
 type snapshot struct {
-	name    string
-	raw     []byte
-	cleaned string
+	name   string
+	screen string
 }
 
-func captureApp(appName, query, cwd string, waitWelcome, waitQuery time.Duration) ([]snapshot, error) {
+func captureApp(appName, query, cwd string, cols, rows int, waitWelcome, waitQuery time.Duration) ([]snapshot, error) {
 	var cmd *exec.Cmd
 	switch appName {
 	case "claude":
@@ -71,25 +44,27 @@ func captureApp(appName, query, cwd string, waitWelcome, waitQuery time.Duration
 	cmd.Dir = cwd
 	cmd.Env = append(os.Environ(),
 		"TERM=xterm-256color",
-		"COLUMNS=80",
-		"LINES=24",
+		fmt.Sprintf("COLUMNS=%d", cols),
+		fmt.Sprintf("LINES=%d", rows),
 	)
 
-	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: 24, Cols: 80})
+	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: uint16(rows), Cols: uint16(cols)})
 	if err != nil {
 		return nil, fmt.Errorf("pty start: %w", err)
 	}
 	defer ptmx.Close()
 
-	// Read output continuously
-	output := make([]byte, 0, 256*1024)
+	// Create a virtual terminal that processes all ANSI sequences
+	term := vt10x.New(vt10x.WithSize(cols, rows))
+
+	// Feed PTY output into the VT emulator continuously
 	done := make(chan struct{})
 	go func() {
 		buf := make([]byte, 4096)
 		for {
 			n, err := ptmx.Read(buf)
 			if n > 0 {
-				output = append(output, buf[:n]...)
+				term.Write(buf[:n])
 			}
 			if err != nil {
 				break
@@ -104,9 +79,8 @@ func captureApp(appName, query, cwd string, waitWelcome, waitQuery time.Duration
 	fmt.Fprintf(os.Stderr, "[%s] Waiting %s for startup...\n", appName, waitWelcome)
 	time.Sleep(waitWelcome)
 	snaps = append(snaps, snapshot{
-		name:    "01-welcome",
-		raw:     append([]byte(nil), output...),
-		cleaned: stripANSI(output),
+		name:   "01-welcome",
+		screen: termToString(term, cols, rows),
 	})
 
 	// 2. Type query if provided
@@ -117,9 +91,8 @@ func captureApp(appName, query, cwd string, waitWelcome, waitQuery time.Duration
 		fmt.Fprintf(os.Stderr, "[%s] Waiting %s for response...\n", appName, waitQuery)
 		time.Sleep(waitQuery)
 		snaps = append(snaps, snapshot{
-			name:    "02-response",
-			raw:     append([]byte(nil), output...),
-			cleaned: stripANSI(output),
+			name:   "02-response",
+			screen: termToString(term, cols, rows),
 		})
 	}
 
@@ -134,12 +107,39 @@ func captureApp(appName, query, cwd string, waitWelcome, waitQuery time.Duration
 	<-done
 
 	snaps = append(snaps, snapshot{
-		name:    "03-final",
-		raw:     append([]byte(nil), output...),
-		cleaned: stripANSI(output),
+		name:   "03-final",
+		screen: termToString(term, cols, rows),
 	})
 
 	return snaps, nil
+}
+
+// termToString reads the virtual terminal's screen buffer as a string,
+// trimming trailing whitespace from each line.
+func termToString(term vt10x.Terminal, cols, rows int) string {
+	term.Lock()
+	defer term.Unlock()
+
+	var lines []string
+	for y := 0; y < rows; y++ {
+		var line strings.Builder
+		for x := 0; x < cols; x++ {
+			g := term.Cell(x, y)
+			if g.Char == 0 {
+				line.WriteRune(' ')
+			} else {
+				line.WriteRune(g.Char)
+			}
+		}
+		lines = append(lines, strings.TrimRight(line.String(), " "))
+	}
+
+	// Trim trailing empty lines
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	return strings.Join(lines, "\n") + "\n"
 }
 
 func writeSnapshots(outDir, appName string, snaps []snapshot) error {
@@ -149,11 +149,9 @@ func writeSnapshots(outDir, appName string, snaps []snapshot) error {
 	}
 
 	for _, s := range snaps {
-		rawPath := filepath.Join(dir, s.name+".raw.txt")
-		cleanPath := filepath.Join(dir, s.name+".txt")
-		os.WriteFile(rawPath, s.raw, 0644)
-		os.WriteFile(cleanPath, []byte(s.cleaned), 0644)
-		fmt.Printf("  %s/%s.txt (%d bytes clean, %d bytes raw)\n", appName, s.name, len(s.cleaned), len(s.raw))
+		path := filepath.Join(dir, s.name+".txt")
+		os.WriteFile(path, []byte(s.screen), 0644)
+		fmt.Printf("  %s/%s.txt (%d bytes)\n", appName, s.name, len(s.screen))
 	}
 	return nil
 }
@@ -164,20 +162,20 @@ func main() {
 	outDir := flag.String("out", "testdata/tui-snapshots", "Output directory for snapshots")
 	cwd := flag.String("cwd", "", "Working directory (defaults to repo root)")
 	doDiff := flag.Bool("diff", false, "Capture both apps and show diff")
+	cols := flag.Int("cols", 80, "Terminal width")
+	rows := flag.Int("rows", 24, "Terminal height")
 	welcomeWait := flag.Duration("welcome-wait", 6*time.Second, "How long to wait for welcome screen")
 	queryWait := flag.Duration("query-wait", 10*time.Second, "How long to wait for query response")
 	flag.Parse()
 
 	if *cwd == "" {
-		// Default to the gopher repo root
 		home, _ := os.UserHomeDir()
 		*cwd = filepath.Join(home, "claude-code-v2", "gopher")
 	}
 
 	if *doDiff {
-		// Capture both and diff
 		fmt.Println("Capturing Claude Code...")
-		cSnaps, err := captureApp("claude", *query, *cwd, *welcomeWait, *queryWait)
+		cSnaps, err := captureApp("claude", *query, *cwd, *cols, *rows, *welcomeWait, *queryWait)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "claude capture failed: %v\n", err)
 			os.Exit(1)
@@ -185,14 +183,13 @@ func main() {
 		writeSnapshots(*outDir, "claude", cSnaps)
 
 		fmt.Println("\nCapturing Gopher...")
-		gSnaps, err := captureApp("gopher", *query, *cwd, *welcomeWait, *queryWait)
+		gSnaps, err := captureApp("gopher", *query, *cwd, *cols, *rows, *welcomeWait, *queryWait)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "gopher capture failed: %v\n", err)
 			os.Exit(1)
 		}
 		writeSnapshots(*outDir, "gopher", gSnaps)
 
-		// Show diff for each snapshot
 		fmt.Println("\n=== DIFFS ===")
 		for i := range cSnaps {
 			if i >= len(gSnaps) {
@@ -203,14 +200,13 @@ func main() {
 			fmt.Printf("\n--- %s ---\n", cSnaps[i].name)
 			diffCmd := exec.Command("diff", "-u", "--label", "claude", "--label", "gopher", cFile, gFile)
 			diffCmd.Stdout = os.Stdout
-			diffCmd.Run() // ignore exit code (diff returns 1 if files differ)
+			diffCmd.Run()
 		}
 		return
 	}
 
-	// Single app capture
 	fmt.Printf("Capturing %s...\n", *app)
-	snaps, err := captureApp(*app, *query, *cwd, *welcomeWait, *queryWait)
+	snaps, err := captureApp(*app, *query, *cwd, *cols, *rows, *welcomeWait, *queryWait)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "capture failed: %v\n", err)
 		os.Exit(1)
