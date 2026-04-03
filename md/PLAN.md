@@ -196,18 +196,22 @@ For each batch:
 ---
 
 ## Batch 9 — Utility Tools
-- [ ] `tools/SleepTool/`
-- [ ] `tools/SyntheticOutputTool/`
-- [ ] `tools/BriefTool/`
-- [ ] `tools/RemoteTriggerTool/`
-- [ ] `tools/ScheduleCronTool/`
-- [ ] `tools/testing/`
+- [x] `tools/SleepTool/`
+- [x] `tools/SyntheticOutputTool/`
+- [x] `tools/BriefTool/`
+- [x] `tools/RemoteTriggerTool/`
+- [x] `tools/ScheduleCronTool/`
+- [x] `tools/testing/`
 
 **Fixes applied:**
+- `pkg/tools/cron.go`: Added `durable` parameter to CronCreate schema matching TS. Added `recurring` field to CronEntry struct. Added DefaultMaxAgeDays=7 and MaxCronJobs=50 constants. Added max-jobs validation. Updated result messages to match TS format (recurring vs one-shot, session-only vs durable, auto-expiry note).
+- SleepTool, SyntheticOutputTool, BriefTool, RemoteTriggerTool: Reviewed — core behavior matches TS. No changes needed.
+- `tools/testing/`: No TS files found in this directory (empty).
 
 **Tests added:**
+- `pkg/tools/cron_test.go`: Updated create_and_list test for new message format.
 
-**Notes written:**
+**Notes written:** `md/batch-09-notes.md`
 
 ---
 
@@ -641,7 +645,7 @@ For each batch:
 | 6 | Task & Todo Tools | [x] | 1 file | 1 test file (1 new test) | batch-06-notes.md |
 | 7 | Web & MCP Tools | [x] | 0 files | existing tests pass | batch-07-notes.md |
 | 8 | Mode & Config Tools | [x] | 2 files | 2 test files (8 tests) | batch-08-notes.md |
-| 9 | Utility Tools | [ ] | | | |
+| 9 | Utility Tools | [x] | 1 file | 1 test file updated | batch-09-notes.md |
 | 10 | Core Services | [ ] | | | |
 | 11 | Memory & Dream Services | [ ] | | | |
 | 12 | Auxiliary Services | [ ] | | | |
