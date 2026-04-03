@@ -43,28 +43,74 @@ func (t *AgentTool) Description() string {
 }
 func (t *AgentTool) IsReadOnly() bool { return false }
 
+// Source: AgentTool/AgentTool.tsx inputSchema
 func (t *AgentTool) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
 		"properties": {
-			"prompt": {
-				"type": "string",
-				"description": "The task for the sub-agent to perform"
-			},
 			"description": {
 				"type": "string",
-				"description": "A short (3-5 word) description of what the agent will do"
+				"description": "A short (3-5 word) description of the task"
+			},
+			"prompt": {
+				"type": "string",
+				"description": "The task for the agent to perform"
+			},
+			"subagent_type": {
+				"type": "string",
+				"description": "The type of specialized agent to use for this task"
+			},
+			"model": {
+				"type": "string",
+				"description": "Optional model override for this agent. If omitted, uses the agent definition's model, or inherits from the parent.",
+				"enum": ["sonnet", "opus", "haiku"]
+			},
+			"name": {
+				"type": "string",
+				"description": "Name for the spawned agent. Makes it addressable via SendMessage({to: name}) while running."
+			},
+			"run_in_background": {
+				"type": "boolean",
+				"description": "Set to true to run this agent in the background. You will be notified when it completes."
+			},
+			"isolation": {
+				"type": "string",
+				"description": "Isolation mode. \"worktree\" creates a temporary git worktree so the agent works on an isolated copy of the repo.",
+				"enum": ["worktree"]
+			},
+			"mode": {
+				"type": "string",
+				"description": "Permission mode for spawned teammate (e.g., \"plan\" to require plan approval).",
+				"enum": ["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"]
 			}
 		},
-		"required": ["prompt", "description"],
+		"required": ["description", "prompt"],
 		"additionalProperties": false
 	}`)
 }
 
+// AgentMaxTurns is the default max turns for subagents.
+// Source: AgentTool/runAgent.ts — agents get fewer turns than main loop
+const AgentMaxTurns = 30
+
+// agentModelAliases maps short model names to full IDs.
+// Source: AgentTool prompt.ts — model enum options
+var agentModelAliases = map[string]string{
+	"haiku":  "claude-haiku-4-5-20251001",
+	"sonnet": "claude-sonnet-4-6",
+	"opus":   "claude-opus-4-6",
+}
+
 func (t *AgentTool) Execute(ctx context.Context, tc *ToolContext, input json.RawMessage) (*ToolOutput, error) {
 	var params struct {
-		Prompt      string `json:"prompt"`
-		Description string `json:"description"`
+		Prompt       string `json:"prompt"`
+		Description  string `json:"description"`
+		SubagentType string `json:"subagent_type"`
+		Model        string `json:"model"`
+		Name         string `json:"name"`
+		RunInBG      bool   `json:"run_in_background"`
+		Isolation    string `json:"isolation"`
+		Mode         string `json:"mode"`
 	}
 	if err := json.Unmarshal(input, &params); err != nil {
 		return ErrorOutput("invalid input: " + err.Error()), nil
@@ -73,15 +119,28 @@ func (t *AgentTool) Execute(ctx context.Context, tc *ToolContext, input json.Raw
 		return ErrorOutput("prompt is required"), nil
 	}
 
-	// Create child session with a fast model and limited turns.
+	// Resolve model: explicit override > parent session model > default
+	// Source: utils/model/agent.ts — getAgentModel()
+	model := "claude-sonnet-4-6"
+	if params.Model != "" {
+		if resolved, ok := agentModelAliases[params.Model]; ok {
+			model = resolved
+		} else {
+			model = params.Model
+		}
+	}
+
+	// Create child session with agent-appropriate config.
+	// Source: AgentTool/runAgent.ts:135-160
 	childCfg := session.SessionConfig{
-		Model:          "claude-sonnet-4-20250514",
+		Model:          model,
 		SystemPrompt:   "You are a helpful sub-agent. Complete the task and report your findings concisely.",
-		MaxTurns:       20,
+		MaxTurns:       AgentMaxTurns,
 		TokenBudget:    compact.DefaultBudget(),
 		PermissionMode: permissions.AutoApprove,
 	}
 	childSess := session.New(childCfg, tc.CWD)
+	childSess.ParentSessionID = tc.SessionID
 	childSess.PushMessage(message.UserMessage(params.Prompt))
 
 	// Create a child orchestrator sharing the registry but not state.
