@@ -60,7 +60,7 @@ func (ip *InputPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the input pane with prompt and cursor.
 func (ip *InputPane) View() tea.View {
 	t := theme.Current()
-	prompt := t.PromptChar().Render("> ")
+	prompt := t.PromptChar().Render(PromptPrefix)
 
 	text := string(ip.runes)
 	if ip.focused && ip.cursor <= len(ip.runes) {

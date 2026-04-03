@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/projectbarks/gopher-code/pkg/session"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
@@ -74,33 +75,33 @@ func (sl *StatusLine) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the status line.
 func (sl *StatusLine) View() tea.View {
 	t := theme.Current()
+	cs := t.Colors()
 
-	var parts []string
+	var content string
 
-	// Mode indicator
 	switch sl.mode {
-	case ModeIdle:
-		parts = append(parts, "Idle")
-	case ModeStreaming:
-		parts = append(parts, "Streaming")
-	case ModeToolRunning:
-		parts = append(parts, "Tool Running")
+	case ModeStreaming, ModeToolRunning:
+		// During streaming/tool: show interrupt hint (matching Claude Code)
+		dimStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(cs.TextMuted))
+		content = dimStyle.Render("esc to interrupt")
+
+	default:
+		// Idle: show model + token info
+		var parts []string
+
+		if sl.session != nil {
+			parts = append(parts, sl.session.Config.Model)
+		}
+
+		if sl.inputTokens > 0 || sl.outputTokens > 0 {
+			parts = append(parts, fmt.Sprintf("%d/%d tokens", sl.inputTokens, sl.outputTokens))
+		}
+
+		content = strings.Join(parts, " │ ")
 	}
 
-	// Model name
-	if sl.session != nil {
-		model := sl.session.Config.Model
-		parts = append(parts, model)
-	}
-
-	// Token count
-	if sl.inputTokens > 0 || sl.outputTokens > 0 {
-		parts = append(parts, fmt.Sprintf("%d/%d tokens", sl.inputTokens, sl.outputTokens))
-	}
-
-	content := strings.Join(parts, " │ ")
-
-	// Pad or truncate to fill width
+	// Pad to fill width
 	if sl.width > 0 && len(content) < sl.width {
 		content = content + strings.Repeat(" ", sl.width-len(content))
 	} else if sl.width > 0 {
