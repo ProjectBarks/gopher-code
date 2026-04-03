@@ -407,10 +407,24 @@ For each batch:
 ---
 
 ## Batch 20 — Bridge & Remote
-- [ ] `bridge/`
-- [ ] `remote/`
-- [ ] `server/`
-- [ ] `upstreamproxy/`
+- [x] `bridge/`
+- [x] `remote/`
+- [x] `server/`
+- [x] `upstreamproxy/`
+
+**Fixes applied:**
+- No code changes needed. All 4 directories are CCR/enterprise remote infrastructure: bridge/ (31 files — REPL bridge for Remote Control web UI), remote/ (4 files — WebSocket session management), server/ (3 files — Direct Connect local HTTP server), upstreamproxy/ (2 files — CONNECT relay for org upstreams). None apply to standalone Go CLI.
+
+**Tests added:**
+- Existing tests pass
+
+**Notes written:** `md/batch-20-notes.md`
+
+---
+
+## Batch UI-20-A — Ink Components 
+- [ ] `ink/`
+- [ ] `ink/components`
 
 **Fixes applied:**
 
@@ -420,9 +434,21 @@ For each batch:
 
 ---
 
-## Batch UI-20-A — TUI Core
-- [ ] `ink/components`
+## Batch UI-20-B — Ink Hooks & Events
+- [ ] `ink/hooks`
 - [ ] `ink/events`
+
+**Fixes applied:**
+
+**Tests added:**
+
+**Notes written:**
+
+---
+
+## Batch UI-20-C — Layout & Termio
+- [ ] `ink/layout`
+- [ ] `ink/termio`
 
 **Fixes applied:**
 
@@ -503,6 +529,42 @@ For each batch:
 - [ ] `components/LspRecommendation/`
 - [ ] `components/ManagedSettingsSecurityDialog/`
 - [ ] `components/Passes/`
+
+**Fixes applied:**
+
+**Tests added:**
+
+**Notes written:**
+
+---
+
+## Batch UI-27-A — Ink - Ink Pass 1 of 3 
+Ensure the UI looks functions nearly identical to claude
+- [ ] `ink/`
+
+**Fixes applied:**
+
+**Tests added:**
+
+**Notes written:**
+
+---
+
+## Batch UI-27-A — Ink - Ink Pass 2 of 3 
+Ensure the UI looks functions nearly identical to claude
+- [ ] `ink/`
+
+**Fixes applied:**
+
+**Tests added:**
+
+**Notes written:**
+
+---
+
+## Batch UI-27-A — Ink - Ink Pass 3 of 3 
+Ensure the UI looks functions nearly identical to claude
+- [ ] `ink/`
 
 **Fixes applied:**
 
@@ -703,7 +765,7 @@ For each batch:
 | 17 | Storage & Swarm Utils | [x] | 0 files | existing tests pass | batch-17-notes.md |
 | 18 | Platform & Remote Utils | [x] | 0 files | existing tests pass | batch-18-notes.md |
 | 19 | Coordinator & Tasks Runtime | [x] | 0 files | existing tests pass | batch-19-notes.md |
-| 20 | Bridge & Remote | [ ] | | | |
+| 20 | Bridge & Remote | [x] | 0 files | existing tests pass | batch-20-notes.md |
 | 21 | TUI Core | [ ] | | | |
 | 22 | TUI Diff & Teams | [ ] | | | |
 | 23 | TUI Permissions & Settings | [ ] | | | |
