@@ -47,7 +47,7 @@ type ModelRequest struct {
 	SystemBlocks []SystemBlock    `json:"system_blocks,omitempty"` // Alternative: array form with cache_control
 	Messages     []RequestMessage `json:"messages"`
 	MaxTokens    int              `json:"max_tokens"`
-	Tools        []ToolDefinition `json:"tools,omitempty"`
+	Tools        []ToolDefinition `json:"tools"`
 	Temperature  *float64         `json:"temperature,omitempty"`
 	Thinking     *ThinkingConfig  `json:"thinking,omitempty"`
 	JSONSchema   json.RawMessage  `json:"json_schema,omitempty"`

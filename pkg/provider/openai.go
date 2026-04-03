@@ -39,7 +39,7 @@ type openAIChatRequest struct {
 	Model       string             `json:"model"`
 	Messages    []openAIMessage    `json:"messages"`
 	Stream      bool               `json:"stream"`
-	Tools       []openAITool       `json:"tools,omitempty"`
+	Tools       []openAITool       `json:"tools"`
 	MaxTokens   int                `json:"max_tokens,omitempty"`
 	Temperature *float64           `json:"temperature,omitempty"`
 }

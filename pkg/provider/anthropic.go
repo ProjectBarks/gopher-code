@@ -58,7 +58,7 @@ type apiRequest struct {
 	MaxTokens   int              `json:"max_tokens"`
 	System      string           `json:"system,omitempty"`
 	Messages    []RequestMessage `json:"messages"`
-	Tools       []ToolDefinition `json:"tools,omitempty"`
+	Tools       []ToolDefinition `json:"tools"`
 	Stream      bool             `json:"stream"`
 	Temperature *float64         `json:"temperature,omitempty"`
 }
