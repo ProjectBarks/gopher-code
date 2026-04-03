@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/session"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
@@ -322,6 +323,75 @@ func TestAppModelSetQueryFunc(t *testing.T) {
 	if app.queryFunc == nil {
 		t.Error("queryFunc should be set")
 	}
-	// We don't call it here — that requires Bubbletea runtime for Cmd execution
 	_ = called
+}
+
+func TestAppModelSlashCommandClear(t *testing.T) {
+	app := newTestApp()
+	app.conversation.AddMessage(message.UserMessage("hello"))
+	// Submit /clear — returns a Cmd that produces ClearConversationMsg
+	_, cmd := app.Update(components.SubmitMsg{Text: "/clear"})
+	if cmd == nil {
+		t.Fatal("Expected command from /clear")
+	}
+	// Execute the command to get the message
+	msg := cmd()
+	// Update with the result
+	app.Update(msg)
+	if app.conversation.MessageCount() != 0 {
+		t.Errorf("Expected 0 messages after /clear, got %d", app.conversation.MessageCount())
+	}
+}
+
+func TestAppModelSlashCommandModel(t *testing.T) {
+	app := newTestApp()
+	_, cmd := app.Update(components.SubmitMsg{Text: "/model opus"})
+	if cmd == nil {
+		t.Fatal("Expected command from /model")
+	}
+	msg := cmd()
+	app.Update(msg)
+	if app.session.Config.Model != "opus" {
+		t.Errorf("Expected model 'opus', got %q", app.session.Config.Model)
+	}
+}
+
+func TestAppModelSlashCommandQuit(t *testing.T) {
+	app := newTestApp()
+	_, cmd := app.Update(components.SubmitMsg{Text: "/quit"})
+	if cmd == nil {
+		t.Fatal("Expected command from /quit")
+	}
+	msg := cmd()
+	// The /quit handler returns QuitMsg, which Update should turn into tea.Quit
+	_, quitCmd := app.Update(msg)
+	if quitCmd == nil {
+		t.Fatal("Expected quit command")
+	}
+	quitMsg := quitCmd()
+	if _, ok := quitMsg.(tea.QuitMsg); !ok {
+		t.Errorf("Expected tea.QuitMsg, got %T", quitMsg)
+	}
+}
+
+func TestAppModelSlashCommandHelp(t *testing.T) {
+	app := newTestApp()
+	_, cmd := app.Update(components.SubmitMsg{Text: "/help"})
+	msg := cmd()
+	app.Update(msg)
+	// Help should add a message to conversation
+	if app.conversation.MessageCount() != 1 {
+		t.Errorf("Expected 1 help message, got %d", app.conversation.MessageCount())
+	}
+}
+
+func TestAppModelSlashCommandUnknown(t *testing.T) {
+	app := newTestApp()
+	_, cmd := app.Update(components.SubmitMsg{Text: "/nonexistent"})
+	msg := cmd()
+	app.Update(msg)
+	// Should add error message
+	if app.conversation.MessageCount() != 1 {
+		t.Errorf("Expected 1 error message, got %d", app.conversation.MessageCount())
+	}
 }

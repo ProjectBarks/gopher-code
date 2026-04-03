@@ -8,6 +8,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/session"
+	"github.com/projectbarks/gopher-code/pkg/ui/commands"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
 	"github.com/projectbarks/gopher-code/pkg/ui/core"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
@@ -100,9 +101,12 @@ type AppModel struct {
 	activeToolCalls map[string]string // toolUseID → toolName
 
 	// Query execution
-	queryFunc QueryFunc
-	queryCtx  context.Context
+	queryFunc   QueryFunc
+	queryCtx    context.Context
 	cancelQuery context.CancelFunc
+
+	// Command dispatch
+	dispatcher *commands.Dispatcher
 }
 
 // NewAppModel creates a new AppModel with the given session and bridge.
@@ -133,6 +137,9 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 
 	// Focus ring: input gets initial focus, conversation is focusable for scrolling
 	app.focus = core.NewFocusManager(inputPane, app.conversation)
+
+	// Command dispatcher for slash commands
+	app.dispatcher = commands.NewDispatcher()
 
 	return app
 }
@@ -179,6 +186,50 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case StatusUpdateMsg:
 		a.mode = msg.Mode
+		return a, nil
+
+	// Slash command results
+	case commands.ClearConversationMsg:
+		a.conversation.Update(components.ClearMessagesMsg{})
+		if a.session != nil {
+			a.session.Messages = a.session.Messages[:0]
+			a.session.TurnCount = 0
+		}
+		return a, nil
+
+	case commands.ModelSwitchMsg:
+		if a.session != nil {
+			a.session.Config.Model = msg.Model
+			a.header.SetModel(msg.Model)
+		}
+		return a, nil
+
+	case commands.QuitMsg:
+		return a, tea.Quit
+
+	case commands.ShowHelpMsg:
+		helpText := "Commands: /help /clear /model <name> /session /quit /compact /thinking"
+		helpMsg := message.Message{
+			Role:    message.RoleAssistant,
+			Content: []message.ContentBlock{{Type: message.ContentText, Text: helpText}},
+		}
+		a.conversation.AddMessage(helpMsg)
+		return a, nil
+
+	case commands.CommandResult:
+		if msg.Error != nil {
+			errMsg := message.Message{
+				Role:    message.RoleAssistant,
+				Content: []message.ContentBlock{{Type: message.ContentText, Text: "Error: " + msg.Error.Error()}},
+			}
+			a.conversation.AddMessage(errMsg)
+		} else if msg.Output != "" {
+			outMsg := message.Message{
+				Role:    message.RoleAssistant,
+				Content: []message.ContentBlock{{Type: message.ContentText, Text: msg.Output}},
+			}
+			a.conversation.AddMessage(outMsg)
+		}
 		return a, nil
 	}
 
@@ -273,15 +324,21 @@ func (a *AppModel) handleSubmit(msg components.SubmitMsg) (*AppModel, tea.Cmd) {
 		return a, nil
 	}
 
-	// Add user message to session and conversation
+	// Add to input history
+	a.input.AddToHistory(text)
+
+	// Check for slash commands first
+	if commands.IsCommand(text) {
+		cmd := a.dispatcher.Dispatch(text)
+		return a, cmd
+	}
+
+	// Regular user input — add to session and dispatch query
 	userMsg := message.UserMessage(text)
 	if a.session != nil {
 		a.session.PushMessage(userMsg)
 	}
 	a.conversation.AddMessage(userMsg)
-
-	// Add to input history
-	a.input.AddToHistory(text)
 
 	// Dispatch query in background goroutine
 	if a.queryFunc != nil {
