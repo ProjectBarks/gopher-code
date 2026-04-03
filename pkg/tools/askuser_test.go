@@ -81,15 +81,31 @@ func TestAskUserQuestionTool(t *testing.T) {
 		}
 	})
 
-	t.Run("non_interactive_disclaimer", func(t *testing.T) {
+	t.Run("question_with_options", func(t *testing.T) {
+		// Source: AskUserQuestionTool.tsx — options with label/description
 		tc := &tools.ToolContext{CWD: t.TempDir()}
-		input := json.RawMessage(`{"question": "test?"}`)
+		input := json.RawMessage(`{"question": "Which approach?", "options": [{"label": "Option A", "description": "First approach"}, {"label": "Option B", "description": "Second approach"}]}`)
 		out, err := tool.Execute(context.Background(), tc, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.Contains(out.Content, "non-interactive") {
-			t.Errorf("output should mention non-interactive mode, got %q", out.Content)
+		if !strings.Contains(out.Content, "Option A") {
+			t.Errorf("expected options in output, got %q", out.Content)
+		}
+		if !strings.Contains(out.Content, "custom response") {
+			t.Errorf("expected 'custom response' prompt, got %q", out.Content)
+		}
+	})
+
+	t.Run("multiselect_question", func(t *testing.T) {
+		tc := &tools.ToolContext{CWD: t.TempDir()}
+		input := json.RawMessage(`{"question": "Which features?", "multiSelect": true, "options": [{"label": "A", "description": "Feature A"}, {"label": "B", "description": "Feature B"}]}`)
+		out, err := tool.Execute(context.Background(), tc, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(out.Content, "Multiple selections") {
+			t.Errorf("expected multiSelect note, got %q", out.Content)
 		}
 	})
 }
