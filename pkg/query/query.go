@@ -19,7 +19,13 @@ import (
 
 const microCompactThreshold = 10000
 
-const maxRetries = 3
+// maxRetries is the general retry limit for retryable API errors (429, 5xx).
+// Source: services/api/withRetry.ts:52 — DEFAULT_MAX_RETRIES = 10
+const maxRetries = 10
+
+// max529Retries is the 529-specific retry limit (overloaded).
+// Source: services/api/withRetry.ts:54 — MAX_529_RETRIES = 3
+const max529Retries = 3
 
 // loadClaudeMD loads CLAUDE.md files following the same hierarchy as the TS source:
 // 1. Global ~/.claude/CLAUDE.md
@@ -191,10 +197,15 @@ func Query(
 				return &AgentError{Kind: ErrProvider, Wrapped: err}
 			}
 
-			// Rate limit (429) or server errors (5xx): retry up to maxRetries
+			// Rate limit (429) or server errors (5xx): retry with appropriate limit.
+			// Source: withRetry.ts:52-54 — DEFAULT_MAX_RETRIES=10, MAX_529_RETRIES=3
 			if isRetryable(errStr) {
 				retryCount++
-				if retryCount <= maxRetries {
+				limit := maxRetries
+				if strings.Contains(errStr, "529") || strings.Contains(errStr, "overloaded") {
+					limit = max529Retries
+				}
+				if retryCount <= limit {
 					continue
 				}
 				return &AgentError{Kind: ErrProvider, Wrapped: err}
