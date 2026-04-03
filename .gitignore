@@ -1,9 +1,13 @@
 # Build artifacts
 /gopher
 /gopher-code
+/capture-tui
+
+# OS files
+.DS_Store
 
 # Development files
-.claude/worktrees/
+.claude/
 run-phase.sh
 testdata/tui-snapshots/
 
