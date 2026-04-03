@@ -1,5 +1,5 @@
 .claude/worktrees/
 gopher
 pkg/ui/
-md/implementation/
+md/
 run-phase.sh
