@@ -53,17 +53,25 @@ For each batch:
 ---
 
 ## Batch 2 — Query Loop & Core Types
-- [ ] `query/`
-- [ ] `context/`
-- [ ] `constants/`
-- [ ] `types/`
-- [ ] `schemas/`
+- [x] `query/`
+- [x] `context/`
+- [x] `constants/`
+- [x] `types/`
+- [x] `schemas/`
 
 **Fixes applied:**
+- `pkg/provider/betas.go`: Added missing BetaTokenEfficientTools constant ("token-efficient-tools-2026-03-28")
+- `pkg/prompt/system.go`: Added CyberRiskInstruction constant and URL restriction to DefaultSystemPrompt() matching TS constants/cyberRiskInstruction.ts and constants/prompts.ts
+- `pkg/query/query.go`: Added API duration tracking (time.Since around Stream+consume, populating sess.TotalAPIDuration)
+- `pkg/ui/components/spinner_verbs.go`: Added TurnCompletionVerbs (8 verbs from TS turnCompletionVerbs.ts), used in completed spinner View instead of "thought for"
+- `pkg/message/message.go`: Added NoContentMessage constant matching TS constants/messages.ts
 
 **Tests added:**
+- `pkg/prompt/system_test.go`: TestDefaultSystemPrompt_ContainsCyberRiskInstruction, TestDefaultSystemPrompt_ContainsURLRestriction, TestBuildSystemPrompt_IncludesEnvironment, TestBuildSystemPrompt_CustomBase, TestCyberRiskInstruction_Constant
+- `pkg/provider/betas_test.go`: Added BetaTokenEfficientTools to TestBetaConstants and TestBetaConstantValues
+- `pkg/ui/components/spinner_verbs_test.go`: Updated TestThinkingSpinnerViewComplete to verify turn completion verbs, added TestTurnCompletionVerbsCount
 
-**Notes written:**
+**Notes written:** `md/batch-02-notes.md`
 
 ---
 
@@ -602,7 +610,7 @@ For each batch:
 | Batch | Area | Status | Fixes | Tests | Notes |
 |-------|------|--------|-------|-------|-------|
 | 1 | Bootstrap & Entrypoints | [x] | 5 files | 2 test files (11 tests) | batch-01-notes.md |
-| 2 | Query Loop & Core Types | [ ] | | | |
+| 2 | Query Loop & Core Types | [x] | 5 files | 3 test files (8 tests) | batch-02-notes.md |
 | 3 | File Tools | [ ] | | | |
 | 4 | Shell & Code Tools | [ ] | | | |
 | 5 | Agent & Team Tools | [ ] | | | |
