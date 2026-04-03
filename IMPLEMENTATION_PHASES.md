@@ -518,7 +518,7 @@ Before shipping:
 - [x] Layout responsive on all sizes
 - [x] `go test -race ./pkg/ui` passes
 - [x] Binary size acceptable
-- [ ] Startup time <100ms
+- [x] Startup time <100ms (measured: ~20ms)
 
 ---
 
