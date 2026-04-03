@@ -1,3 +1,4 @@
 .claude/worktrees/
 gopher
 run-phase.sh
+testdata/tui-snapshots/
