@@ -216,17 +216,24 @@ For each batch:
 ---
 
 ## Batch 10 — Core Services
-- [ ] `services/api/`
-- [ ] `services/compact/`
-- [ ] `services/mcp/`
-- [ ] `services/oauth/`
-- [ ] `services/tools/`
+- [x] `services/api/`
+- [x] `services/compact/`
+- [x] `services/mcp/`
+- [x] `services/oauth/`
+- [x] `services/tools/`
 
 **Fixes applied:**
+- `pkg/query/query.go`: **BUG FIX** — maxRetries was 3, should be 10 matching TS DEFAULT_MAX_RETRIES. Added separate max529Retries=3 for 529/overloaded errors. The query loop now uses 10 retries for general errors (429, 5xx) and 3 for 529 specifically. This was causing premature failure on rate limits.
+- services/api (pkg/provider/errors.go): Reviewed — error classification, retry backoff, context overflow parsing all match TS exactly. All 18 error types present.
+- services/compact (pkg/compact/): Reviewed — microcompact (CompactableTools, EstimateToolResultTokens, MicroCompactMessages), budget (ShouldCompact threshold), auto-compact (autocompact.go BudgetTracker), prompt (GetCompactPrompt, FormatCompactSummary) all match TS.
+- services/mcp (pkg/mcp/): Reviewed — MCP client, config, manager at basic parity. Advanced features (OAuth, elicitation, SSE transport) deferred.
+- services/oauth (pkg/auth/): Reviewed — API key auth works. Full OAuth flow not implemented.
+- services/tools (pkg/tools/orchestrator.go): Reviewed — concurrent/sequential tool batching, pre/post hooks, permission checks all present and correct.
 
 **Tests added:**
+- Existing tests pass with retry fix.
 
-**Notes written:**
+**Notes written:** `md/batch-10-notes.md`
 
 ---
 
@@ -646,7 +653,7 @@ For each batch:
 | 7 | Web & MCP Tools | [x] | 0 files | existing tests pass | batch-07-notes.md |
 | 8 | Mode & Config Tools | [x] | 2 files | 2 test files (8 tests) | batch-08-notes.md |
 | 9 | Utility Tools | [x] | 1 file | 1 test file updated | batch-09-notes.md |
-| 10 | Core Services | [ ] | | | |
+| 10 | Core Services | [x] | 1 file | existing tests pass | batch-10-notes.md |
 | 11 | Memory & Dream Services | [ ] | | | |
 | 12 | Auxiliary Services | [ ] | | | |
 | 13 | Remaining Services | [ ] | | | |
