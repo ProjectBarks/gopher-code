@@ -277,16 +277,18 @@ For each batch:
 ---
 
 ## Batch 13 — Remaining Services
-- [ ] `services/remoteManagedSettings/`
-- [ ] `services/settingsSync/`
-- [ ] `services/tips/`
-- [ ] `services/toolUseSummary/`
+- [x] `services/remoteManagedSettings/`
+- [x] `services/settingsSync/`
+- [x] `services/tips/`
+- [x] `services/toolUseSummary/`
 
 **Fixes applied:**
+- No code changes needed. All 4 services are cloud-dependent or UI features: remoteManagedSettings (enterprise API, fail-open), settingsSync (OAuth cloud sync), tips (Go already has SpinnerTips), toolUseSummary (SDK Haiku summaries).
 
 **Tests added:**
+- Existing tests pass
 
-**Notes written:**
+**Notes written:** `md/batch-13-notes.md`
 
 ---
 
@@ -664,7 +666,7 @@ For each batch:
 | 10 | Core Services | [x] | 1 file | existing tests pass | batch-10-notes.md |
 | 11 | Memory & Dream Services | [x] | 0 files | existing tests pass | batch-11-notes.md |
 | 12 | Auxiliary Services | [x] | 0 files | existing tests pass | batch-12-notes.md |
-| 13 | Remaining Services | [ ] | | | |
+| 13 | Remaining Services | [x] | 0 files | existing tests pass | batch-13-notes.md |
 | 14 | Permission & Settings Utils | [ ] | | | |
 | 15 | Shell & Model Utils | [ ] | | | |
 | 16 | Git, Task & Plugin Utils | [ ] | | | |
