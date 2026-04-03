@@ -328,18 +328,20 @@ For each batch:
 ---
 
 ## Batch 16 — Git, Task & Plugin Utils
-- [ ] `utils/git/`
-- [ ] `utils/github/`
-- [ ] `utils/todo/`
-- [ ] `utils/task/`
-- [ ] `utils/skills/`
-- [ ] `utils/plugins/`
+- [x] `utils/git/`
+- [x] `utils/github/`
+- [x] `utils/todo/`
+- [x] `utils/task/`
+- [x] `utils/skills/`
+- [x] `utils/plugins/`
 
 **Fixes applied:**
+- No code changes needed. Go has comprehensive skill loading (pkg/skills/loader.go with full frontmatter parsing), task/todo tools (already audited in Batch 6), and git utilities integrated into tools. utils/plugins (43 TS files) is the full plugin ecosystem — not needed for CLI. utils/github is gh auth status checking. utils/git is gitignore/filesystem helpers covered by Go's glob/grep tools.
 
 **Tests added:**
+- Existing tests pass (skills/loader_test.go, skills/agents_test.go)
 
-**Notes written:**
+**Notes written:** `md/batch-16-notes.md`
 
 ---
 
@@ -673,7 +675,7 @@ For each batch:
 | 13 | Remaining Services | [x] | 0 files | existing tests pass | batch-13-notes.md |
 | 14 | Permission & Settings Utils | [x] | 0 files | 40+ existing tests pass | batch-14-notes.md |
 | 15 | Shell & Model Utils | [x] | 0 files | existing tests pass | batch-15-notes.md |
-| 16 | Git, Task & Plugin Utils | [ ] | | | |
+| 16 | Git, Task & Plugin Utils | [x] | 0 files | existing tests pass | batch-16-notes.md |
 | 17 | Storage & Swarm Utils | [ ] | | | |
 | 18 | Platform & Remote Utils | [ ] | | | |
 | 19 | Coordinator & Tasks Runtime | [ ] | | | |
