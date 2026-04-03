@@ -522,6 +522,188 @@ Before shipping:
 
 ---
 
+## PHASE 6: Visual Parity with Claude Code
+
+**Priority**: CRITICAL — screenshots show massive visual gaps  
+**Depends On**: Phase 5 ✅  
+**Effort**: ~1,500 lines  
+**Reference**: Side-by-side screenshots + code from `research/claude-code-source-build`
+
+### Gap Analysis (code-verified)
+
+**Claude Code renders:**
+```
+┌── Claude Code v2.1.91 ──────────────────────────────────────┐
+│ Welcome back Brandon!          │ Tips for getting started     │
+│      ░░██░░   (robot mascot)   │ Run /init to create a ...    │
+│      ██████                    │ Recent activity              │
+│ Opus 4.6 (1M context)...      │ No recent activity           │
+│ ~/claude-code-v2/testing       │                              │
+└──────────────────────────────────────────────────────────────┘
+› /clear
+  └ (no content)
+› think for me for 30s
+✻ Topsy-turvying… (thinking with high effort)
+  └ Tip: Did you know you can drag and drop image files?
+
+› █
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+esc to interrupt
+```
+
+**Gopher renders:**
+```
+🐿 Gopher │ claude-sonnet-4-20250514 │ /Users/.../testing
+No messages yet.
+> █
+Idle │ claude-sonnet-4-20250514
+```
+
+### Tasks
+
+#### Task 6.1: Welcome Screen
+- **Files**: `pkg/ui/components/welcome.go`, `welcome_test.go`
+- **Lines**: ~350
+- **What**: Bordered welcome screen shown on startup until first input
+- **Checklist**:
+  - [ ] Bordered box using lipgloss rounded border
+  - [ ] Title in border: "── Gopher v{VERSION} ──"
+  - [ ] Left panel: "Welcome!" + ASCII gopher mascot (block elements ░▒▓█)
+  - [ ] Model info line: "{model} · {cwd}"
+  - [ ] Right panel: "Tips for getting started" with 2-3 tips
+  - [ ] Right panel: "Recent activity" (placeholder initially)
+  - [ ] Width: 58 chars (matching Claude Code's WELCOME_V2_WIDTH)
+  - [ ] Tests: render output, width, sections present
+- **Reference**: `src/components/LogoV2/WelcomeV2.tsx`
+
+#### Task 6.2: Prompt Character — "›" (U+203A)
+- **Files**: `pkg/ui/components/input.go`, `pkg/ui/components/message_bubble.go`
+- **Lines**: ~15 changes
+- **What**: Replace ">" with "›" everywhere
+- **Checklist**:
+  - [ ] `input.go` line 63: change `"> "` to `"› "`
+  - [ ] `message_bubble.go` renderUserMessage: change `"> "` and `"  "` to `"› "` and `"  "`
+  - [ ] Define `const PromptPrefix = "› "` in a shared location
+  - [ ] Tests: verify U+203A in rendered output
+- **Reference**: `src/components/messages/HighlightedThinkingText.tsx` uses `figures.pointer`
+
+#### Task 6.3: Message Connector — "  └ " spacing
+- **Files**: `pkg/ui/components/message_bubble.go`
+- **Lines**: ~30 changes
+- **What**: Fix connector character and spacing for tool results
+- **Checklist**:
+  - [ ] Change connector from `"⎿ "` (2 chars) to `"  └ "` (4 chars: 2-space indent + └ + space)
+  - [ ] Continuation lines: `"    "` (4-space indent, matching connector width)
+  - [ ] Empty tool result: `"  └ (no content)"` instead of `"⎿ (no output)"`
+  - [ ] Tests: connector character U+2514 in output, proper indentation
+- **Reference**: `src/components/MessageResponse.tsx` renders `"  ⎿  "` (5-char pattern)
+
+#### Task 6.4: Spinner Verb System
+- **Files**: `pkg/ui/components/spinner_verbs.go` (new), `spinner_verbs_test.go` (new)
+- **Lines**: ~300
+- **What**: Animated thinking indicator with 188 random verbs
+- **Checklist**:
+  - [ ] Define all 188 verbs from Claude Code's `spinnerVerbs.ts`
+  - [ ] Spinner glyph animation: cycle through `['·','✢','✳','✶','✻','✽']` (6 frames)
+  - [ ] Format: `"{glyph} {Verb}… ({thinking_suffix})"` 
+  - [ ] thinking_suffix: "thinking" or "thinking with {effort}" where effort is low/medium/high/max
+  - [ ] Effort icons: ○ (low), ◐ (medium), ● (high), ◉ (max) — from `figures.ts`
+  - [ ] Random verb on each new query start
+  - [ ] tea.Tick at 50ms for glyph animation
+  - [ ] After thinking complete: `"{glyph} thought for {N}s"`
+  - [ ] Tests: verb list length, format string, effort icons, animation cycling
+- **Reference**: `src/components/Spinner/`, `src/constants/spinnerVerbs.ts`, `src/constants/figures.ts`
+
+#### Task 6.5: User Message Styling — bold on dark background
+- **Files**: `pkg/ui/components/message_bubble.go`
+- **Lines**: ~25 changes
+- **What**: User messages stand out with bold text + background row
+- **Checklist**:
+  - [ ] User text: Bold(true), Foreground(TextPrimary) — currently uses TextSecondary (WRONG)
+  - [ ] Full-width background: Background(Surface) applied to entire row via lipgloss.Width(width)
+  - [ ] Prompt "›" stays Accent color + Bold
+  - [ ] Tests: verify Bold in style, background color present
+- **Reference**: `src/components/messages/UserPromptMessage.tsx` uses `backgroundColor="userMessageBackground"`
+  - Dark theme: `rgb(55,55,55)` — maps to our Surface or SurfaceElevated
+
+#### Task 6.6: Divider Line + Status Bar Overhaul
+- **Files**: `pkg/ui/app.go`, `pkg/ui/components/statusline.go`
+- **Lines**: ~80 changes
+- **What**: Visual divider between conversation and input; context-aware status bar
+- **Checklist**:
+  - [ ] `app.go` View(): insert `strings.Repeat("━", width)` between conversation and input
+  - [ ] Divider styled with BorderSubtle color (dim)
+  - [ ] Status bar streaming mode: `"esc to interrupt"` (dimColor=true)
+  - [ ] Status bar idle mode: keep current format but add keybinding hints
+  - [ ] Divider char: `━` (U+2501 HEAVY HORIZONTAL) — from `figures.ts HEAVY_HORIZONTAL`
+  - [ ] Tests: divider present in View output, status text changes per mode
+- **Reference**: `src/components/Spinner/SpinnerAnimationRow.tsx` line 216: `"(esc to interrupt)"`
+
+#### Task 6.7: Welcome Screen Integration in AppModel
+- **Files**: `pkg/ui/app.go`
+- **Lines**: ~50 changes
+- **What**: Show welcome on startup, dismiss on first input or keypress
+- **Checklist**:
+  - [ ] Add `showWelcome bool` field to AppModel (default true)
+  - [ ] Add `welcome *components.WelcomeScreen` field
+  - [ ] Init welcome with session.Config.Model, session.CWD, version
+  - [ ] View(): when showWelcome=true, render welcome + input + status (no conversation)
+  - [ ] Any SubmitMsg or printable KeyPressMsg sets showWelcome=false
+  - [ ] Tests: welcome shown on init, dismissed on input
+
+#### Task 6.8: Spinner Integration in Conversation Flow
+- **Files**: `pkg/ui/app.go`, `pkg/ui/components/conversation.go`
+- **Lines**: ~60 changes
+- **What**: Show spinner row in conversation during streaming, not just blinking cursor
+- **Checklist**:
+  - [ ] During ModeStreaming: render spinner verb line ABOVE streaming text in conversation
+  - [ ] ConversationPane gets `SetSpinnerLine(line string)` method
+  - [ ] AppModel creates spinner on SubmitMsg, clears on TurnComplete
+  - [ ] Spinner line format: `"✻ {Verb}… (thinking)"` (from SpinnerVerbs)
+  - [ ] Streaming text still appears below spinner as tokens arrive
+  - [ ] Tests: spinner line appears during streaming, clears after
+
+#### Task 6.9: Effort Level Display
+- **Files**: `pkg/ui/components/spinner_verbs.go`, `pkg/ui/app.go`
+- **Lines**: ~40 changes
+- **What**: Show thinking effort level in spinner based on session config
+- **Checklist**:
+  - [ ] Read effort/thinking from session config
+  - [ ] Map to effort icon: ○ (low/default), ◐ (medium), ● (high), ◉ (max)
+  - [ ] Append to spinner: `"✻ Verb… (thinking with high effort)"` — only if effort > low
+  - [ ] After thinking: `"✻ thought for {N}s"` — show duration
+  - [ ] Tests: effort icon mapping, format with/without effort suffix
+
+#### Task 6.10: Tip Line Below Spinner
+- **Files**: `pkg/ui/components/spinner_verbs.go`
+- **Lines**: ~30
+- **What**: Random tip displayed below spinner during thinking
+- **Checklist**:
+  - [ ] Define 10-15 tips (e.g., "Did you know you can drag and drop files?")
+  - [ ] Format: `"  └ Tip: {tip text}"` (indented with connector)
+  - [ ] Random tip selected per query
+  - [ ] Only shown during active thinking (not after completion)
+  - [ ] Tests: tip format, randomness
+
+### Phase 6 Go/No-Go Criteria
+
+Before shipping:
+- [ ] All 10 tasks complete
+- [ ] Side-by-side screenshot shows near-parity with Claude Code
+- [ ] Welcome screen displays on startup with bordered box, mascot, tips
+- [ ] Welcome dismisses on first input
+- [ ] "›" prefix on all prompts and user messages
+- [ ] "  └ " connector on all tool results/responses
+- [ ] Animated spinner with verb during thinking (`✻ Cogitating…`)
+- [ ] User messages bold white on dark background row
+- [ ] Heavy divider ━━━ separates conversation from input
+- [ ] "esc to interrupt" shown during streaming
+- [ ] Effort level shown (○/◐/●/◉) when thinking enabled
+- [ ] `go test -race ./pkg/ui/...` passes
+- [ ] Binary builds: `go build -o gopher ./cmd/gopher-code`
+
+---
+
 ## Post-Implementation
 
 ### Code Quality
@@ -530,12 +712,6 @@ Before shipping:
 - [x] No goroutine leaks
 - [x] Code coverage >80% (all UI packages 83-97%)
 - [ ] Linting: `golangci-lint run`
-
-### Documentation
-- [ ] Component API docs
-- [ ] Usage examples
-- [ ] Architecture notes
-- [ ] Troubleshooting guide
 
 ### Production Ready
 - [ ] Default to new UI (currently behind GOPHER_NEW_UI=1 flag)
@@ -552,3 +728,4 @@ Before shipping:
 - [Component Catalog](md/UI_REDESIGN_COMPONENT_CATALOG.md)
 - [Testing Strategy](md/FEATURE_PARITY_TEST.md)
 - [Original Research](/Users/alexgaribaldi/claude-code-v2/research/architecture/)
+- [Claude Code Source](/Users/alexgaribaldi/claude-code-v2/research/claude-code-source-build)
