@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/projectbarks/gopher-code/pkg/provider"
+	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/session"
 	"github.com/projectbarks/gopher-code/pkg/tools"
 	"github.com/projectbarks/gopher-code/pkg/ui"
@@ -26,13 +27,21 @@ func RunTUIV2(
 	// Create the top-level app model
 	appModel := ui.NewAppModel(sess, bridge)
 
+	// Wire the query function — this is what gets called when the user submits input.
+	// It creates a ToolOrchestrator per-query (matching REPL behavior) and calls
+	// query.Query with the bridge callback for streaming events into the UI.
+	orchestrator := tools.NewOrchestrator(registry)
+	appModel.SetQueryFunc(func(qctx context.Context, qsess *session.SessionState, onEvent query.EventCallback) error {
+		return query.Query(qctx, qsess, prov, registry, orchestrator, onEvent)
+	})
+
 	// Create the Bubbletea program
 	p := tea.NewProgram(appModel)
 
 	// Wire the bridge to the program (must happen before any queries)
 	bridge.SetProgram(p)
 
-	// Handle Ctrl+C cleanup via context cancellation
+	// Handle parent context cancellation (e.g., signal from main)
 	go func() {
 		<-ctx.Done()
 		p.Send(tea.QuitMsg{})
@@ -50,7 +59,6 @@ func UseNewUI() bool {
 }
 
 func init() {
-	// Print info about new UI availability (only if verbose)
 	if os.Getenv("GOPHER_DEBUG") != "" {
 		if UseNewUI() {
 			fmt.Fprintln(os.Stderr, "[debug] Using new TUI v2")
