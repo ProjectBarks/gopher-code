@@ -42,3 +42,33 @@ func truncateLines(s string, maxLines int) string {
 	}
 	return strings.Join(lines[:maxLines], "\n")
 }
+
+// wrapText wraps text to fit within width using simple word-wrap.
+func wrapText(text string, width int) string {
+	if width <= 0 {
+		return text
+	}
+	var lines []string
+	for _, line := range strings.Split(text, "\n") {
+		if len(line) <= width {
+			lines = append(lines, line)
+			continue
+		}
+		words := strings.Fields(line)
+		current := ""
+		for _, word := range words {
+			if current == "" {
+				current = word
+			} else if len(current)+1+len(word) <= width {
+				current += " " + word
+			} else {
+				lines = append(lines, current)
+				current = word
+			}
+		}
+		if current != "" {
+			lines = append(lines, current)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
