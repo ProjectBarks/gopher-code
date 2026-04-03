@@ -87,34 +87,36 @@ This file is used by `run-phase.sh` to guide you through implementation. Each ph
   - [x] React to StatusUpdateMsg
   - [x] Tests: all modes, token updates
 
-#### Task 1.7: EventCallback Bridge
+#### Task 1.7: EventCallback Bridge (COMPLETE ✅)
 - **Files**: `pkg/ui/bridge.go`
 - **Lines**: 150
+- **Status**: ✅ Bridge implemented, message types in app.go, integration tests pass
 - **What**: Convert QueryEvent → tea.Msg, inject via program.Send()
 - **Tests**: bridge_test.go
 - **Checklist**:
-  - [ ] Define message types for all QueryEvents
-  - [ ] Create bridge function
-  - [ ] Pass to query.Query() as onEvent
-  - [ ] Tests: all QueryEvent types, no goroutine leaks
+  - [x] Define message types for all QueryEvents
+  - [x] Create bridge function
+  - [x] Pass to query.Query() as onEvent
+  - [x] Tests: all QueryEvent types, no goroutine leaks
 
-#### Task 1.8: Entry Point & CLI Integration
+#### Task 1.8: Entry Point & CLI Integration (COMPLETE ✅)
 - **Files**: `internal/cli/tui_v2.go`
 - **Lines**: 200
+- **Status**: ✅ RunTUIV2 wired in main.go, GOPHER_NEW_UI feature flag active
 - **What**: RunTUIV2() function, wire up tea.Program
 - **Checklist**:
-  - [ ] Create tea.Program with AppModel
-  - [ ] Handle Ctrl+C cleanup
-  - [ ] Alternate screen mode (defer restore)
-  - [ ] Call from main.go if GOPHER_NEW_UI env var set
-  - [ ] Tests: startup, shutdown, signal handling
+  - [x] Create tea.Program with AppModel
+  - [x] Handle Ctrl+C cleanup
+  - [x] Alternate screen mode (defer restore)
+  - [x] Call from main.go if GOPHER_NEW_UI env var set
+  - [x] Tests: startup, shutdown, signal handling
 
 ### Phase 1 Go/No-Go Criteria
 
 Before proceeding to Phase 2:
-- [ ] All 8 tasks complete
-- [ ] `go test ./pkg/ui ./internal/cli -race` passes
-- [ ] Binary builds: `go build -o gopher ./cmd/gopher-code`
+- [x] All 8 tasks complete
+- [x] `go test ./pkg/ui ./internal/cli -race` passes
+- [x] Binary builds: `go build -o gopher ./cmd/gopher-code`
 - [ ] Can run: `GOPHER_NEW_UI=1 ./gopher -p "hello"`
 - [ ] Output scrolls, input works, status bar updates
 - [ ] Theme colors apply correctly
