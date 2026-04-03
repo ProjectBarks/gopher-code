@@ -1,0 +1,225 @@
+# Gopher-Code: Go Library Stack
+
+Complete library mapping for building gopher-code — Go equivalent of Claude Code.
+Cross-referenced against TypeScript (original), Rust (claw-code-rust), and Python (claudecode) implementations.
+
+---
+
+## Core / Stdlib (Zero Dependencies)
+
+| Category | Package | Purpose | Equivalent In |
+|---|---|---|---|
+| JSON | `encoding/json` | Serialization, streaming decoder, struct tags | TS: native JSON, Rust: serde_json, Python: json |
+| Process Exec | `os/exec` | BashTool — subprocess with timeout via `CommandContext` | TS: child_process, Rust: std::process, Python: subprocess |
+| Context | `context` | Cancellation/timeout propagation through query loop → provider → tools | TS: AbortController, Rust: CancellationToken, Python: asyncio |
+| Logging | `log/slog` | Structured logging with levels | TS: custom, Rust: tracing, Python: logging |
+| HTTP Client | `net/http` | Anthropic API calls, SSE stream reading | TS: axios, Rust: reqwest, Python: httpx |
+| File I/O | `os`, `io`, `bufio` | FileReadTool, FileWriteTool — file operations with line numbers | TS: fs, Rust: std::fs, Python: pathlib |
+| Path Handling | `path/filepath` | Path resolution, traversal prevention, `filepath.WalkDir` | TS: path, Rust: std::path, Python: pathlib |
+| Regex | `regexp` | GrepTool fallback — safe finite automaton (no backtracking) | TS: RegExp, Rust: regex, Python: re |
+| Sync | `sync` | Mutex, WaitGroup, Once — concurrent tool execution safety | TS: N/A, Rust: Arc<Mutex<T>>, Python: asyncio.Lock |
+| Strings | `strings` | FileEditTool — Count (uniqueness check) + Replace | TS: String methods, Rust: str methods, Python: str methods |
+| Testing | `testing` | Test framework — subtests via `t.Run`, `t.Parallel`, `-race` | TS: jest, Rust: #[test], Python: pytest |
+| Signal | `os/signal` | `signal.NotifyContext` — Ctrl+C → context cancellation | TS: process.on('SIGINT'), Rust: tokio::signal, Python: signal |
+| Embed | `embed` | Embed system prompts, default configs at compile time | TS: bundled strings, Rust: include_str!, Python: importlib.resources |
+
+---
+
+## Semi-Stdlib (golang.org/x/)
+
+| Category | Package | Purpose | Equivalent In |
+|---|---|---|---|
+| Concurrency | `golang.org/x/sync/errgroup` | Parallel tool execution with error propagation + `SetLimit(n)` | TS: Promise.all, Rust: futures::join_all, Python: asyncio.gather |
+| Terminal | `golang.org/x/term` | Raw terminal mode, terminal size detection | TS: process.stdout, Rust: crossterm, Python: shutil.get_terminal_size |
+
+---
+
+## Anthropic API
+
+| Category | Package | Purpose | Equivalent In |
+|---|---|---|---|
+| API Client | `github.com/anthropics/anthropic-sdk-go` | Official Claude API — streaming via `Messages.NewStreaming()`, `Accumulate()` helper, retry, auth | TS: @anthropic-ai/sdk, Rust: reqwest + custom, Python: anthropic SDK |
+
+---
+
+## Terminal UI (Charm Ecosystem)
+
+| Category | Package | Stars | Purpose | Equivalent In |
+|---|---|---|---|---|
+| TUI Framework | `charmbracelet/bubbletea` (v2) | 41k | Elm-architecture TUI — interactive REPL, spinners, viewports | TS: React + Ink, Rust: ratatui + crossterm, Python: textual |
+| Styling | `charmbracelet/lipgloss` (v2) | 11k | CSS-like terminal styles — colors, padding, borders, alignment | TS: chalk, Rust: crossterm styles, Python: rich |
+| Components | `charmbracelet/bubbles` | 8k | Pre-built widgets — spinner, progress, textinput, viewport, list, table | TS: ora + ink components, Rust: indicatif, Python: rich components |
+| Markdown | `charmbracelet/glamour` (v2) | 3.4k | Stylesheet-based markdown rendering in terminal | TS: marked-terminal, Rust: pulldown-cmark, Python: rich.markdown |
+| Prompts | `charmbracelet/huh` | — | Interactive forms — select, confirm, text input, multiselect | TS: inquirer, Rust: dialoguer, Python: prompt_toolkit |
+
+---
+
+## Syntax Highlighting
+
+| Category | Package | Stars | Purpose | Equivalent In |
+|---|---|---|---|---|
+| Highlighter | `github.com/alecthomas/chroma` (v2) | 4.9k | Pygments-based syntax highlighting — 8/256/true-color terminal output, used internally by glamour | TS: Shiki (57 langs), Rust: syntect (base16-ocean.dark), Python: pygments |
+
+---
+
+## Readline / User Input
+
+| Category | Package | Stars | Purpose | Equivalent In |
+|---|---|---|---|---|
+| Readline | `github.com/chzyer/readline` | 2.3k | GNU readline-compatible — history, completion, vi/emacs modes, multiline, password mask | TS: readline (node), Rust: rustyline, Python: prompt_toolkit |
+| Alt Readline | `github.com/reeflective/readline` | — | Modern readline — full .inputrc support, Z-Shell completion, fuzzy history, syntax highlighting | TS: readline, Rust: rustyline, Python: prompt_toolkit |
+| Simple Alt | `github.com/peterh/liner` | 1k | Linenoise-inspired — basic history + tab completion | TS: readline, Rust: rustyline, Python: readline |
+
+---
+
+## File Operations
+
+| Category | Package | Stars | Purpose | Equivalent In |
+|---|---|---|---|---|
+| Glob (`**`) | `github.com/bmatcuk/doublestar` (v4) | 683 | Recursive glob patterns with `**` support, `GlobWalk` for streaming | TS: fast-glob/picomatch, Rust: globset, Python: glob |
+| Gitignore | `github.com/sabhiram/go-gitignore` | — | Parse `.gitignore` files, test paths against patterns, negation support | TS: N/A, Rust: ignore crate, Python: gitignore |
+| Atomic Writes | `github.com/google/renameio` (v2) | — | Atomic file writes — temp file + rename, crash-safe, auto-cleanup on error | TS: N/A, Rust: N/A, Python: N/A |
+| File Watching | `github.com/fsnotify/fsnotify` | 10k | Cross-platform filesystem notifications | TS: chokidar, Rust: notify, Python: watchdog |
+| Diff | `github.com/sergi/go-diff` | — | Text diffing for FileEditTool — unified diff, patch generation | TS: custom, Rust: similar, Python: difflib |
+
+---
+
+## Code Search
+
+| Category | Package | Purpose | Equivalent In |
+|---|---|---|---|
+| Primary | Shell out to `rg` (ripgrep) via `os/exec` | `rg --json` for structured output — orders of magnitude faster than pure Go | TS: @vscode/ripgrep, Rust: grep-searcher/grep-regex, Python: subprocess rg |
+| Fallback | `regexp` + `filepath.WalkDir` (stdlib) | Pure Go fallback when ripgrep not installed | TS: N/A, Rust: regex, Python: re |
+
+---
+
+## CLI Framework & Config
+
+| Category | Package | Stars | Purpose | Equivalent In |
+|---|---|---|---|---|
+| CLI Framework | `github.com/spf13/cobra` | 43.5k | Subcommands, auto-help, shell completions (bash/zsh/fish/powershell) | TS: Commander.js, Rust: clap, Python: click/typer |
+| Config | `github.com/spf13/viper` | 30k | Config from JSON/YAML/TOML/env vars/flags — integrates with Cobra | TS: cosmiconfig, Rust: config, Python: configparser |
+| Alt CLI | `github.com/urfave/cli` (v3) | 22k | Lighter alternative to Cobra for simpler CLIs | TS: yargs, Rust: clap, Python: argparse |
+
+---
+
+## IDs & Utilities
+
+| Category | Package | Purpose | Equivalent In |
+|---|---|---|---|
+| UUIDs | `github.com/google/uuid` | Session IDs, tool call IDs | TS: uuid, Rust: uuid, Python: uuid |
+| Clipboard | `github.com/atotto/clipboard` | System clipboard read/write | TS: N/A, Rust: arboard, Python: pyperclip |
+
+---
+
+## Code Parsing (Optional / Advanced)
+
+| Category | Package | Purpose | Equivalent In |
+|---|---|---|---|
+| Tree-sitter | `github.com/smacker/go-tree-sitter` | Syntax-aware code parsing — AST analysis, scope detection | TS: @vscode/tree-sitter-wasm, Rust: tree-sitter, Python: tree-sitter |
+
+---
+
+## Testing
+
+| Category | Package | Stars | Purpose | Equivalent In |
+|---|---|---|---|---|
+| Assertions | `github.com/stretchr/testify` | 26k | `assert` (continue) + `require` (fail fast) — Equal, Contains, ErrorIs, JSONEq | TS: jest expect, Rust: assert_eq!, Python: pytest assert |
+| Mock Gen | `github.com/vektra/mockery` | — | Auto-generate mock implementations from interfaces | TS: sinon, Rust: mockall, Python: unittest.mock |
+| Alt Mocks | `go.uber.org/mock` | — | Code-generated mocks (formerly golang/mock) — stricter than testify | TS: jest.fn(), Rust: mockall, Python: unittest.mock |
+| Goroutine Leaks | `go.uber.org/goleak` | — | Detect leaked goroutines after tests — catches unclosed channels | TS: N/A, Rust: N/A, Python: N/A |
+
+---
+
+## Observability / Telemetry (Future)
+
+| Category | Package | Purpose | Equivalent In |
+|---|---|---|---|
+| Telemetry | `go.opentelemetry.io/otel` | OpenTelemetry SDK — traces, metrics, spans | TS: OpenTelemetry + gRPC, Rust: tracing, Python: opentelemetry |
+| Tracing | `go.opentelemetry.io/otel/trace` | Distributed tracing for query loop + tool execution | TS: OTel spans, Rust: tracing spans, Python: OTel spans |
+
+---
+
+## Installation Priority
+
+### Phase 1-2 (Foundation + Query Loop)
+```
+go get github.com/google/uuid
+go get golang.org/x/sync
+go get github.com/bmatcuk/doublestar/v4
+go get github.com/stretchr/testify
+go get go.uber.org/goleak
+```
+
+### Phase 3-4 (Permissions + Tools)
+```
+go get github.com/google/renameio/v2
+go get github.com/sabhiram/go-gitignore
+go get github.com/sergi/go-diff
+```
+
+### Phase 5 (Anthropic Provider)
+```
+go get github.com/anthropics/anthropic-sdk-go
+```
+
+### Phase 6 (CLI + REPL)
+```
+go get github.com/spf13/cobra
+go get github.com/spf13/viper
+go get github.com/chzyer/readline
+go get github.com/charmbracelet/bubbletea/v2
+go get github.com/charmbracelet/lipgloss/v2
+go get github.com/charmbracelet/glamour/v2
+go get github.com/charmbracelet/bubbles
+go get github.com/charmbracelet/huh
+go get github.com/alecthomas/chroma/v2
+go get github.com/atotto/clipboard
+go get github.com/fsnotify/fsnotify
+```
+
+### Future (Telemetry + Advanced)
+```
+go get go.opentelemetry.io/otel
+go get go.opentelemetry.io/otel/trace
+go get github.com/smacker/go-tree-sitter
+```
+
+---
+
+## Quick Reference: What Maps to What
+
+```
+TypeScript ink           →  Go bubbletea
+TypeScript chalk         →  Go lipgloss
+TypeScript shiki         →  Go chroma
+TypeScript marked-terminal → Go glamour
+TypeScript commander     →  Go cobra
+TypeScript @anthropic-ai/sdk → Go anthropic-sdk-go
+TypeScript child_process →  Go os/exec
+TypeScript fast-glob     →  Go doublestar
+TypeScript @vscode/ripgrep → Go exec rg --json
+TypeScript jest          →  Go testify
+TypeScript zod           →  Go struct tags + validator
+TypeScript AbortController → Go context.Context
+
+Rust tokio               →  Go goroutines + channels
+Rust serde_json          →  Go encoding/json
+Rust ratatui             →  Go bubbletea
+Rust crossterm           →  Go lipgloss + x/term
+Rust clap                →  Go cobra
+Rust reqwest             →  Go net/http
+Rust pulldown-cmark      →  Go glamour (uses goldmark)
+Rust syntect             →  Go chroma
+Rust futures::join_all   →  Go errgroup
+Rust ignore              →  Go go-gitignore + doublestar
+Rust similar             →  Go go-diff
+Rust anyhow+thiserror    →  Go fmt.Errorf + custom errors
+
+Python anthropic         →  Go anthropic-sdk-go
+Python rich              →  Go lipgloss + glamour
+Python prompt_toolkit    →  Go readline
+Python asyncio.gather    →  Go errgroup
+Python subprocess        →  Go os/exec
+Python pytest            →  Go testify
+```

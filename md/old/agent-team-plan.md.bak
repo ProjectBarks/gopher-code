@@ -1,0 +1,540 @@
+# Gopher-Code: Agent Team Implementation Plan
+
+## Current State
+
+**Project**: `/Users/alexgaribaldi/claude-code-v2/gopher-code/`
+**Module**: `github.com/projectbarks/gopher-code`
+**Go Version**: 1.22
+**Lines Written**: 2,882 across 16 files
+
+### Already Complete
+- All foundation types (message, provider interfaces, session, permissions, compact, tools, query events/errors)
+- Full test harness (ScriptedProvider, SpyTool, EventCollector, builders, golden file loaders)
+- All L1-L4 test contracts written (30+ test cases across 4 files)
+- Tool orchestrator (implemented + passing tests)
+- Tool registry (thread-safe, implemented)
+
+### Not Yet Implemented
+- `pkg/query/query.go` — **STUB** (returns error immediately). This is the heart of the system.
+- Built-in tools (bash, read, write, edit, glob, grep)
+- Anthropic provider (SSE streaming)
+- CLI/REPL
+- Testdata golden files (tool_schemas.json, query_loop_constants.json)
+
+### Test Status
+- `pkg/tools/orchestrator_test.go` — 6 tests **PASSING**
+- `pkg/query/l1_basic_loop_test.go` — 10 tests **FAILING** (stub query)
+- `pkg/query/l2_error_recovery_test.go` — 8 tests **FAILING**
+- `pkg/query/l3_budget_compact_test.go` — 7 tests **FAILING**
+- `pkg/query/l4_lifecycle_test.go` — 6 tests **FAILING**
+- `pkg/tools/schema_conformance_test.go` — **FAILING** (missing testdata)
+
+---
+
+## Reference Implementations
+
+All at `/Users/alexgaribaldi/claude-code-v2/`:
+- **Rust query loop**: `claw-code-rust/crates/core/src/query.rs` (384 lines)
+- **Rust test harness**: `claw-code-rust/crates/core/tests/harness/`
+- **Rust L1 tests**: `claw-code-rust/crates/core/tests/L1_basic_loop.rs`
+- **Rust orchestrator**: `claw-code-rust/crates/tools/src/orchestrator.rs`
+- **Python agent loop**: `research/nano-claude-code/agent.py`
+- **Python tools**: `research/nano-claude-code/tools.py`
+- **Original TS source**: `research/claude-code-source-code/src/`
+
+---
+
+## Agent Team Structure
+
+```
+                    ┌──────────────┐
+                    │  TEAM LEAD   │
+                    │  (Conductor) │
+                    └──────┬───────┘
+                           │
+          ┌────────────────┼────────────────┐
+          │                │                │
+   ┌──────┴──────┐  ┌─────┴──────┐  ┌──────┴──────┐
+   │  RED TEAM   │  │ IMPL AGENTS│  │  PROVIDER   │
+   │  (Verifier) │  │ (Builders) │  │  + CLI      │
+   └─────────────┘  └────────────┘  └─────────────┘
+```
+
+### Agent Roles
+
+#### 1. TEAM LEAD (Conductor)
+**Responsibilities:**
+- Spawns and coordinates all other agents
+- Monitors test results after each phase
+- Resolves merge conflicts between agents working in parallel
+- Makes go/no-go decisions for phase transitions
+- Runs final `go test -race ./...` after each phase
+- Reports progress to user
+
+**Decision authority:**
+- Whether to proceed to next phase or fix current phase first
+- Whether to reassign work when an agent is stuck
+- Whether tests need to be adjusted (test bug vs impl bug)
+
+#### 2. RED TEAM AGENT (Verifier)
+**Responsibilities:**
+- Runs `go test ./...` continuously after each implementation change
+- Analyzes test failures to determine root cause (impl bug vs test bug)
+- Writes NEW tests beyond the existing L1-L4 suite to find edge cases
+- Writes fuzz tests for critical paths (JSON assembly, stream parsing)
+- Writes benchmark tests for hot paths (tool execution, stream consumption)
+- Reports failures with exact diagnosis: file, line, expected vs actual
+- Validates that passing tests don't regress when new code lands
+
+**Test writing priorities:**
+1. Edge cases the L1-L4 suite misses (empty inputs, nil contexts, concurrent cancel)
+2. Integration tests that cross package boundaries
+3. Race condition tests (tool orchestrator under concurrent load)
+4. Error path tests (every error branch in query loop)
+5. Golden file tests (tool schemas, query constants)
+
+**Tools:** `go test`, `go test -race`, `go test -fuzz`, `go test -bench`
+
+#### 3. QUERY LOOP AGENT (Core Builder)
+**Responsibilities:**
+- Implements `pkg/query/query.go` — the core agent loop
+- This is THE critical path — nothing else matters until L1 tests pass
+- Translates directly from Rust `query.rs` (384 lines) to Go
+- Must handle: stream consumption, tool call accumulation, JSON assembly, event emission
+
+**Reference:** `/Users/alexgaribaldi/claude-code-v2/claw-code-rust/crates/core/src/query.rs`
+
+#### 4. TOOLS AGENT (Built-in Tools Builder)
+**Responsibilities:**
+- Implements all 6 built-in tools in `pkg/tools/`
+- Creates testdata golden files
+- Each tool gets its own file + test file
+
+**Reference:** `/Users/alexgaribaldi/claude-code-v2/research/nano-claude-code/tools.py`
+
+#### 5. PROVIDER AGENT (API + CLI Builder)
+**Responsibilities:**
+- Implements `pkg/provider/anthropic.go` — real Anthropic API client
+- Implements `cmd/gopher-code/main.go` + `internal/cli/`
+- SSE stream parsing, channel-based streaming, error classification
+
+**Reference:** Anthropic API research (see earlier conversation)
+
+---
+
+## Phase Execution Plan
+
+### PHASE 1: Query Loop Core (L1 Green)
+**Goal:** Make all 10 L1 tests pass
+**Agents:** Query Loop Agent + Red Team Agent
+**Parallel work:** None — this is the critical path
+
+**Query Loop Agent tasks:**
+1. Read the existing test contracts in `l1_basic_loop_test.go` (412 lines) to understand exact assertions
+2. Read the Rust `query.rs` reference implementation
+3. Read existing Go types (SessionState, StreamEvent, StreamResult, ToolOrchestrator, EventCallback)
+4. Implement `Query()` function with:
+   - Build ModelRequest from session (system prompt + messages + tool defs)
+   - Call provider.Stream() → get channel
+   - Range over channel, accumulate:
+     - TextDelta → strings.Builder for text
+     - ContentBlockStart (ToolUse) → new tool use entry
+     - InputJsonDelta → append to tool use JSON buffer
+     - MessageDone → extract usage + stop reason
+   - Build assistant message with text + tool use blocks
+   - Push to session
+   - If no tool calls + EndTurn → emit TurnComplete, return nil
+   - If no tool calls + MaxTokens → inject "Please continue", loop
+   - If tool calls → execute via orchestrator
+   - Build tool result message (User role), push to session
+   - Loop
+5. Emit QueryEvents at correct points (TextDelta, ToolUseStart, ToolResult, TurnComplete, Usage)
+6. Handle max turns check at top of loop
+
+**Red Team Agent tasks (concurrent):**
+1. Run existing L1 tests, report exact failure messages
+2. Write additional L1 edge case tests:
+   - Empty text response (no text, just tool calls)
+   - Tool that returns empty string
+   - Tool that returns very long output
+   - Multiple text blocks in one turn
+   - Zero tools registered but tool call received
+3. Validate test harness itself works (ScriptedProvider, SpyTool, EventCollector)
+
+**Exit criteria:** `go test -race -run TestQuery/L1 ./pkg/query/` — all pass
+
+---
+
+### PHASE 2: Error Recovery (L2 Green)
+**Goal:** Make all 8 L2 tests pass
+**Agents:** Query Loop Agent + Red Team Agent
+**Depends on:** Phase 1 complete
+
+**Query Loop Agent tasks:**
+1. Add error classification function:
+   ```
+   classifyError(err) → ContextTooLong | RateLimit | ServerError | Auth | Unknown
+   ```
+   Pattern match on error string for "context_too_long", "429", "5xx", "401"
+2. Add retry logic around provider.Stream():
+   - ContextTooLong → compact session (drop old messages), retry once
+   - RateLimit/ServerError → retry up to 3 times
+   - Auth → fail immediately
+3. Add MaxTokens auto-continue:
+   - If stop_reason == MaxTokens AND no tool calls → inject user message "Please continue from where you left off."
+4. Add malformed JSON graceful fallback:
+   - If json.Unmarshal fails on accumulated tool input → use empty object `{}`
+
+**Red Team Agent tasks:**
+1. Write tests for retry exhaustion (4th retry should fail)
+2. Write tests for mixed errors (first 429, then success)
+3. Write test for context_too_long during tool execution (not during streaming)
+4. Verify error messages are descriptive
+
+**Exit criteria:** `go test -race -run TestQuery/L2 ./pkg/query/` — all pass
+
+---
+
+### PHASE 3: Budget & Compaction (L3 Green)
+**Goal:** Make all 7 L3 tests pass
+**Agents:** Query Loop Agent + Red Team Agent
+**Depends on:** Phase 2 complete
+
+**Query Loop Agent tasks:**
+1. Implement `compactSession()`:
+   - Check TokenBudget.ShouldCompact(totalInputTokens)
+   - Drop messages from middle of history (keep system prompt + last N exchanges)
+   - Preserve most recent user+assistant exchange
+2. Add budget check at top of each loop iteration
+3. Implement `microCompact()`:
+   - Tool results > 10KB → truncate with "... [truncated, was N bytes]"
+   - Tool results ≤ 10KB → leave unchanged
+4. Wire InputBudget into ModelRequest.MaxTokens
+
+**Red Team Agent tasks:**
+1. Write test for compaction that preserves tool results in last exchange
+2. Write test for micro-compact at exact boundary (10240 bytes)
+3. Write test for multiple compactions in one session
+4. Write benchmark for compaction performance
+
+**Exit criteria:** `go test -race -run TestQuery/L3 ./pkg/query/` — all pass
+
+---
+
+### PHASE 4: Lifecycle (L4 Green) + Built-in Tools
+**Goal:** Make all L4 tests pass + implement tools
+**Agents:** Query Loop Agent + Tools Agent + Red Team Agent (3-way parallel)
+**Depends on:** Phase 3 complete
+
+**Query Loop Agent tasks (L4):**
+1. Implement `loadClaudeMD(cwd)`:
+   - Walk up directory tree from cwd looking for CLAUDE.md
+   - Also check `~/.claude/CLAUDE.md` (global)
+   - Prepend content to system prompt
+2. Add cache token tracking to session (cache_creation, cache_read)
+3. Add context cancellation check in loop (ctx.Err() → AgentError Aborted)
+4. Implement session save/load (JSON serialization to file)
+
+**Tools Agent tasks (parallel with L4):**
+1. Create `testdata/tool_schemas.json` — golden schemas for all tools
+2. Create `testdata/query_loop_constants.json` — operational constants
+3. Implement tools in this order (each with its own test file):
+
+   a. **`pkg/tools/bash.go`** + `bash_test.go`
+      - `exec.CommandContext(ctx, "sh", "-c", command)`
+      - `cmd.Dir = toolContext.CWD`
+      - `Setpgid: true` for process group cleanup
+      - `WaitDelay` for pipe timeout
+      - Capture stdout + stderr separately
+      - Timeout from input JSON or default 30s
+      - NOT read-only
+
+   b. **`pkg/tools/fileread.go`** + `fileread_test.go`
+      - Read file with line numbers (bufio.Scanner)
+      - Support offset + limit parameters
+      - Path traversal check (filepath.Abs + strings.HasPrefix)
+      - Binary detection (check for null bytes in first 512 bytes)
+      - Read-only
+
+   c. **`pkg/tools/filewrite.go`** + `filewrite_test.go`
+      - Atomic write (temp file + os.Rename)
+      - Create parent dirs (os.MkdirAll)
+      - Preserve permissions if file exists
+      - NOT read-only
+
+   d. **`pkg/tools/fileedit.go`** + `fileedit_test.go`
+      - Read file, find old_string
+      - strings.Count for uniqueness check (must be exactly 1 match)
+      - strings.Replace(content, old, new, 1)
+      - Atomic write back
+      - NOT read-only
+
+   e. **`pkg/tools/glob.go`** + `glob_test.go`
+      - `doublestar.GlobWalk` for `**` support
+      - Skip .git, node_modules, vendor, __pycache__
+      - Return sorted paths relative to CWD
+      - Read-only
+
+   f. **`pkg/tools/grep.go`** + `grep_test.go`
+      - Primary: shell out to `rg --json` via os/exec
+      - Fallback: regexp + filepath.WalkDir if rg not found
+      - Support: pattern, path, glob filter, context lines, output mode
+      - Read-only
+
+4. Register all tools in a `pkg/tools/defaults.go` function: `RegisterDefaults(registry)`
+
+**Red Team Agent tasks:**
+1. Run schema_conformance_test.go after golden files created
+2. Write tool-specific edge case tests:
+   - BashTool: timeout, large output, process cleanup
+   - FileReadTool: nonexistent file, binary file, empty file, symlink
+   - FileWriteTool: permission denied, path with spaces
+   - FileEditTool: no match, multiple matches, empty replacement
+   - GlobTool: no matches, symlink loop
+   - GrepTool: regex syntax error, no rg available
+3. Write integration tests: Query loop + real tools (not mocks)
+4. Run `go test -race ./pkg/tools/...` for thread safety
+
+**Exit criteria:**
+- `go test -race -run TestQuery/L4 ./pkg/query/` — all pass
+- `go test -race ./pkg/tools/...` — all pass (including schema conformance)
+- All 30+ query tests pass: `go test -race ./pkg/query/`
+
+---
+
+### PHASE 5: Anthropic Provider
+**Goal:** Real API integration working
+**Agents:** Provider Agent + Red Team Agent
+**Depends on:** Phase 4 complete (all tests green)
+
+**Provider Agent tasks:**
+1. Implement `pkg/provider/anthropic.go`:
+   - HTTP POST to `https://api.anthropic.com/v1/messages`
+   - Headers: `x-api-key`, `anthropic-version: 2023-06-01`, `content-type: application/json`
+   - Request body: model, max_tokens, messages, system, tools, stream: true
+   - SSE parsing: bufio.Scanner on resp.Body
+   - Parse `event:` and `data:` lines
+   - Map SSE events to StreamEvent types:
+     - `message_start` → extract usage.input_tokens
+     - `content_block_start` (text) → ContentBlockStart
+     - `content_block_start` (tool_use) → ContentBlockStart with tool ID + name
+     - `content_block_delta` (text_delta) → TextDelta
+     - `content_block_delta` (input_json_delta) → InputJsonDelta
+     - `content_block_stop` → ContentBlockStop
+     - `message_delta` → extract stop_reason + usage.output_tokens
+     - `message_stop` → MessageDone
+     - `ping` → skip
+     - `error` → send error on channel
+   - Send events on `<-chan StreamResult`
+   - Close channel when done (defer close)
+   - Respect context cancellation in reader goroutine
+
+2. Consider using `github.com/anthropics/anthropic-sdk-go` instead of raw HTTP:
+   - Official SDK handles streaming, retry, auth
+   - `client.Messages.NewStreaming()` + `stream.Next()` / `stream.Current()`
+   - Map SDK events to our StreamEvent types
+
+**Red Team Agent tasks:**
+1. Write mock HTTP server tests (httptest.NewServer) that replay real SSE responses
+2. Test SSE parsing with malformed events
+3. Test context cancellation during stream
+4. Test connection timeout
+5. Write integration test (skipped by default, enabled with `-tags=integration`)
+
+**Exit criteria:**
+- SSE parsing unit tests pass
+- Mock HTTP server tests pass
+- Manual smoke test with real API key works
+
+---
+
+### PHASE 6: CLI & REPL
+**Goal:** Working command-line tool
+**Agents:** Provider Agent (repurposed as CLI Agent) + Red Team Agent
+**Depends on:** Phase 5 complete
+
+**CLI Agent tasks:**
+1. Implement `cmd/gopher-code/main.go`:
+   - Cobra root command with flags: --model, --query, --cwd, --permission-mode
+   - One-shot mode: `gopher-code --query "list files"`
+   - Interactive mode: `gopher-code` (default)
+
+2. Implement `internal/cli/repl.go`:
+   - `chzyer/readline` for input with history
+   - Multi-line input support
+   - Slash commands: /help, /clear, /model, /exit, /cost, /compact
+   - Ctrl+C handling (cancel current query, not exit)
+   - Two-phase Ctrl+C (second within 1s exits)
+
+3. Implement `internal/cli/render.go`:
+   - Streaming text output with `lipgloss` styling
+   - Tool call display: name + args → result
+   - Spinner during tool execution (`bubbles` spinner)
+   - Final markdown rendering with `glamour`
+   - Usage display (tokens, cost estimate)
+
+4. Wire everything together:
+   - Create AnthropicProvider with API key from env
+   - Create ToolRegistry with RegisterDefaults
+   - Create SessionState
+   - Run REPL loop calling Query() per user input
+
+**Red Team Agent tasks:**
+1. Write CLI flag parsing tests
+2. Test one-shot mode with mock provider
+3. Test REPL slash command parsing
+4. Manual smoke test of full flow
+
+**Exit criteria:**
+- `gopher-code --query "what is 2+2"` returns a response
+- Interactive REPL starts, accepts input, shows streaming output
+- `go build ./cmd/gopher-code/` succeeds with no warnings
+
+---
+
+## Parallel Execution Timeline
+
+```
+PHASE 1 ━━━━━━━━┓
+ Query Loop L1   ┃
+ Red Team L1     ┃
+                 ┃
+PHASE 2 ━━━━━━━━┫
+ Query Loop L2   ┃
+ Red Team L2     ┃
+                 ┃
+PHASE 3 ━━━━━━━━┫
+ Query Loop L3   ┃
+ Red Team L3     ┃
+                 ┃
+PHASE 4 ━━━━━━━━╋━━━━━━━━━━━━━━┓
+ Query Loop L4   ┃  Tools Agent  ┃
+ Red Team L4     ┃  Red Team     ┃
+                 ┃  (tools)      ┃
+                 ┃               ┃
+PHASE 5 ━━━━━━━━╋━━━━━━━━━━━━━━┛
+ Provider Agent  ┃
+ Red Team SSE    ┃
+                 ┃
+PHASE 6 ━━━━━━━━┛
+ CLI Agent
+ Red Team CLI
+```
+
+**Key parallelism:**
+- Phase 4 splits: Query Loop Agent does L4, Tools Agent does built-in tools simultaneously
+- Red Team runs continuously across all phases
+- Phases 1-3 are strictly sequential (each builds on prior)
+- Phase 5 depends on Phase 4 (needs tools registered for integration)
+- Phase 6 depends on Phase 5 (needs real provider)
+
+---
+
+## Agent Communication Protocol
+
+### Team Lead → Agents
+- **ASSIGN**: "Implement X. Reference file Y. Target tests Z."
+- **REVIEW**: "Tests A, B, C are failing. Diagnose and fix."
+- **HOLD**: "Stop work on X, Phase N has a blocking issue."
+- **PROCEED**: "Phase N complete. Begin Phase N+1."
+
+### Agents → Team Lead
+- **DONE**: "Implemented X. Tests A, B pass. Tests C, D still failing because [reason]."
+- **BLOCKED**: "Cannot proceed because [dependency/question]."
+- **FINDING**: "Discovered issue with [test/impl/design]. Recommend [fix]."
+
+### Red Team → Team Lead
+- **PASS**: "All tests in Phase N pass. `go test -race` clean."
+- **FAIL**: "Tests A, B failing. Root cause: [impl bug in file:line] or [test bug in file:line]."
+- **REGRESSION**: "Previously passing test X now fails after change Y."
+- **NEW_TEST**: "Added N new tests. M pass, K fail."
+
+---
+
+## Success Metrics
+
+| Phase | Tests Expected | Must Pass |
+|-------|---------------|-----------|
+| 1     | 10 L1 + edge cases | All L1 |
+| 2     | 8 L2 + edge cases | All L1 + L2 |
+| 3     | 7 L3 + edge cases | All L1 + L2 + L3 |
+| 4     | 6 L4 + tool tests + schema | All L1-L4 + tools |
+| 5     | SSE + provider tests | All above + provider |
+| 6     | CLI tests + smoke | All above + CLI |
+
+**Final target:** `go test -race ./...` — ALL PASS, zero failures, zero race conditions.
+
+---
+
+## File Inventory (What Gets Created/Modified)
+
+### Modified (existing stubs):
+- `pkg/query/query.go` — from 31-line stub to ~300-line implementation
+
+### Created (new files):
+```
+pkg/tools/bash.go
+pkg/tools/bash_test.go
+pkg/tools/fileread.go
+pkg/tools/fileread_test.go
+pkg/tools/filewrite.go
+pkg/tools/filewrite_test.go
+pkg/tools/fileedit.go
+pkg/tools/fileedit_test.go
+pkg/tools/glob.go
+pkg/tools/glob_test.go
+pkg/tools/grep.go
+pkg/tools/grep_test.go
+pkg/tools/defaults.go
+pkg/provider/anthropic.go
+pkg/provider/anthropic_test.go
+cmd/gopher-code/main.go         (may already exist as stub)
+internal/cli/repl.go
+internal/cli/render.go
+internal/cli/repl_test.go
+testdata/tool_schemas.json
+testdata/query_loop_constants.json
+```
+
+### Dependencies added (go.mod):
+```
+Phase 1-3: golang.org/x/sync (errgroup)
+Phase 4:   github.com/bmatcuk/doublestar/v4
+           github.com/google/renameio/v2
+           github.com/stretchr/testify (optional, for new red team tests)
+Phase 5:   github.com/anthropics/anthropic-sdk-go
+Phase 6:   github.com/spf13/cobra
+           github.com/chzyer/readline
+           github.com/charmbracelet/glamour/v2
+           github.com/charmbracelet/lipgloss/v2
+           github.com/charmbracelet/bubbles
+```
+
+---
+
+## How to Launch
+
+The Team Lead spawns agents in this order:
+
+```
+1. Spawn Red Team Agent (background, continuous)
+   → "Run go test ./... in gopher-code, report all failures"
+
+2. Spawn Query Loop Agent (foreground, Phase 1)
+   → "Implement Query() to pass L1 tests. Reference: rust query.rs"
+
+3. Wait for Phase 1 green. Then:
+   → Continue Query Loop Agent for Phase 2, then 3
+
+4. At Phase 4, spawn in parallel:
+   → Continue Query Loop Agent for L4
+   → Spawn Tools Agent for built-in tools
+
+5. At Phase 5:
+   → Spawn Provider Agent
+
+6. At Phase 6:
+   → Repurpose Provider Agent as CLI Agent
+```
+
+Red Team Agent runs after every phase gate, writes new tests, and validates no regressions.

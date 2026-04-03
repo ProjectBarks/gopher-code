@@ -1,0 +1,331 @@
+# Go Coding Agent CLI — Implementation Plan
+
+## Context
+
+We're building a Go implementation of a coding agent CLI, based on the architecture found in two Rust reference implementations: `claw-code-rust` (8-crate modular design) and `claudecode` (monolithic runtime). Both are clean-room rewrites of the Claude Code agent harness pattern.
+
+The core idea: an LLM-powered CLI that takes user input, sends it to an LLM, executes tool calls the LLM requests (bash, file read/write, grep, glob), feeds results back into the conversation, and repeats until done. The **test harness as a feedback loop** is the most important architectural pattern — it makes the entire system testable without hitting real LLM APIs.
+
+**Reference files studied:**
+- `claw-code-rust/crates/core/src/query.rs` — The query loop (384 lines, the heart of the system)
+- `claw-code-rust/crates/core/tests/harness/mod.rs` — ScriptedProvider, SpyTool, EventCollector
+- `claw-code-rust/crates/core/tests/harness/builders.rs` — Test scenario builders
+- `claw-code-rust/crates/core/tests/L1_basic_loop.rs` — 10 baseline tests
+- `claw-code-rust/crates/tools/src/orchestrator.rs` — Tool execution (concurrent/sequential)
+- `claudecode/rust/crates/runtime/src/conversation.rs` — Alternative runtime with hooks
+
+---
+
+## Package Structure
+
+```
+gopher-code/
+├── go.mod
+├── cmd/
+│   └── gopher-code/
+│       └── main.go                 # CLI entry point, flags, REPL
+├── pkg/
+│   ├── message/
+│   │   └── message.go              # Role, ContentBlock, Message
+│   ├── provider/
+│   │   ├── provider.go             # ModelProvider interface
+│   │   ├── request.go              # ModelRequest, ToolDefinition
+│   │   ├── response.go             # ModelResponse, StreamEvent, StopReason, Usage
+│   │   └── anthropic.go            # Anthropic SSE streaming impl
+│   ├── session/
+│   │   └── session.go              # SessionConfig, SessionState, persistence
+│   ├── tools/
+│   │   ├── tool.go                 # Tool interface, ToolOutput
+│   │   ├── context.go              # ToolContext
+│   │   ├── registry.go             # ToolRegistry
+│   │   ├── orchestrator.go         # ToolOrchestrator (concurrent/sequential)
+│   │   ├── bash.go                 # BashTool
+│   │   ├── fileread.go             # FileReadTool
+│   │   ├── filewrite.go            # FileWriteTool
+│   │   ├── fileedit.go             # FileEditTool
+│   │   ├── glob.go                 # GlobTool
+│   │   └── grep.go                 # GrepTool
+│   ├── permissions/
+│   │   ├── types.go                # PermissionMode, PermissionRequest, PermissionDecision
+│   │   ├── policy.go               # PermissionPolicy interface
+│   │   └── rules.go                # RuleBasedPolicy implementation
+│   ├── compact/
+│   │   └── budget.go               # TokenBudget, compactSession, microCompact
+│   └── query/
+│       ├── query.go                # THE QUERY LOOP — the heart
+│       ├── events.go               # QueryEvent, EventCallback
+│       ├── errors.go               # AgentError, error classification
+│       └── query_test.go           # L1-L4 tests
+└── internal/
+    ├── testharness/
+    │   ├── scripted_provider.go    # ScriptedProvider (mock LLM)
+    │   ├── spy_tool.go             # SpyTool (mock tool with call recording)
+    │   ├── event_collector.go      # EventCollector (captures QueryEvents)
+    │   └── builders.go             # MakeSession, MakeTextTurn, MakeToolTurn, etc.
+    └── cli/
+        ├── repl.go                 # Interactive REPL
+        └── render.go               # Streaming output with colors
+```
+
+---
+
+## Key Interfaces and Types
+
+### Message Model (`pkg/message/`)
+```go
+type Role string // "user" | "assistant"
+
+type ContentBlock struct {
+    Type      ContentBlockType  // "text" | "tool_use" | "tool_result"
+    Text      string            // for text blocks
+    ID        string            // for tool_use
+    Name      string            // for tool_use
+    Input     json.RawMessage   // for tool_use (deferred parsing)
+    ToolUseID string            // for tool_result
+    Content   string            // for tool_result
+    IsError   bool              // for tool_result
+}
+```
+Go lacks sum types — a struct with type discriminator is the pragmatic choice. Matches JSON serialization naturally.
+
+### Provider (`pkg/provider/`)
+```go
+type ModelProvider interface {
+    Stream(ctx context.Context, req ModelRequest) (<-chan StreamResult, error)
+    Name() string
+}
+
+type StreamResult struct {
+    Event *StreamEvent
+    Err   error
+}
+```
+**Key Go decision:** Rust's `Pin<Box<dyn Stream>>` becomes `<-chan StreamResult`. Provider goroutine writes events, closes channel when done. The query loop does `for result := range ch`. No async runtime needed.
+
+### Tool System (`pkg/tools/`)
+```go
+type Tool interface {
+    Name() string
+    Description() string
+    InputSchema() json.RawMessage
+    Execute(ctx context.Context, tc *ToolContext, input json.RawMessage) (*ToolOutput, error)
+    IsReadOnly() bool
+}
+```
+
+### Tool Orchestrator
+Partitions tool calls into concurrent (read-only, goroutines + WaitGroup) and sequential (mutating, one-by-one). Permission check before each mutating tool. Rust's `futures::join_all` maps to goroutines + `sync.WaitGroup`.
+
+### Permission System (`pkg/permissions/`)
+```go
+type PermissionPolicy interface {
+    Check(ctx context.Context, req *PermissionRequest) PermissionDecision
+}
+// Modes: AutoApprove, Interactive, Deny
+```
+
+---
+
+## The Query Loop (`pkg/query/query.go`)
+
+Direct translation of `claw-code-rust/crates/core/src/query.rs`. The core algorithm:
+
+```
+func Query(ctx, session, provider, registry, orchestrator, onEvent) error {
+    memoryContent := loadClaudeMD(session.CWD)
+
+    for {
+        // 1. Token budget check → compact if threshold exceeded
+        // 2. Max turns check → return ErrMaxTurnsExceeded
+        // 3. Build ModelRequest (system prompt + memory, messages, tools)
+        // 4. provider.Stream(ctx, request) → channel
+        //    - On error: classify → ContextTooLong (compact+retry once),
+        //      RateLimit/5xx (retry ≤3), Auth (fail fast)
+        // 5. Range over channel, accumulate:
+        //    - TextDelta → strings.Builder
+        //    - ContentBlockStart(ToolUse) → append to toolUses slice
+        //    - InputJsonDelta → append to last toolUse's JSON buffer
+        //    - MessageDone → record usage, extract stop reason
+        // 6. Build assistant message, append to session
+        // 7. If no tool calls:
+        //    - MaxTokens stop → inject "Please continue", loop
+        //    - EndTurn → emit TurnComplete, return nil
+        // 8. Execute tool calls via orchestrator
+        // 9. Build tool result message (micro-compact >10KB results)
+        // 10. Append to session as User message → loop
+    }
+}
+```
+
+**Go-specific advantages over Rust here:**
+- `context.Context` gives cancellation for free (Rust version has `#[ignore]` on interrupt tests)
+- Channel ranging replaces async stream consumption
+- No pinning, boxing, or lifetime annotations
+
+---
+
+## Test Harness Architecture (MOST IMPORTANT)
+
+This is the key learning from the reference implementations. The harness makes the entire query loop testable without real LLM calls.
+
+### ScriptedProvider (`internal/testharness/scripted_provider.go`)
+Mock LLM that plays back pre-recorded stream event sequences per turn. Also captures all `ModelRequest` objects for assertion.
+
+```go
+type TurnScript struct {
+    Events []provider.StreamResult  // scripted stream events
+    Err    error                    // if non-nil, Stream() returns this error
+}
+
+type ScriptedProvider struct {
+    turns            []TurnScript
+    CapturedRequests []*provider.ModelRequest  // inspect what agent sent
+}
+```
+
+Channel is buffered to `len(events)` — goroutine writes all events immediately, query loop consumes at its own pace.
+
+### SpyTool (`internal/testharness/spy_tool.go`)
+Mock tool that records all calls (arguments, count) and returns configurable responses.
+
+```go
+type SpyTool struct {
+    name       string
+    readOnly   bool
+    calls      []json.RawMessage  // recorded inputs
+    responseFn func(json.RawMessage) *ToolOutput
+}
+```
+
+### EventCollector (`internal/testharness/event_collector.go`)
+Captures all `QueryEvent` emissions for post-hoc assertion.
+
+```go
+func NewEventCollector() (query.EventCallback, *EventLog)
+// EventLog has: Events(), TextDeltas(), ToolResults(), UsageEvents()
+```
+
+### Builder Functions (`internal/testharness/builders.go`)
+```go
+MakeSession() *SessionState                          // default session with "hello"
+MakeTextTurn(text, stopReason) TurnScript            // scripted text response
+MakeToolTurn(id, name, input, stopReason) TurnScript // scripted tool call
+MakeMultiToolTurn(tools, stopReason) TurnScript      // concurrent tool calls
+MakeChunkedTextTurn(chunks, stopReason) TurnScript   // streaming text deltas
+MakeToolTurnWithJSONChunks(...) TurnScript            // streaming JSON assembly
+MakeErrorTurn(err) TurnScript                        // error injection
+```
+
+### Test Levels (`pkg/query/query_test.go`)
+
+Using Go subtests (`t.Run`) organized by capability level:
+
+**L1: Basic Loop** — The behavioral contract
+- `single_turn_text_only` — user→assistant text response
+- `multi_turn_with_tools` — tool call→result→tool call→result→text (THE feedback loop)
+- `streaming_text_deltas` — TextDelta events captured via EventCollector
+- `streaming_tool_json_assembly` — partial JSON chunks assembled correctly
+- `max_turns_exceeded` — terminates on turn limit
+- `empty_tool_calls_terminates` — EndTurn emitted
+- `multiple_concurrent_tool_calls` — parallel read-only tools
+- `usage_tokens_accumulated` — token tracking across turns
+- `system_prompt_forwarded` — captured in ModelRequest
+- `tool_definitions_included` — registry exported to ModelRequest
+
+**L2: Error Recovery**
+- `context_too_long_triggers_compact` — compact + retry once
+- `context_too_long_after_compact_fails` — fail after retry exhausted
+- `max_output_tokens_auto_continue` — inject "please continue"
+- `stream_error_429_retries` — retry on rate limit
+- `stream_error_auth_fails_fast` — no retry on 401
+
+**L3: Budget & Compact**
+- `auto_compact_triggered_at_threshold` — token usage exceeds budget
+- `auto_compact_preserves_recent` — keeps recent context
+- `token_budget_limits_output` — max_output_tokens from budget
+- `micro_compact_large_tool_result` — truncate >10KB results
+
+**L4: Lifecycle**
+- `memory_prefetch_loads_claude_md` — CLAUDE.md merged into system prompt
+- `permission_denied_surfaces_as_tool_error` — denied tool → is_error result
+- `session_save_load_roundtrip` — JSON persistence
+
+---
+
+## Implementation Order
+
+**Principle: Tests are written BEFORE implementation. The harness comes first.**
+
+### Phase 1: Foundation Types + Test Harness (build first)
+1. `go.mod`, directory scaffold
+2. `pkg/message/` — Role, ContentBlock, Message
+3. `pkg/provider/` — interfaces, StreamEvent, ModelRequest/Response (types only)
+4. `pkg/session/` — SessionConfig, SessionState
+5. `pkg/tools/` — Tool interface, ToolOutput, ToolContext, ToolRegistry, ToolOrchestrator
+6. `pkg/permissions/` — types and PermissionPolicy interface
+7. `pkg/compact/` — TokenBudget
+8. `pkg/query/` — QueryEvent, AgentError (types only)
+9. **`internal/testharness/`** — ALL four files: ScriptedProvider, SpyTool, EventCollector, builders
+10. Write all L1 tests (they won't compile yet — that's the point)
+
+### Phase 2: The Query Loop (make tests green)
+1. `pkg/query/errors.go` — error classification
+2. `pkg/query/query.go` — compactSession, microCompact, loadClaudeMD, Query()
+3. Run L1 tests → fix until green
+4. Run L2 tests → fix error recovery
+5. Run L3 tests → fix budget/compact
+6. Run L4 tests → fix lifecycle
+
+### Phase 3: Permission System
+1. `pkg/permissions/rules.go` — RuleBasedPolicy
+2. Wire into orchestrator
+3. Permission tests green
+
+### Phase 4: Built-in Tools
+1. BashTool (os/exec)
+2. FileReadTool, FileWriteTool, FileEditTool
+3. GlobTool (filepath.Glob or doublestar)
+4. GrepTool (os/exec to rg, or native regex)
+
+### Phase 5: Anthropic Provider
+1. HTTP client, SSE stream parsing, stream→channel conversion
+2. Manual integration test against real API
+
+### Phase 6: CLI
+1. Flag parsing, config, REPL loop
+2. Streaming markdown output rendering
+
+---
+
+## Go Concurrency Mapping
+
+| Rust | Go |
+|---|---|
+| `Pin<Box<dyn Stream<Item=Result<StreamEvent>>>>` | `<-chan StreamResult` |
+| `stream.next().await` | `for result := range ch` |
+| `futures::join_all(futs)` | goroutines + `sync.WaitGroup` |
+| `Arc<Mutex<Vec<T>>>` | `sync.Mutex` + slice |
+| `Arc<dyn Trait>` | interface value |
+| `async_trait` | not needed |
+| `tokio::time::timeout` | `context.WithTimeout` |
+| `CancellationToken` (#[ignore] in Rust) | `context.Context` (works day one) |
+
+---
+
+## Verification Plan
+
+1. **Unit tests**: `go test ./...` — all L1-L4 tests pass
+2. **Race detector**: `go test -race ./...` — concurrent tool execution is safe
+3. **Integration test**: Manual test with real Anthropic API key — multi-turn tool use conversation
+4. **CLI smoke test**: `gopher-code --query "list files in current directory"` — bash tool executes, result feeds back, LLM summarizes
+
+---
+
+## Key Dependencies
+
+- `log/slog` (stdlib) for structured logging
+- `encoding/json` (stdlib) for serialization
+- `os/exec` (stdlib) for tool execution
+- `bufio` (stdlib) for SSE parsing
+- `github.com/google/uuid` for session IDs
+- No test framework beyond stdlib `testing`
