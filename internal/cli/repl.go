@@ -302,10 +302,16 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 			fmt.Printf("  Cache creation: %d tokens\n", sess.TotalCacheCreationTokens)
 			fmt.Printf("  Cache read:     %d tokens\n", sess.TotalCacheReadTokens)
 			fmt.Printf("  Turns:          %d\n", sess.TurnCount)
-			// Rough cost estimate (Sonnet pricing)
-			inputCost := float64(sess.TotalInputTokens) / 1_000_000 * 3.0
-			outputCost := float64(sess.TotalOutputTokens) / 1_000_000 * 15.0
-			fmt.Printf("  Est. cost:      $%.4f\n", inputCost+outputCost)
+			// Per-model cost calculation — Source: utils/modelCost.ts
+			cost := provider.CalculateUSDCost(sess.Config.Model, provider.TokenUsage{
+				InputTokens:              sess.TotalInputTokens,
+				OutputTokens:             sess.TotalOutputTokens,
+				CacheReadInputTokens:     sess.TotalCacheReadTokens,
+				CacheCreationInputTokens: sess.TotalCacheCreationTokens,
+			})
+			modelCosts := provider.GetModelCosts(sess.Config.Model)
+			fmt.Printf("  Model pricing:  %s\n", provider.FormatModelPricing(modelCosts))
+			fmt.Printf("  Est. cost:      %s\n", provider.FormatCost(cost))
 			continue
 		case input == "/session":
 			fmt.Printf("Session ID:   %s\n", sess.ID)
