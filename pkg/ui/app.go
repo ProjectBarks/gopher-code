@@ -109,6 +109,10 @@ type AppModel struct {
 
 	// Command dispatch
 	dispatcher *commands.Dispatcher
+
+	// Welcome screen
+	showWelcome bool
+	welcome     *components.WelcomeScreen
 }
 
 // NewAppModel creates a new AppModel with the given session and bridge.
@@ -143,6 +147,16 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 
 	// Command dispatcher for slash commands
 	app.dispatcher = commands.NewDispatcher()
+
+	// Welcome screen shown on startup
+	modelName := ""
+	cwd := ""
+	if sess != nil {
+		modelName = sess.Config.Model
+		cwd = sess.CWD
+	}
+	app.showWelcome = true
+	app.welcome = components.NewWelcomeScreen(t, modelName, cwd)
 
 	return app
 }
@@ -258,21 +272,24 @@ func (a *AppModel) View() tea.View {
 	cs := t.Colors()
 	var sections []string
 
-	// Header (1 line)
-	sections = append(sections, a.header.View().Content)
+	if a.showWelcome {
+		// Welcome screen with input and status below
+		sections = append(sections, a.welcome.View().Content)
+	} else {
+		// Normal mode: header + conversation
+		sections = append(sections, a.header.View().Content)
+		sections = append(sections, a.conversation.View().Content)
+	}
 
-	// Conversation area (fills remaining space)
-	sections = append(sections, a.conversation.View().Content)
-
-	// Heavy divider line ━━━ separating conversation from input
+	// Heavy divider line ━━━ separating content from input
 	dividerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(cs.BorderSubtle))
 	sections = append(sections, dividerStyle.Render(strings.Repeat(components.DividerChar, a.width)))
 
-	// Input pane (1-3 lines)
+	// Input pane (always visible)
 	sections = append(sections, a.input.View().Content)
 
-	// Status line (1 line)
+	// Status line (always visible)
 	sections = append(sections, a.statusLine.View().Content)
 
 	return tea.NewView(strings.Join(sections, "\n"))
@@ -305,6 +322,11 @@ func (a *AppModel) handleResize(msg tea.WindowSizeMsg) (*AppModel, tea.Cmd) {
 }
 
 func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
+	// Dismiss welcome screen on any printable key
+	if a.showWelcome && msg.Text != "" {
+		a.showWelcome = false
+	}
+
 	switch {
 	// Quit: Ctrl+C
 	case msg.Code == 'c' && msg.Mod == tea.ModCtrl:
@@ -337,6 +359,9 @@ func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
 }
 
 func (a *AppModel) handleSubmit(msg components.SubmitMsg) (*AppModel, tea.Cmd) {
+	// Dismiss welcome screen on any submit
+	a.showWelcome = false
+
 	text := strings.TrimSpace(msg.Text)
 	if text == "" {
 		return a, nil
