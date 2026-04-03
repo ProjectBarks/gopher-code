@@ -439,79 +439,85 @@ Before proceeding to Phase 5:
 
 ### Tasks
 
-#### Task 5.1: SidePanel
+#### Task 5.1: SidePanel (COMPLETE ✅)
 - **File**: `pkg/ui/components/side_panel.go`
 - **Lines**: 300
+- **Status**: ✅ Pre-existing implementation, all tests pass
 - **What**: Session list, task list, file tree
 - **Checklist**:
-  - [ ] Toggle on/off
-  - [ ] Session list view
-  - [ ] Task list view
-  - [ ] File tree view
-  - [ ] Tests: panel rendering
+  - [x] Toggle on/off
+  - [x] Session list view
+  - [x] Task list view
+  - [x] File tree view
+  - [x] Tests: panel rendering
 
-#### Task 5.2: TabBar
+#### Task 5.2: TabBar (COMPLETE ✅)
 - **File**: `pkg/ui/components/tabbar.go`
 - **Lines**: 200
+- **Status**: ✅ Pre-existing implementation, all tests pass
 - **What**: Switch between conversations
 - **Checklist**:
-  - [ ] Tab titles
-  - [ ] Highlight active tab
-  - [ ] Click/key to switch
-  - [ ] Add/close tabs
-  - [ ] Tests: tab switching
+  - [x] Tab titles
+  - [x] Highlight active tab
+  - [x] Click/key to switch
+  - [x] Add/close tabs
+  - [x] Tests: tab switching
 
-#### Task 5.3: TreeView
+#### Task 5.3: TreeView (COMPLETE ✅)
 - **File**: `pkg/ui/components/treeview.go`
 - **Lines**: 350
+- **Status**: ✅ Pre-existing implementation, all tests pass
 - **What**: Hierarchical file/task display
 - **Checklist**:
-  - [ ] Tree node rendering
-  - [ ] Expand/collapse nodes
-  - [ ] Select node
-  - [ ] Tests: all tree operations
+  - [x] Tree node rendering
+  - [x] Expand/collapse nodes
+  - [x] Select node
+  - [x] Tests: all tree operations
 
-#### Task 5.4: CommandPalette
+#### Task 5.4: CommandPalette (COMPLETE ✅)
 - **File**: `pkg/ui/components/command_palette.go`
 - **Lines**: 300
+- **Status**: ✅ Pre-existing implementation, all tests pass
 - **What**: Searchable command picker (Cmd+K)
 - **Checklist**:
-  - [ ] Modal presentation
-  - [ ] Fuzzy search all commands
-  - [ ] Execute selected command
-  - [ ] Tests: search, execution
+  - [x] Modal presentation
+  - [x] Fuzzy search all commands
+  - [x] Execute selected command
+  - [x] Tests: search, execution
 
-#### Task 5.5: AgentMessageRenderer
+#### Task 5.5: AgentMessageRenderer (COMPLETE ✅)
 - **File**: `pkg/ui/components/agent_message.go`
 - **Lines**: 200
+- **Status**: ✅ Pre-existing implementation, 26 tests pass
 - **What**: Color messages by agent identity
 - **Checklist**:
-  - [ ] Map agent ID → color
-  - [ ] Apply color to message borders
-  - [ ] Integration with MessageBubble
-  - [ ] Tests: color mapping
+  - [x] Map agent ID → color
+  - [x] Apply color to message borders
+  - [x] Integration with MessageBubble
+  - [x] Tests: color mapping
 
-#### Task 5.6: Responsive Layout
+#### Task 5.6: Responsive Layout (COMPLETE ✅)
 - **File**: Modify `pkg/ui/core/layout.go`
 - **Lines**: 150
+- **Status**: ✅ Flex weights in VerticalStack/HorizontalStack, SidePanel auto-collapse
 - **What**: Adapt to all terminal sizes
 - **Checklist**:
-  - [ ] Side panel collapses on narrow
-  - [ ] TabBar collapses on small screens
-  - [ ] All components responsive
-  - [ ] Tests: all breakpoints
+  - [x] Side panel collapses on narrow
+  - [x] TabBar collapses on small screens
+  - [x] All components responsive
+  - [x] Tests: all breakpoints
 
 ### Phase 5 Go/No-Go Criteria
 
 Before shipping:
-- [ ] All 6 tasks complete
-- [ ] Side panels toggle
-- [ ] Tabs switch conversations
-- [ ] Command palette searchable
-- [ ] Agent messages color-coded
-- [ ] Layout responsive on all sizes
-- [ ] `go test -race ./pkg/ui` passes
-- [ ] Binary size acceptable
+- [x] All 6 tasks complete
+- [x] Side panels toggle
+- [x] Tabs switch conversations
+- [x] Command palette searchable
+- [x] Agent messages color-coded
+- [x] Layout responsive on all sizes
+- [x] `go test -race ./pkg/ui` passes
+- [x] Binary size acceptable
 - [ ] Startup time <100ms
 
 ---
