@@ -1,4 +1,15 @@
+# Build artifacts
+/gopher
+/gopher-code
+
+# Development files
 .claude/worktrees/
-gopher
 run-phase.sh
 testdata/tui-snapshots/
+
+# Implementation planning docs (not source code)
+/md/
+/GETTING_STARTED.md
+/PLAN.md
+pkg/ui/BENCHMARKS.md
+pkg/ui/examples/
