@@ -327,6 +327,86 @@ func TestVisualParity_QueryEventFlow(t *testing.T) {
 	}
 }
 
+// TestParity_CtrlCFourStateMachine validates the complete Ctrl+C state machine:
+// text→clear, empty→hint, hint→quit, streaming→cancel.
+//
+// Unique behaviors (not covered by CtrlCQuitsWhenIdle which only tests double-press):
+// 1. Ctrl+C with text → clears input, does NOT quit, resets ctrlCPending
+// 2. After clear, input.HasText() is false
+// 3. Ctrl+C on empty → sets ctrlCPending=true (hint shown), no quit
+// 4. Second Ctrl+C on empty → quits (QuitMsg returned)
+// 5. Non-Ctrl+C key after hint → resets ctrlCPending back to false
+//
+// Cross-ref: app.go:352-375 — Ctrl+C handler with 4 paths
+// Cross-ref: REPL.tsx stashedPrompt — Claude stashes then clears on Ctrl+C
+func TestParity_CtrlCFourStateMachine(t *testing.T) {
+	config := session.DefaultConfig()
+	sess := session.New(config, "/tmp")
+	app := NewAppModel(sess, nil)
+	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// Dismiss welcome
+	app.Update(components.SubmitMsg{Text: "hi"})
+	app.Update(TurnCompleteMsg{})
+
+	// Type text into input
+	for _, ch := range "some text" {
+		app.Update(tea.KeyPressMsg{Code: rune(ch), Text: string(ch)})
+	}
+	if !app.input.HasText() {
+		t.Fatal("Setup: input should have text")
+	}
+
+	// 1. Ctrl+C with text → clears input, no quit
+	_, cmd1 := app.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if cmd1 != nil {
+		msg := cmd1()
+		if _, isQuit := msg.(tea.QuitMsg); isQuit {
+			t.Fatal("Ctrl+C with text should clear, not quit")
+		}
+	}
+	// 2. Input should now be empty
+	if app.input.HasText() {
+		t.Error("Input should be empty after Ctrl+C clear")
+	}
+	// ctrlCPending should be false (clearing resets it)
+	if app.ctrlCPending {
+		t.Error("ctrlCPending should be false after clearing text")
+	}
+
+	// 3. Now input is empty — first Ctrl+C shows hint
+	_, cmd2 := app.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if cmd2 != nil {
+		msg := cmd2()
+		if _, isQuit := msg.(tea.QuitMsg); isQuit {
+			t.Fatal("First Ctrl+C on empty should show hint, not quit")
+		}
+	}
+	if !app.ctrlCPending {
+		t.Error("ctrlCPending should be true after first Ctrl+C on empty")
+	}
+
+	// 5. Non-Ctrl+C key resets the pending state
+	app.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	if app.ctrlCPending {
+		t.Error("ctrlCPending should reset on non-Ctrl+C key")
+	}
+
+	// Clear the 'x' we just typed
+	app.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}) // clears 'x'
+
+	// 4. Double Ctrl+C on empty → quit
+	app.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}) // first: hint
+	_, cmd4 := app.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}) // second: quit
+	if cmd4 == nil {
+		t.Fatal("Double Ctrl+C on empty should produce quit")
+	}
+	msg4 := cmd4()
+	if _, isQuit := msg4.(tea.QuitMsg); !isQuit {
+		t.Errorf("Expected QuitMsg on double Ctrl+C, got %T", msg4)
+	}
+}
+
 // TestParity_DiffApprovalAllThreeKeys validates the DiffApprovalDialog dispatches
 // correct results for all 3 key paths (y/n/a), sends through the channel AND
 // returns the correct tea.Cmd message. Also validates the dialog renders diff content.

@@ -197,7 +197,13 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | A11 | TestVisualParity_WelcomeDismissOnSubmit | MARGINAL (2x strings.Contains) | REWRITTEN → WelcomeDismissLifecycle: 4 behaviors (initial state, empty-submit-keeps-welcome, non-empty dismisses+mode+messages, header replaces box) |
 | A12-A16 | UserMessageStyling, StreamingStatusBar, ToolResultUsesConnector, IdleStatusShowsModel, DividerSpansFullWidth | ALL SUPERFICIAL | DELETED — 5 functions removed, imports cleaned |
 | A17-A22 | StreamingShowsSpinner, FullConversationFlow, SlashCommandClear, EffortLevelDisplay, CtrlCQuitsWhenIdle, QueryEventFlow | GOOD | KEPT — these test real state transitions |
-### Audit COMPLETE. 22/22 original functions audited. 8 remaining after cleanup. Moving to PHASE B.
+### Audit COMPLETE. 22/22 original functions audited. 8 remaining after cleanup.
+
+## Phase B: New Functional Tests
+| # | Test | Behaviors validated | Status |
+|---|------|-------------------|--------|
+| B1 | TestParity_DiffApprovalAllThreeKeys | y→Approved, n→Rejected, a→Always (channel+cmd), ToolUseID propagation, diff content rendered | ✅ pass |
+### Next B2: /model switch pipeline or Ctrl+C-clears-input flow
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
