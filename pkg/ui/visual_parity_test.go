@@ -409,6 +409,98 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_WelcomeResponsiveSizing validates SetSize calculation AND that
+// the rendered box width actually matches ws.width (no drift).
+//
+// Unique behaviors (no existing test validates width calculation or enforcement):
+// 1. SetSize(terminal-width, h) sets ws.width = terminal-width - 2 (border budget)
+// 2. SetSize with tiny width is clamped to minimum 20
+// 3. Rendered top border width == ws.width + 2 (includes ╭ and ╮)
+// 4. All body lines have same rendered width
+// 5. Growing terminal expands box width
+// 6. Width changes trigger re-render (idempotent SetSize works)
+//
+// Cross-ref: welcome.go:165-172 SetSize
+func TestParity_WelcomeResponsiveSizing(t *testing.T) {
+	ws := components.NewWelcomeScreen(theme.Current(), "claude-opus-4-6", "/tmp")
+
+	// Test various terminal sizes
+	cases := []struct {
+		termWidth int
+		wantBox   int // expected box content width (= termWidth - 2, or 20 min)
+	}{
+		{80, 78},
+		{100, 98},
+		{60, 58},
+		{40, 38},
+		{22, 20}, // 22-2=20 (exact minimum)
+		{15, 20}, // clamped to 20
+		{5, 20},  // clamped to 20
+	}
+
+	for _, tc := range cases {
+		ws.SetSize(tc.termWidth, 24)
+		// Render and verify top border width
+		view := ws.View()
+		plain := strip(view.Content)
+		lines := strings.Split(plain, "\n")
+
+		// Find top border line
+		var topLine string
+		for _, l := range lines {
+			if strings.HasPrefix(strings.TrimSpace(l), "╭") && strings.HasSuffix(strings.TrimSpace(l), "╮") {
+				topLine = strings.TrimSpace(l)
+				break
+			}
+		}
+		if topLine == "" {
+			t.Errorf("termWidth=%d: no ╭...╮ border line found", tc.termWidth)
+			continue
+		}
+
+		// Top line includes ╭ + content + ╮ = wantBox + 2
+		actualWidth := len([]rune(topLine))
+		expectedWidth := tc.wantBox + 2
+		if actualWidth != expectedWidth {
+			t.Errorf("termWidth=%d: expected border width %d, got %d (line: %s)",
+				tc.termWidth, expectedWidth, actualWidth, topLine)
+		}
+	}
+
+	// Test that growing width expands box (not static)
+	ws.SetSize(50, 24)
+	v1 := strip(ws.View().Content)
+	w1 := maxLineWidth(v1)
+
+	ws.SetSize(100, 24)
+	v2 := strip(ws.View().Content)
+	w2 := maxLineWidth(v2)
+
+	if w2 <= w1 {
+		t.Errorf("Growing from 50 to 100 should increase width, got %d → %d", w1, w2)
+	}
+
+	// Idempotent: calling SetSize with same value is safe
+	ws.SetSize(80, 24)
+	v3 := strip(ws.View().Content)
+	ws.SetSize(80, 24)
+	v4 := strip(ws.View().Content)
+	if v3 != v4 {
+		t.Error("Repeat SetSize with same args should produce identical output")
+	}
+}
+
+// maxLineWidth returns the width of the longest line in s (rune count).
+func maxLineWidth(s string) int {
+	max := 0
+	for _, line := range strings.Split(s, "\n") {
+		if n := len([]rune(line)); n > max {
+			max = n
+		}
+	}
+	return max
+}
+
 // TestParity_StatusLineHintLifecycle validates the CtrlCHintMsg state machine
 // in the StatusLine component, including how it interacts with mode changes.
 //

@@ -215,7 +215,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B11 | TestParity_AppFocusCyclingTabShiftTab | initial focus, Tab→Next, Blur/Focus on transition, ring wrap forward+backward, modal blocks cycling | ✅ pass |
 | B12 | TestParity_DispatcherParsingAndErrorPaths | non-slash→nil, whitespace→nil, IsCommand detects trimmed slash, unknown→error CommandResult, case-insensitive, args trimmed, multi-word preserved | ✅ pass |
 | B13 | TestParity_QueryEventDispatchAllTypes | ToolUseStart→activeToolCalls+ModeToolRunning, ToolResult removes, Usage accumulates both token counts, unknown type no-op, TurnComplete→idle | ✅ pass |
-### Next B14: InputPane multiline/Shift+Enter OR StatusLine CtrlCHintMsg lifecycle
+| B14 | TestParity_StatusLineHintLifecycle | idle default, CtrlCHintMsg switches text, streaming/tool overrides hint, mode→idle clears hint, defensive hint reset | ✅ pass |
+### Next B15: WelcomeScreen SetSize responsive width calculation
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
