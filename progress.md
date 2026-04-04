@@ -235,7 +235,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B31 | TestParity_InputCursorBlockRendering | focused cursor at start/end/middle (exact split), blur hides cursor, refocus restores | ✅ pass |
 | B32 | TestParity_MessageBubbleRoleDispatch | nil safe, role→prefix mapping (❯/⏺/none), thinking truncation, SetWidth wrap change, unknown type → empty | ✅ pass |
 | B33 | TestParity_InputBufferLifecycle | SetValue+cursor, Clear resets, HasText transitions, Unicode rune-boundary splitting | ✅ pass |
-### Next B34: StatusLine TokenUpdateMsg + width padding
+| B34 | TestParity_StatusLineTokenTrackingAndWidth | FOUND BUG: padding used byte len including ANSI codes → fixed to use lipgloss.Width(). Test validates 8 behaviors. | ✅ pass |
+### Next B35: Welcome color scheme accent/subtle border styling
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)

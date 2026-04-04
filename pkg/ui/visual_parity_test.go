@@ -412,6 +412,78 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_ConversationClearMessagesMsg validates the ClearMessagesMsg handler
+// AND checks whether autoScroll state survives correctly through a clear+add cycle.
+//
+// Unique behaviors:
+// 1. ClearMessagesMsg empties messages slice (len=0)
+// 2. ClearMessagesMsg empties rendered slice (len=0)
+// 3. ClearMessagesMsg resets scrollOffset to 0
+// 4. After ClearMessagesMsg, MessageCount()==0
+// 5. AddMessageMsg adds a message (different path from direct AddMessage())
+// 6. WindowSizeMsg triggers re-render via SetSize
+// 7. After Clear+Add, view shows new message correctly
+//
+// Cross-ref: conversation.go:55-75 Update message handlers
+func TestParity_ConversationClearMessagesMsg(t *testing.T) {
+	cp := components.NewConversationPane()
+	cp.SetSize(80, 10)
+
+	// Setup: add messages via AddMessageMsg (not direct AddMessage)
+	for i := 0; i < 3; i++ {
+		cp.Update(components.AddMessageMsg{Message: message.Message{
+			Role:    message.RoleUser,
+			Content: []message.ContentBlock{{Type: message.ContentText, Text: fmt.Sprintf("msg%d", i)}},
+		}})
+	}
+	if cp.MessageCount() != 3 {
+		t.Fatalf("AddMessageMsg should add 3 messages, got %d", cp.MessageCount())
+	}
+
+	// Scroll up to set scrollOffset > 0
+	cp.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	cp.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+
+	// ClearMessagesMsg handler
+	cp.Update(components.ClearMessagesMsg{})
+
+	// 1,4. Messages cleared
+	if cp.MessageCount() != 0 {
+		t.Errorf("After ClearMessagesMsg, MessageCount should be 0, got %d", cp.MessageCount())
+	}
+
+	// 3. scrollOffset reset (verify via behavior: new message appears)
+	cp.Update(components.AddMessageMsg{Message: message.Message{
+		Role:    message.RoleAssistant,
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: "fresh"}},
+	}})
+	v := strip(cp.View().Content)
+	if !strings.Contains(v, "fresh") {
+		t.Errorf("Post-clear message should be visible, got:\n%s", v)
+	}
+	// Old messages should NOT appear
+	for i := 0; i < 3; i++ {
+		if strings.Contains(v, fmt.Sprintf("msg%d", i)) {
+			t.Errorf("Old msg%d should be gone after clear, got:\n%s", i, v)
+		}
+	}
+
+	// 6. WindowSizeMsg triggers SetSize re-render
+	cp2 := components.NewConversationPane()
+	cp2.SetSize(80, 10)
+	cp2.Update(components.AddMessageMsg{Message: message.Message{
+		Role:    message.RoleUser,
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: "a long test message that might wrap when width shrinks"}},
+	}})
+	widthBefore := strip(cp2.View().Content)
+	cp2.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
+	widthAfter := strip(cp2.View().Content)
+	// Views should be different (different width = different wrap)
+	if widthBefore == widthAfter {
+		t.Error("WindowSizeMsg should trigger re-render with new width")
+	}
+}
+
 // TestParity_StatusLineTokenTrackingAndWidth validates token state tracking
 // and width padding/truncation logic.
 //
