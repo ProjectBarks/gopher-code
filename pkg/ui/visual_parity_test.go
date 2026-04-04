@@ -412,6 +412,92 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_ConversationViewComposition validates the ConversationPane View():
+// empty state, streaming text placement, height padding, and interleaving.
+//
+// Unique behaviors (scroll test doesn't cover streaming/placeholder/padding):
+// 1. Empty (no messages + no streaming) → "No messages yet." placeholder
+// 2. width=0 or height=0 → empty view
+// 3. Messages rendered into view
+// 4. Streaming text appears AFTER messages (at bottom)
+// 5. View is padded to exactly `height` lines
+// 6. ClearStreamingText removes streaming content
+// 7. Visible lines count == height (when height > 0)
+//
+// Cross-ref: conversation.go:78-123 View composition
+func TestParity_ConversationViewComposition(t *testing.T) {
+	// 1. Width/height 0 → empty
+	cp := components.NewConversationPane()
+	if cp.View().Content != "" {
+		t.Error("width=0,height=0 should return empty view")
+	}
+
+	cp.SetSize(80, 10)
+
+	// 2. Empty conversation → placeholder
+	v1 := strip(cp.View().Content)
+	if !strings.Contains(v1, "No messages yet") {
+		t.Errorf("Empty conversation should show placeholder, got: %q", v1)
+	}
+
+	// 3. Add a message → no more placeholder
+	cp.AddMessage(message.Message{
+		Role:    message.RoleUser,
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: "hello"}},
+	})
+	v2 := strip(cp.View().Content)
+	if strings.Contains(v2, "No messages yet") {
+		t.Error("After AddMessage, placeholder should be gone")
+	}
+
+	// 5. View is padded to exactly `height` lines
+	lines := strings.Split(cp.View().Content, "\n")
+	if len(lines) != 10 {
+		t.Errorf("View should be padded to height=10 lines, got %d", len(lines))
+	}
+
+	// 4. Streaming text appears AFTER messages
+	cp.SetStreamingText("streaming-here")
+	v3 := strip(cp.View().Content)
+	helloIdx := strings.Index(v3, "hello")
+	streamIdx := strings.Index(v3, "streaming-here")
+	if helloIdx == -1 || streamIdx == -1 {
+		t.Fatalf("Both 'hello' and 'streaming-here' should be visible.\nGot:\n%s", v3)
+	}
+	if helloIdx >= streamIdx {
+		t.Errorf("Message 'hello' (idx=%d) should come BEFORE streaming 'streaming-here' (idx=%d)", helloIdx, streamIdx)
+	}
+
+	// 6. ClearStreamingText removes streaming content
+	cp.ClearStreamingText()
+	v4 := strip(cp.View().Content)
+	if strings.Contains(v4, "streaming-here") {
+		t.Error("After ClearStreamingText, streaming content should be gone")
+	}
+	// But the message should still be there
+	if !strings.Contains(v4, "hello") {
+		t.Error("Message should still be visible after ClearStreamingText")
+	}
+
+	// 7. Line count always equals height
+	linesAfterClear := strings.Split(cp.View().Content, "\n")
+	if len(linesAfterClear) != 10 {
+		t.Errorf("After clear, view should still be 10 lines, got %d", len(linesAfterClear))
+	}
+
+	// Streaming without messages: show placeholder disabled, streaming visible
+	cp2 := components.NewConversationPane()
+	cp2.SetSize(80, 10)
+	cp2.SetStreamingText("only-streaming")
+	v5 := strip(cp2.View().Content)
+	if strings.Contains(v5, "No messages yet") {
+		t.Error("Streaming text alone should skip placeholder")
+	}
+	if !strings.Contains(v5, "only-streaming") {
+		t.Error("Streaming text should be visible")
+	}
+}
+
 // TestParity_ToolEventStreamingBuffer validates the streamingText buffer
 // changes produced by ToolUseStart and ToolResult events.
 //
