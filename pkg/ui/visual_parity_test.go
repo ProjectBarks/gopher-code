@@ -409,6 +409,82 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_AppFocusCyclingTabShiftTab validates Tab/Shift+Tab key routing
+// and the FocusManager's ring cycling behavior through AppModel.Update.
+//
+// Unique behaviors (no existing test validates focus management):
+// 1. Tab key triggers focus.Next() in AppModel.handleKey
+// 2. Shift+Tab key triggers focus.Prev()
+// 3. Next cycles forward, wraps from last to first
+// 4. Prev cycles backward, wraps from first to last
+// 5. Blur is called on outgoing child, Focus on incoming
+// 6. Initial focus is on the first child (input pane)
+//
+// Cross-ref: app.go:377-383 Tab/Shift+Tab handlers
+// Cross-ref: core/focus.go:46-71 Next/Prev ring arithmetic
+func TestParity_AppFocusCyclingTabShiftTab(t *testing.T) {
+	config := session.DefaultConfig()
+	sess := session.New(config, "/tmp")
+	app := NewAppModel(sess, nil)
+	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// NewAppModel creates focus ring with [input, conversation]
+	// 1. Initial focus should be on input
+	initial := app.focus.Focused()
+	if initial == nil {
+		t.Fatal("FocusManager should have a focused child initially")
+	}
+	if !initial.Focused() {
+		t.Error("Initially focused child should report Focused()==true")
+	}
+
+	// 2. Tab → Next() cycles to second child
+	app.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: 0})
+	second := app.focus.Focused()
+	if second == initial {
+		t.Error("Tab should cycle to a different child")
+	}
+	if second == nil || !second.Focused() {
+		t.Error("After Tab, new child should be focused")
+	}
+	if initial.Focused() {
+		t.Error("After Tab, previous child should be Blur'd")
+	}
+
+	// 3. Tab again → wraps back to first (2 children in ring)
+	app.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: 0})
+	wrapped := app.focus.Focused()
+	if wrapped != initial {
+		t.Error("Tab should wrap back to initial child (ring of 2)")
+	}
+
+	// 4. Shift+Tab → Prev() goes backward
+	app.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+	reversed := app.focus.Focused()
+	if reversed != second {
+		t.Error("Shift+Tab should go back to second child")
+	}
+
+	// 5. Shift+Tab from first → wraps to last (prev from 0)
+	// First reset to initial
+	app.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}) // now on initial
+	app.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}) // wrap to last
+	wrapped2 := app.focus.Focused()
+	if wrapped2 == initial {
+		t.Error("Shift+Tab from first should wrap to last child")
+	}
+
+	// 6. Modal active blocks cycling
+	// Use the second child as a fake modal
+	app.focus.PushModal(second)
+	focusBeforeTab := app.focus.Focused()
+	app.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: 0})
+	if app.focus.Focused() != focusBeforeTab {
+		t.Error("Tab with active modal should NOT cycle focus")
+	}
+	app.focus.PopModal()
+}
+
 // TestParity_ThinkingSpinnerLifecycle validates the spinner's state machine
 // including Start/Stop, tick-driven frame advancement, and SetEffort mapping.
 //

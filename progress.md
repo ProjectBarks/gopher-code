@@ -211,7 +211,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B7 | TestParity_InputPaneHistorySaveRestore | no-history no-op, non-empty blocks nav, 3-entry traversal, oldest stops, restore savedInput | ✅ pass |
 | B8 | TestParity_ConversationScrollAutoScroll | Up disables autoScroll, Down re-enables at 0, PgUp/PgDown clamping, AddMessage respects autoScroll state | ✅ pass |
 | B9 | TestParity_ToolResultTruncationAndStyling | 300-char err trunc, 10-line success trunc, 500-char single-line trunc, empty→(no content), first-line ⎿ vs continuation spaces, Content/Text precedence | ✅ pass |
-### Next B10: Spinner state lifecycle (Start/Stop/IsActive/verb rotation)
+| B10 | TestParity_ThinkingSpinnerLifecycle | new=inactive, Start assigns verb+resets frame, SetEffort mapping (4 levels+unknown), tick advances only when active, frame wraps, Stop | ✅ pass |
+### Next B11: ReplBridge event conversion OR focus cycling (Tab/Shift+Tab)
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
