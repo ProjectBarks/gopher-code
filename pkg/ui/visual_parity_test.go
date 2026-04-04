@@ -3460,6 +3460,151 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_SlashCommandAutocompleteFlow validates the SlashCommandInput full
+// user interaction: activate on "/", filter-as-you-type, navigate suggestions
+// with Up/Down (with clamping), select with Enter/Tab, dismiss with Escape,
+// and the fuzzy-match rule (subsequence, not just prefix).
+//
+// Unique behaviors (no existing test covers this end-to-end flow):
+//  1. Activate("/") sets active=true and populates suggestions from the 7
+//     default commands; Deactivate clears suggestions+prefix+active.
+//  2. Update on KeyPressMsg is a no-op when !active (returns immediately).
+//  3. Prefix filter "/mo" leaves only /model (exact HasPrefix match).
+//  4. Prefix filter "/h" matches BOTH /help (HasPrefix) AND /thinking (fuzzy
+//     subsequence "/" → "h" present in "/thinking"). This is the fuzzy rule
+//     and would break if the filter reverted to HasPrefix-only.
+//  5. KeyDown advances selected; clamps at len(suggestions)-1 (does not wrap,
+//     does not go OOB).
+//  6. KeyUp decrements; clamps at 0 (no negative index).
+//  7. KeyEnter selects current suggestion → returns SlashCommandSelectedMsg
+//     carrying the selected command AND deactivates the input.
+//  8. KeyTab behaves identically to KeyEnter (alias).
+//  9. KeyEscape deactivates WITHOUT producing a selection message.
+//
+// Cross-ref: slash_input.go:65-117 Activate/Update/filterSuggestions
+// Cross-ref: Claude Code: components/PromptInput/slash autocomplete —
+// fuzzy match mirrors Ink's CommandSelector behavior.
+func TestParity_SlashCommandAutocompleteFlow(t *testing.T) {
+	// -- Behavior 1: Activate + Deactivate --
+	sci := components.NewSlashCommandInput(theme.Current())
+	if sci.IsActive() {
+		t.Error("new input must be inactive")
+	}
+	sci.Activate("/")
+	if !sci.IsActive() {
+		t.Fatal("Activate must set active=true")
+	}
+	if len(sci.Suggestions()) != 7 {
+		t.Errorf("prefix=\"/\" should match all 7 default commands, got %d: %+v",
+			len(sci.Suggestions()), sci.Suggestions())
+	}
+
+	// -- Behavior 2: Update is no-op when inactive --
+	sci.Deactivate()
+	if sci.IsActive() {
+		t.Error("Deactivate must clear active")
+	}
+	if len(sci.Suggestions()) != 0 {
+		t.Errorf("Deactivate must clear suggestions, got %d", len(sci.Suggestions()))
+	}
+	_, cmd := sci.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if cmd != nil {
+		t.Error("Update while inactive must return nil cmd")
+	}
+
+	// -- Behavior 3: prefix "/mo" filters to /model only --
+	sci.Activate("/mo")
+	suggs := sci.Suggestions()
+	if len(suggs) != 1 || suggs[0].Name != "/model" {
+		t.Errorf("prefix=\"/mo\" should match only /model, got %+v", suggs)
+	}
+
+	// -- Behavior 4: prefix "/h" matches /help AND /thinking (fuzzy) --
+	sci.Deactivate()
+	sci.Activate("/h")
+	suggs = sci.Suggestions()
+	hasHelp, hasThinking := false, false
+	for _, s := range suggs {
+		if s.Name == "/help" {
+			hasHelp = true
+		}
+		if s.Name == "/thinking" {
+			hasThinking = true
+		}
+	}
+	if !hasHelp {
+		t.Errorf("prefix=\"/h\" should include /help via HasPrefix, got %+v", suggs)
+	}
+	if !hasThinking {
+		t.Errorf("prefix=\"/h\" should include /thinking via fuzzy subsequence, got %+v", suggs)
+	}
+
+	// -- Behavior 5: KeyDown advances and clamps at end --
+	sci.Deactivate()
+	sci.Activate("/") // 7 suggestions, selected starts at 0
+	// Reach via reflection-free path: push Down 20 times
+	for i := 0; i < 20; i++ {
+		sci.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	}
+	// selected should be clamped at len-1=6. Verify by pressing Enter and
+	// checking the selected command name.
+	_, cmd = sci.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("KeyEnter with suggestions must return cmd")
+	}
+	msg := cmd()
+	selMsg, ok := msg.(components.SlashCommandSelectedMsg)
+	if !ok {
+		t.Fatalf("Enter must return SlashCommandSelectedMsg, got %T", msg)
+	}
+	// Default commands order: /model /session /clear /help /compact /quit /thinking
+	// so selected=6 → /thinking
+	if selMsg.Command.Name != "/thinking" {
+		t.Errorf("after clamping down at end, selected should be /thinking (idx 6), got %q",
+			selMsg.Command.Name)
+	}
+	// -- Behavior 7 (cont): Enter must deactivate --
+	if sci.IsActive() {
+		t.Error("Enter must deactivate after selection")
+	}
+
+	// -- Behavior 6: KeyUp clamps at 0 --
+	sci.Activate("/")
+	for i := 0; i < 20; i++ {
+		sci.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	}
+	_, cmd = sci.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	selMsg = cmd().(components.SlashCommandSelectedMsg)
+	if selMsg.Command.Name != "/model" {
+		t.Errorf("after clamping up at 0, selected should be /model (idx 0), got %q",
+			selMsg.Command.Name)
+	}
+
+	// -- Behavior 8: Tab is alias for Enter --
+	sci.Activate("/")
+	_, cmd = sci.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if cmd == nil {
+		t.Fatal("Tab must select current suggestion")
+	}
+	selMsg = cmd().(components.SlashCommandSelectedMsg)
+	if selMsg.Command.Name != "/model" { // selected=0 at fresh activate
+		t.Errorf("Tab alias: expected /model, got %q", selMsg.Command.Name)
+	}
+	if sci.IsActive() {
+		t.Error("Tab must deactivate after selection")
+	}
+
+	// -- Behavior 9: Escape deactivates without producing a message --
+	sci.Activate("/")
+	_, cmd = sci.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd != nil {
+		t.Errorf("Escape must NOT produce a selection cmd, got %v", cmd())
+	}
+	if sci.IsActive() {
+		t.Error("Escape must deactivate")
+	}
+}
+
 // TestParity_ConversationViewportWindowing validates the viewport line-slicing
 // math in ConversationPane.View() — i.e. which content lines are actually
 // visible when total rendered lines exceed the height.
