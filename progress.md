@@ -236,7 +236,9 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B32 | TestParity_MessageBubbleRoleDispatch | nil safe, role→prefix mapping (❯/⏺/none), thinking truncation, SetWidth wrap change, unknown type → empty | ✅ pass |
 | B33 | TestParity_InputBufferLifecycle | SetValue+cursor, Clear resets, HasText transitions, Unicode rune-boundary splitting | ✅ pass |
 | B34 | TestParity_StatusLineTokenTrackingAndWidth | FOUND BUG: padding used byte len including ANSI codes → fixed to use lipgloss.Width(). Test validates 8 behaviors. | ✅ pass |
-### Next B35: Welcome color scheme accent/subtle border styling
+| B35 | TestParity_ConversationClearMessagesMsg | AddMessageMsg/ClearMessagesMsg/WindowSizeMsg routing via Update(), re-render with new width | ✅ pass |
+| B36 | TestParity_DispatcherDefaultCommands | 7 default slash commands produce correct msg types (/model→ModelSwitchMsg, /session→SessionSwitchMsg, /clear→ClearConversationMsg, /help→ShowHelpMsg, /quit→QuitMsg, /compact→CompactMsg, /thinking→ThinkingToggleMsg), HasHandler and Commands() listing | ✅ pass |
+### Next B37: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)

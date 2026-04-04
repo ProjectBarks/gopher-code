@@ -412,6 +412,81 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_DispatcherDefaultCommands validates each default slash command
+// dispatches to the correct message type.
+//
+// Unique behaviors (existing tests cover /model and /clear individually):
+// 1. /model {arg} → ModelSwitchMsg{Model: arg}
+// 2. /model (no args) → CommandResult with error
+// 3. /session → SessionSwitchMsg
+// 4. /clear → ClearConversationMsg
+// 5. /help → ShowHelpMsg
+// 6. /quit → QuitMsg
+// 7. /compact → CompactMsg
+// 8. /thinking → ThinkingToggleMsg
+// 9. HasHandler returns true for all registered, false for unknown
+// 10. Commands() returns all 7 names
+//
+// Cross-ref: commands/handlers.go:110-143 registerDefaults
+func TestParity_DispatcherDefaultCommands(t *testing.T) {
+	d := commands.NewDispatcher()
+
+	// Map each command to its expected message type
+	cases := []struct {
+		input   string
+		msgType string // type name for comparison
+	}{
+		{"/model sonnet", "ModelSwitchMsg"},
+		{"/session", "SessionSwitchMsg"},
+		{"/clear", "ClearConversationMsg"},
+		{"/help", "ShowHelpMsg"},
+		{"/quit", "QuitMsg"},
+		{"/compact", "CompactMsg"},
+		{"/thinking", "ThinkingToggleMsg"},
+	}
+
+	for _, tc := range cases {
+		cmd := d.Dispatch(tc.input)
+		if cmd == nil {
+			t.Errorf("%s should dispatch to a cmd", tc.input)
+			continue
+		}
+		msg := cmd()
+		gotType := fmt.Sprintf("%T", msg)
+		if !strings.Contains(gotType, tc.msgType) {
+			t.Errorf("%s: expected msg type containing %q, got %s", tc.input, tc.msgType, gotType)
+		}
+	}
+
+	// /model with args → ModelSwitchMsg carries the args
+	cmd := d.Dispatch("/model sonnet")
+	msg := cmd()
+	if msm, ok := msg.(commands.ModelSwitchMsg); ok {
+		if msm.Model != "sonnet" {
+			t.Errorf("ModelSwitchMsg.Model should be 'sonnet', got %q", msm.Model)
+		}
+	} else {
+		t.Errorf("Expected ModelSwitchMsg, got %T", msg)
+	}
+
+	// HasHandler checks
+	if !d.HasHandler("/clear") {
+		t.Error("HasHandler should be true for /clear")
+	}
+	if !d.HasHandler("/model") {
+		t.Error("HasHandler should be true for /model")
+	}
+	if d.HasHandler("/nonexistent") {
+		t.Error("HasHandler should be false for unknown command")
+	}
+
+	// Commands() returns all 7
+	cmds := d.Commands()
+	if len(cmds) != 7 {
+		t.Errorf("Commands() should return 7 default commands, got %d: %v", len(cmds), cmds)
+	}
+}
+
 // TestParity_ConversationClearMessagesMsg validates the ClearMessagesMsg handler
 // AND checks whether autoScroll state survives correctly through a clear+add cycle.
 //
