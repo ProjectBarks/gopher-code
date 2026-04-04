@@ -30,9 +30,9 @@ func TestStatusLineViewIdle(t *testing.T) {
 	sl.SetSize(80, 1)
 	view := sl.View()
 	plain := stripANSI(view.Content)
-	// Idle mode shows model name
-	if !strings.Contains(plain, sess.Config.Model) {
-		t.Errorf("Expected model name in idle status, got %q", plain)
+	// Idle mode shows "? for shortcuts" (matching Claude Code)
+	if !strings.Contains(plain, "? for shortcuts") {
+		t.Errorf("Expected '? for shortcuts' in idle status, got %q", plain)
 	}
 }
 
@@ -44,8 +44,9 @@ func TestStatusLineViewWithModel(t *testing.T) {
 	sl.SetSize(80, 1)
 	view := sl.View()
 	plain := stripANSI(view.Content)
-	if !strings.Contains(plain, "claude-opus") {
-		t.Error("Expected model name in status")
+	// Idle status shows shortcuts hint, not model name
+	if !strings.Contains(plain, "? for shortcuts") {
+		t.Error("Expected '? for shortcuts' in idle status")
 	}
 }
 
@@ -83,8 +84,8 @@ func TestStatusLineBackToIdleShowsModel(t *testing.T) {
 	sl.Update(ModeChangeMsg{Mode: ModeIdle})
 	view := sl.View()
 	plain := stripANSI(view.Content)
-	if !strings.Contains(plain, "test-model") {
-		t.Errorf("Expected model name after return to idle, got %q", plain)
+	if !strings.Contains(plain, "? for shortcuts") {
+		t.Errorf("Expected '? for shortcuts' after return to idle, got %q", plain)
 	}
 }
 
@@ -96,8 +97,9 @@ func TestStatusLineTokenUpdate(t *testing.T) {
 	sl.Update(TokenUpdateMsg{InputTokens: 1500, OutputTokens: 500})
 	view := sl.View()
 	plain := stripANSI(view.Content)
-	if !strings.Contains(plain, "1500") {
-		t.Error("Expected token count in idle status")
+	// Idle status shows shortcuts hint regardless of token state
+	if !strings.Contains(plain, "? for shortcuts") {
+		t.Error("Expected '? for shortcuts' in idle status even after token update")
 	}
 }
 

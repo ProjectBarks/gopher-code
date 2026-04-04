@@ -1,7 +1,6 @@
 package components
 
 import (
-	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -24,6 +23,9 @@ type ModeChangeMsg struct {
 	Mode StatusMode
 }
 
+// CtrlCHintMsg signals the status line to show the exit confirmation hint.
+type CtrlCHintMsg struct{}
+
 // TokenUpdateMsg updates the token count display.
 type TokenUpdateMsg struct {
 	InputTokens  int
@@ -33,10 +35,11 @@ type TokenUpdateMsg struct {
 // StatusLine renders the bottom status bar with model, tokens, cost, and mode.
 type StatusLine struct {
 	session *session.SessionState
-	mode    StatusMode
-	width   int
-	height  int
-	focused bool
+	mode       StatusMode
+	width      int
+	height     int
+	focused    bool
+	ctrlCHint  bool // Show "Press Ctrl-C again to exit"
 
 	inputTokens  int
 	outputTokens int
@@ -58,8 +61,12 @@ func (sl *StatusLine) Init() tea.Cmd {
 // Update handles status line messages.
 func (sl *StatusLine) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case CtrlCHintMsg:
+		sl.ctrlCHint = true
+		return sl, nil
 	case ModeChangeMsg:
 		sl.mode = msg.Mode
+		sl.ctrlCHint = false // Reset hint on mode change
 		return sl, nil
 	case TokenUpdateMsg:
 		sl.inputTokens = msg.InputTokens
@@ -87,27 +94,15 @@ func (sl *StatusLine) View() tea.View {
 		content = dimStyle.Render("esc to interrupt")
 
 	default:
-		// Idle: show model + token info + cost
-		// Source: TS status bar shows model, tokens, and cost
-		var parts []string
-
-		if sl.session != nil {
-			parts = append(parts, sl.session.Config.Model)
+		dimStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(cs.TextMuted))
+		if sl.ctrlCHint {
+			// After first Ctrl+C: show exit confirmation hint
+			content = dimStyle.Render("Press Ctrl-C again to exit")
+		} else {
+			// Idle: show "? for shortcuts" on the left (matching Claude Code)
+			content = dimStyle.Render("? for shortcuts")
 		}
-
-		if sl.inputTokens > 0 || sl.outputTokens > 0 {
-			parts = append(parts, fmt.Sprintf("%d/%d tokens", sl.inputTokens, sl.outputTokens))
-		}
-
-		if sl.session != nil && sl.session.TotalCostUSD > 0 {
-			costStr := fmt.Sprintf("$%.4f", sl.session.TotalCostUSD)
-			if sl.session.TotalCostUSD > 0.5 {
-				costStr = fmt.Sprintf("$%.2f", sl.session.TotalCostUSD)
-			}
-			parts = append(parts, costStr)
-		}
-
-		content = strings.Join(parts, " │ ")
 	}
 
 	// Pad to fill width
