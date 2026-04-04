@@ -409,6 +409,83 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_StatusLineHintLifecycle validates the CtrlCHintMsg state machine
+// in the StatusLine component, including how it interacts with mode changes.
+//
+// Unique behaviors (no existing test validates status hint transitions):
+// 1. Default idle status shows "? for shortcuts"
+// 2. CtrlCHintMsg switches idle display to "Press Ctrl-C again to exit"
+// 3. ModeStreaming overrides hint → shows "esc to interrupt"
+// 4. ModeToolRunning also shows "esc to interrupt"
+// 5. ModeChangeMsg to ModeIdle clears the hint → back to "? for shortcuts"
+// 6. Mode change from streaming TO idle resets ctrlCHint (no stale hint)
+// 7. CtrlCHintMsg while streaming doesn't affect visible text (mode wins)
+//
+// Cross-ref: statusline.go:62-80 Update, :82-125 View mode switch
+func TestParity_StatusLineHintLifecycle(t *testing.T) {
+	config := session.DefaultConfig()
+	sess := session.New(config, "/tmp")
+	sl := components.NewStatusLine(sess)
+	sl.SetSize(80, 1)
+
+	// 1. Default idle → "? for shortcuts"
+	v1 := strip(sl.View().Content)
+	if !strings.Contains(v1, "? for shortcuts") {
+		t.Errorf("Default idle should show '? for shortcuts', got: %s", v1)
+	}
+
+	// 2. CtrlCHintMsg → "Press Ctrl-C again to exit"
+	sl.Update(components.CtrlCHintMsg{})
+	v2 := strip(sl.View().Content)
+	if !strings.Contains(v2, "Ctrl-C again") {
+		t.Errorf("After CtrlCHintMsg should show exit hint, got: %s", v2)
+	}
+	if strings.Contains(v2, "? for shortcuts") {
+		t.Errorf("After CtrlCHintMsg should NOT show '? for shortcuts', got: %s", v2)
+	}
+
+	// 3. Switch to streaming → "esc to interrupt" (mode overrides hint visibility)
+	sl.Update(components.ModeChangeMsg{Mode: components.ModeStreaming})
+	v3 := strip(sl.View().Content)
+	if !strings.Contains(v3, "esc to interrupt") {
+		t.Errorf("Streaming should show 'esc to interrupt', got: %s", v3)
+	}
+	if strings.Contains(v3, "Ctrl-C again") {
+		t.Errorf("Streaming should NOT show Ctrl-C hint (mode wins), got: %s", v3)
+	}
+
+	// 4. Switch to tool running → same as streaming
+	sl.Update(components.ModeChangeMsg{Mode: components.ModeToolRunning})
+	v4 := strip(sl.View().Content)
+	if !strings.Contains(v4, "esc to interrupt") {
+		t.Errorf("ToolRunning should show 'esc to interrupt', got: %s", v4)
+	}
+
+	// 5. Back to idle → "? for shortcuts" (ctrlCHint was reset by ModeChangeMsg)
+	sl.Update(components.ModeChangeMsg{Mode: components.ModeIdle})
+	v5 := strip(sl.View().Content)
+	if !strings.Contains(v5, "? for shortcuts") {
+		t.Errorf("Back to idle should show '? for shortcuts' (hint reset), got: %s", v5)
+	}
+	if strings.Contains(v5, "Ctrl-C again") {
+		t.Errorf("After mode change, hint should be cleared, got: %s", v5)
+	}
+
+	// 6. Set hint again while idle → shows hint
+	sl.Update(components.CtrlCHintMsg{})
+	v6 := strip(sl.View().Content)
+	if !strings.Contains(v6, "Ctrl-C again") {
+		t.Errorf("Re-setting hint should show again, got: %s", v6)
+	}
+
+	// 7. Mode change to idle (same state) still clears hint — defensive reset
+	sl.Update(components.ModeChangeMsg{Mode: components.ModeIdle})
+	v7 := strip(sl.View().Content)
+	if strings.Contains(v7, "Ctrl-C again") {
+		t.Errorf("ModeChange to Idle should clear hint even if already Idle, got: %s", v7)
+	}
+}
+
 // TestParity_QueryEventDispatchAllTypes validates AppModel.handleQueryEvent
 // correctly dispatches all 5 QueryEvent types and accumulates usage.
 //

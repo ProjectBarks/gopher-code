@@ -214,7 +214,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B10 | TestParity_ThinkingSpinnerLifecycle | new=inactive, Start assigns verb+resets frame, SetEffort mapping (4 levels+unknown), tick advances only when active, frame wraps, Stop | ✅ pass |
 | B11 | TestParity_AppFocusCyclingTabShiftTab | initial focus, Tab→Next, Blur/Focus on transition, ring wrap forward+backward, modal blocks cycling | ✅ pass |
 | B12 | TestParity_DispatcherParsingAndErrorPaths | non-slash→nil, whitespace→nil, IsCommand detects trimmed slash, unknown→error CommandResult, case-insensitive, args trimmed, multi-word preserved | ✅ pass |
-### Next B13: EventBridge callback conversion OR Header model/CWD setters
+| B13 | TestParity_QueryEventDispatchAllTypes | ToolUseStart→activeToolCalls+ModeToolRunning, ToolResult removes, Usage accumulates both token counts, unknown type no-op, TurnComplete→idle | ✅ pass |
+### Next B14: InputPane multiline/Shift+Enter OR StatusLine CtrlCHintMsg lifecycle
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
