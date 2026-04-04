@@ -412,6 +412,90 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_InputBufferLifecycle validates Value/SetValue/Clear/HasText
+// semantics including Unicode handling and cursor positioning.
+//
+// Unique behaviors:
+// 1. SetValue replaces buffer + moves cursor to end
+// 2. SetValue with Unicode preserves rune count (not byte count)
+// 3. Clear empties buffer AND moves cursor to 0
+// 4. Value returns exact buffer contents (no trimming/transformation)
+// 5. HasText reflects buffer state (true when non-empty)
+// 6. After Clear + typing, cursor position is correct
+// 7. SetValue then type: char inserted at end
+// 8. Multi-byte Unicode chars (CJK) counted as single runes
+//
+// Cross-ref: input.go:96-113 Value/SetValue/Clear/HasText
+func TestParity_InputBufferLifecycle(t *testing.T) {
+	inp := components.NewInputPane()
+	inp.SetSize(80, 3)
+	inp.Focus()
+
+	// 1. SetValue replaces buffer, cursor at end
+	inp.SetValue("hello")
+	if inp.Value() != "hello" {
+		t.Errorf("SetValue should set buffer, got %q", inp.Value())
+	}
+	// Insert at end should append
+	inp.Update(tea.KeyPressMsg{Code: '!', Text: "!"})
+	if inp.Value() != "hello!" {
+		t.Errorf("Insert after SetValue should append, got %q", inp.Value())
+	}
+
+	// 2. SetValue overwrites
+	inp.SetValue("world")
+	if inp.Value() != "world" {
+		t.Errorf("SetValue should replace, got %q", inp.Value())
+	}
+
+	// 3. Clear empties + cursor=0
+	inp.Clear()
+	if inp.Value() != "" {
+		t.Errorf("Clear should empty, got %q", inp.Value())
+	}
+	if inp.HasText() {
+		t.Error("HasText should be false after Clear")
+	}
+	// Insert after Clear should start fresh
+	inp.Update(tea.KeyPressMsg{Code: 'X', Text: "X"})
+	if inp.Value() != "X" {
+		t.Errorf("Insert after Clear should start fresh, got %q", inp.Value())
+	}
+
+	// 4. HasText reflects state
+	inp.Clear()
+	if inp.HasText() {
+		t.Error("HasText false on empty")
+	}
+	inp.SetValue("a")
+	if !inp.HasText() {
+		t.Error("HasText true after SetValue with text")
+	}
+	inp.SetValue("")
+	if inp.HasText() {
+		t.Error("HasText false after SetValue with empty string")
+	}
+
+	// 5. Unicode multi-byte chars counted as runes
+	inp.SetValue("日本語") // 3 runes, 9 bytes
+	if inp.Value() != "日本語" {
+		t.Errorf("SetValue should preserve Unicode, got %q", inp.Value())
+	}
+	// Cursor should be at rune position 3 (not byte 9)
+	// Left arrow should move to rune position 2 — then insert
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	inp.Update(tea.KeyPressMsg{Code: '!', Text: "!"})
+	if inp.Value() != "日本!語" {
+		t.Errorf("Unicode cursor should split at rune boundary, got %q", inp.Value())
+	}
+
+	// 6. Clear after Unicode — also works
+	inp.Clear()
+	if inp.Value() != "" {
+		t.Errorf("Clear after Unicode, got %q", inp.Value())
+	}
+}
+
 // TestParity_MessageBubbleRoleDispatch validates the Render() role dispatch,
 // nil safety, thinking block truncation, and SetWidth re-rendering.
 //
