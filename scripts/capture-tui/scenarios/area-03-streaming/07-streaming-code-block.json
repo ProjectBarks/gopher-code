@@ -1,0 +1,17 @@
+{
+  "name": "streaming-code-block",
+  "category": "area-03-streaming",
+  "tags": ["streaming", "code", "block", "formatting"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Write a hello world python function in a code block"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "def |print|hello", "timeout": "30s", "note": "Wait for code to appear"},
+    {"action": "wait_for", "value": "❯", "timeout": "30s", "note": "Wait for response to complete"},
+    {"action": "snapshot", "value": "streaming-code-block"}
+  ]
+}

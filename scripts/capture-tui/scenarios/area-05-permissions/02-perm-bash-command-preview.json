@@ -1,0 +1,16 @@
+{
+  "name": "perm-bash-command-preview",
+  "category": "area-05-permissions",
+  "tags": ["permission", "bash", "command", "preview"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Run the command: echo test"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "echo test|Allow|allow", "timeout": "30s", "note": "Wait for command text in permission dialog"},
+    {"action": "snapshot", "value": "perm-bash-command-preview"}
+  ]
+}

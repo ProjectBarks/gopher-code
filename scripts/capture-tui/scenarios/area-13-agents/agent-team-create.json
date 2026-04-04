@@ -1,0 +1,16 @@
+{
+  "name": "agent-team-create",
+  "category": "area-13-agents",
+  "tags": ["agent", "team", "create"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "key", "value": "Escape", "note": "Dismiss welcome screen"},
+    {"action": "wait", "value": "1s"},
+    {"action": "type", "value": "create a team of agents to review this project"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "3s"},
+    {"action": "snapshot", "value": "agent-team-create"}
+  ]
+}

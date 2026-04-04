@@ -1,0 +1,16 @@
+{
+  "name": "perm-diff-in-edit",
+  "category": "area-05-permissions",
+  "tags": ["permission", "diff", "edit", "preview"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Add a comment '// diff-perm-test' at the very top of cmd/gopher-code/main.go"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "Edit|edit|Allow|allow|diff", "timeout": "30s", "note": "Wait for edit permission with diff preview"},
+    {"action": "snapshot", "value": "perm-diff-in-edit"}
+  ]
+}

@@ -1,0 +1,1 @@
+{"name":"theme-border-colors","category":"area-15-themes","tags":["theme","colors","borders"],"cols":80,"rows":24,"steps":[{"action":"wait_for","value":"Welcome|Claude"},{"action":"snapshot","value":"01-theme-border-colors","note":"Border color data"}]}

@@ -1,0 +1,16 @@
+{
+  "name": "agent-task-assignment",
+  "category": "area-13-agents",
+  "tags": ["agent", "task", "assignment"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "key", "value": "Escape", "note": "Dismiss welcome screen"},
+    {"action": "wait", "value": "1s"},
+    {"action": "type", "value": "create a task for the agent to review all Go files"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "3s"},
+    {"action": "snapshot", "value": "agent-task-assignment"}
+  ]
+}

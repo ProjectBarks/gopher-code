@@ -1,0 +1,11 @@
+{
+  "name": "welcome-very-narrow-40x15",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "very-narrow", "responsive", "minimum"],
+  "cols": 40,
+  "rows": 15,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render at minimum size"},
+    {"action": "snapshot", "value": "01-welcome-very-narrow", "note": "Capture welcome screen at minimum 40x15 terminal"}
+  ]
+}

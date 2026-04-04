@@ -1,0 +1,33 @@
+{
+  "name": "prompt-rapid-typing",
+  "category": "area-02-prompt",
+  "tags": ["prompt", "rapid", "typing", "performance"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "t"},
+    {"action": "type", "value": "h"},
+    {"action": "type", "value": "e"},
+    {"action": "type", "value": " "},
+    {"action": "type", "value": "q"},
+    {"action": "type", "value": "u"},
+    {"action": "type", "value": "i"},
+    {"action": "type", "value": "c"},
+    {"action": "type", "value": "k"},
+    {"action": "type", "value": " "},
+    {"action": "type", "value": "b"},
+    {"action": "type", "value": "r"},
+    {"action": "type", "value": "o"},
+    {"action": "type", "value": "w"},
+    {"action": "type", "value": "n"},
+    {"action": "type", "value": " "},
+    {"action": "type", "value": "f"},
+    {"action": "type", "value": "o"},
+    {"action": "type", "value": "x"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "prompt-rapid-typing"}
+  ]
+}

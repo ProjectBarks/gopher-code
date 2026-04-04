@@ -1,0 +1,13 @@
+{
+  "name": "key-page-down",
+  "category": "area-08-keyboard",
+  "tags": ["keyboard", "page-down", "scroll"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "key", "value": "PageDown"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "key-page-down"}
+  ]
+}

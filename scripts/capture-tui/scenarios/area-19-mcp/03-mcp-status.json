@@ -1,0 +1,13 @@
+{
+  "name": "mcp-status",
+  "category": "area-19-mcp",
+  "tags": ["mcp", "status", "indicator"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "snapshot", "value": "mcp-status"}
+  ]
+}

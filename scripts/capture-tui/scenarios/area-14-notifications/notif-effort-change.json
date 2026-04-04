@@ -1,0 +1,16 @@
+{
+  "name": "notif-effort-change",
+  "category": "area-14-notifications",
+  "tags": ["notification", "effort", "change"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "key", "value": "Escape", "note": "Dismiss welcome screen"},
+    {"action": "wait", "value": "1s"},
+    {"action": "type", "value": "/effort high"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "notif-effort-change"}
+  ]
+}

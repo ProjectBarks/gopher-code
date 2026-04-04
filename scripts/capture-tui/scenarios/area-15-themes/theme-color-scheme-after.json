@@ -1,0 +1,13 @@
+{
+  "name": "theme-color-scheme-after",
+  "category": "area-15-themes",
+  "tags": ["theme", "color", "after-welcome"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "key", "value": "Escape", "note": "Dismiss welcome screen"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "theme-color-scheme-after"}
+  ]
+}

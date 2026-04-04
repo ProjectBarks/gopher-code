@@ -1,0 +1,11 @@
+{
+  "name": "status-thinking-indicator",
+  "category": "area-06-status",
+  "tags": ["status", "thinking", "indicator"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "snapshot", "value": "status-thinking-indicator"}
+  ]
+}

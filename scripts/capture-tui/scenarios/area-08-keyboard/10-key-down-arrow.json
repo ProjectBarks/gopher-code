@@ -1,0 +1,13 @@
+{
+  "name": "key-down-arrow",
+  "category": "area-08-keyboard",
+  "tags": ["keyboard", "down-arrow", "navigation"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "key", "value": "Down"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "key-down-arrow"}
+  ]
+}

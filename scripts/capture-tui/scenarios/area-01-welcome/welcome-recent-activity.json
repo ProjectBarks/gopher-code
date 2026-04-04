@@ -1,0 +1,11 @@
+{
+  "name": "welcome-recent-activity",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "recent-activity", "content"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render"},
+    {"action": "snapshot", "value": "01-welcome-recent-activity", "note": "Capture welcome screen to verify Recent activity section is present"}
+  ]
+}

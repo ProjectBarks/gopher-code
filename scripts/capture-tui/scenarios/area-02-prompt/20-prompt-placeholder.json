@@ -1,0 +1,13 @@
+{
+  "name": "prompt-placeholder",
+  "category": "area-02-prompt",
+  "tags": ["prompt", "placeholder", "empty"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "snapshot", "value": "prompt-placeholder"}
+  ]
+}

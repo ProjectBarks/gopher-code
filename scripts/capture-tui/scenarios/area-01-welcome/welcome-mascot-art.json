@@ -1,0 +1,11 @@
+{
+  "name": "welcome-mascot-art",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "mascot", "art", "ascii"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render"},
+    {"action": "snapshot", "value": "01-welcome-mascot", "note": "Capture welcome screen focusing on mascot art area"}
+  ]
+}

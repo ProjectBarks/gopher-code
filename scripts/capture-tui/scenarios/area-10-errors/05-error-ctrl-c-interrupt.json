@@ -1,0 +1,16 @@
+{
+  "name": "error-ctrl-c-interrupt",
+  "category": "area-10-errors",
+  "tags": ["error", "ctrlc", "interrupt"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "explain the theory of relativity in great detail"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "key", "value": "Ctrl+C"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "error-ctrl-c-interrupt"}
+  ]
+}

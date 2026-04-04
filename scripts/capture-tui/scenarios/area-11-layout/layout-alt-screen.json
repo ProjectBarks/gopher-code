@@ -1,0 +1,11 @@
+{
+  "name": "layout-alt-screen",
+  "category": "area-11-layout",
+  "tags": ["layout", "alt-screen", "chrome"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "snapshot", "value": "layout-alt-screen"}
+  ]
+}

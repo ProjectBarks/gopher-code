@@ -1,0 +1,15 @@
+{
+  "name": "perm-dialog-layout",
+  "category": "area-05-permissions",
+  "tags": ["permission", "dialog", "layout", "ui"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude"},
+    {"action": "type", "value": "Run the command: echo layout-test"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "⏺", "timeout": "60s"},
+    {"action": "wait_for", "value": "shortcuts|/buddy", "timeout": "60s"},
+    {"action": "snapshot", "value": "perm-dialog-layout"}
+  ]
+}

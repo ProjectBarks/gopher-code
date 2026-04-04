@@ -1,0 +1,14 @@
+{
+  "name": "tasks-plan-approval",
+  "category": "area-18-tasks",
+  "tags": ["tasks", "plan", "approval"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "/plan"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "2s"},
+    {"action": "snapshot", "value": "tasks-plan-approval", "note": "capture plan mode state"}
+  ]
+}

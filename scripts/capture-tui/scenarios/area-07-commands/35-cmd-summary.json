@@ -1,0 +1,53 @@
+{
+  "name": "cmd-summary",
+  "category": "area-07-commands",
+  "tags": [
+    "commands",
+    "summary"
+  ],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {
+      "action": "wait_for",
+      "value": "Welcome|Claude",
+      "note": "wait for welcome screen"
+    },
+    {
+      "action": "type",
+      "value": "say hi"
+    },
+    {
+      "action": "key",
+      "value": "Enter"
+    },
+    {
+      "action": "wait_for",
+      "value": "⏺",
+      "timeout": "60s",
+      "note": "wait for assistant response prefix"
+    },
+    {
+      "action": "wait_for",
+      "value": "shortcuts|/buddy",
+      "timeout": "60s",
+      "note": "wait for turn complete"
+    },
+    {
+      "action": "type",
+      "value": "/summary"
+    },
+    {
+      "action": "key",
+      "value": "Enter"
+    },
+    {
+      "action": "wait",
+      "value": "2s"
+    },
+    {
+      "action": "snapshot",
+      "value": "cmd-summary"
+    }
+  ]
+}

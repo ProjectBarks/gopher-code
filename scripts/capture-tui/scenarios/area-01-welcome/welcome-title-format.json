@@ -1,0 +1,11 @@
+{
+  "name": "welcome-title-format",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "title", "formatting"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render"},
+    {"action": "snapshot", "value": "01-welcome-title", "note": "Capture welcome screen to verify title line is present and formatted"}
+  ]
+}

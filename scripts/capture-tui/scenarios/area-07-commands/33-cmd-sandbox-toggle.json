@@ -1,0 +1,14 @@
+{
+  "name": "cmd-sandbox-toggle",
+  "category": "area-07-commands",
+  "tags": ["command", "sandbox", "toggle"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "/sandbox-toggle"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "cmd-sandbox-toggle"}
+  ]
+}

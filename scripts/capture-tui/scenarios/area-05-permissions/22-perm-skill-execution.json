@@ -1,0 +1,16 @@
+{
+  "name": "perm-skill-execution",
+  "category": "area-05-permissions",
+  "tags": ["permission", "skill", "execution"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Run a bash command to print the current date using the date command"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "Allow|allow|Bash|bash", "timeout": "30s", "note": "Wait for skill/tool permission"},
+    {"action": "snapshot", "value": "perm-skill-execution"}
+  ]
+}

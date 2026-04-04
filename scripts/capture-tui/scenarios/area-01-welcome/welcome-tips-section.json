@@ -1,0 +1,11 @@
+{
+  "name": "welcome-tips-section",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "tips", "content"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render"},
+    {"action": "snapshot", "value": "01-welcome-tips", "note": "Capture welcome screen to verify Tips section content is present"}
+  ]
+}

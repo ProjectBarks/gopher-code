@@ -1,0 +1,11 @@
+{
+  "name": "status-footer-full",
+  "category": "area-06-status",
+  "tags": ["status", "footer", "full", "layout"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "snapshot", "value": "status-footer-full"}
+  ]
+}

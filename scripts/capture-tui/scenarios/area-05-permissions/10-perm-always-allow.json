@@ -1,0 +1,16 @@
+{
+  "name": "perm-always-allow",
+  "category": "area-05-permissions",
+  "tags": ["permission", "always", "allow", "option"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Run the command: echo always-test"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "Allow|allow|Always|always", "timeout": "30s", "note": "Wait for always-allow option"},
+    {"action": "snapshot", "value": "perm-always-allow"}
+  ]
+}

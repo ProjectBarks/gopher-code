@@ -1,0 +1,45 @@
+{
+  "name": "perm-accept-button",
+  "category": "area-05-permissions",
+  "tags": [
+    "permissions",
+    "accept"
+  ],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {
+      "action": "wait_for",
+      "value": "Welcome|Claude",
+      "note": "Wait for welcome screen"
+    },
+    {
+      "action": "key",
+      "value": "Enter",
+      "note": "Dismiss welcome"
+    },
+    {
+      "action": "wait_for",
+      "value": "❯",
+      "note": "Wait for prompt"
+    },
+    {
+      "action": "type",
+      "value": "Run the command: echo button-test"
+    },
+    {
+      "action": "key",
+      "value": "Enter"
+    },
+    {
+      "action": "wait_for",
+      "value": "⏺|Allow|Deny|allow|deny|Yes|yes",
+      "timeout": "60s",
+      "note": "Wait for accept button to display"
+    },
+    {
+      "action": "snapshot",
+      "value": "perm-accept-button"
+    }
+  ]
+}

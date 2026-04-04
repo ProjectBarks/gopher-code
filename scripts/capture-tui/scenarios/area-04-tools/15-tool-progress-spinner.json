@@ -1,0 +1,56 @@
+{
+  "name": "tool-progress-spinner",
+  "category": "area-04-tools",
+  "tags": [
+    "tools",
+    "spinner",
+    "progress"
+  ],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {
+      "action": "wait_for",
+      "value": "Welcome|Claude",
+      "note": "Wait for welcome screen"
+    },
+    {
+      "action": "key",
+      "value": "Enter",
+      "note": "Dismiss welcome"
+    },
+    {
+      "action": "wait_for",
+      "value": "❯",
+      "note": "Wait for prompt"
+    },
+    {
+      "action": "type",
+      "value": "Run the command: echo hello"
+    },
+    {
+      "action": "key",
+      "value": "Enter"
+    },
+    {
+      "action": "wait_for",
+      "value": "⏺|Allow|Deny|allow|deny|Bash|bash",
+      "timeout": "60s",
+      "note": "Wait for permission dialog"
+    },
+    {
+      "action": "type",
+      "value": "y",
+      "note": "Accept permission"
+    },
+    {
+      "action": "wait",
+      "value": "500ms",
+      "note": "Capture during execution"
+    },
+    {
+      "action": "snapshot",
+      "value": "tool-progress-spinner"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "error-interrupted",
+  "category": "area-10-errors",
+  "tags": ["error", "interrupted", "escape"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "write a very detailed essay about the history of computing"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "key", "value": "Escape"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "error-interrupted"}
+  ]
+}

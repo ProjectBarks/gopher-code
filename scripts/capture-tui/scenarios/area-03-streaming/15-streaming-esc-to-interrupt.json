@@ -1,0 +1,16 @@
+{
+  "name": "streaming-esc-to-interrupt",
+  "category": "area-03-streaming",
+  "tags": ["streaming", "escape", "interrupt", "status"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Write a paragraph about nature"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "500ms", "note": "Wait for status line to show esc hint"},
+    {"action": "snapshot", "value": "streaming-esc-to-interrupt"}
+  ]
+}

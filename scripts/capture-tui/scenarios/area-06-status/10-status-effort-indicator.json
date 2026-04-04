@@ -1,0 +1,14 @@
+{
+  "name": "status-effort-indicator",
+  "category": "area-06-status",
+  "tags": ["status", "effort", "indicator"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "say hi"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "status-effort-indicator"}
+  ]
+}

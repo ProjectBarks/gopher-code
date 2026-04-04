@@ -1,0 +1,16 @@
+{
+  "name": "welcome-dismiss-submit",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "dismiss", "submit", "interaction"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render"},
+    {"action": "snapshot", "value": "01-welcome-before-submit", "note": "Capture welcome screen before typing and submitting"},
+    {"action": "type", "value": "hello", "note": "Type text into the input area"},
+    {"action": "snapshot", "value": "02-welcome-with-text", "note": "Capture welcome screen with typed text"},
+    {"action": "key", "value": "Enter", "note": "Press Enter to submit text and dismiss welcome"},
+    {"action": "wait_for", "value": ">|\\$|❯|hello", "note": "Wait for prompt or submitted text to appear"},
+    {"action": "snapshot", "value": "03-welcome-after-submit", "note": "Capture screen after welcome dismissed by submission"}
+  ]
+}

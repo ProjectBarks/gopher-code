@@ -1,0 +1,17 @@
+{
+  "name": "thinking-spinner-with-effort",
+  "category": "area-09-thinking",
+  "tags": ["thinking", "spinner", "effort", "high"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "/effort high"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "type", "value": "explain quantum computing"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "thinking-spinner-with-effort"}
+  ]
+}

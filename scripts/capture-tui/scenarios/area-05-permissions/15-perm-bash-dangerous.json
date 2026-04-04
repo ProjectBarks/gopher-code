@@ -1,0 +1,16 @@
+{
+  "name": "perm-bash-dangerous",
+  "category": "area-05-permissions",
+  "tags": ["permission", "bash", "dangerous", "rm"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Run the command: rm -rf /tmp/test-nonexistent-xxx"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "Allow|allow|Bash|bash|rm", "timeout": "30s", "note": "Wait for dangerous command permission"},
+    {"action": "snapshot", "value": "perm-bash-dangerous"}
+  ]
+}

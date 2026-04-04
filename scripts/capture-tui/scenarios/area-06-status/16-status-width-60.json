@@ -1,0 +1,11 @@
+{
+  "name": "status-width-60",
+  "category": "area-06-status",
+  "tags": ["status", "width", "layout", "60-cols"],
+  "cols": 60,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "snapshot", "value": "status-width-60"}
+  ]
+}

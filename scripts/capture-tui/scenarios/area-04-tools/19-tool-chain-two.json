@@ -1,0 +1,15 @@
+{
+  "name": "tool-chain-two",
+  "category": "area-04-tools",
+  "tags": ["tool", "chain", "multiple", "two"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude"},
+    {"action": "type", "value": "Read both README.md and go.mod files"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "⏺", "timeout": "60s"},
+    {"action": "wait_for", "value": "shortcuts|/buddy", "timeout": "60s"},
+    {"action": "snapshot", "value": "tool-chain-two"}
+  ]
+}

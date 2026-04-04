@@ -1,0 +1,16 @@
+{
+  "name": "tool-name-formatting",
+  "category": "area-04-tools",
+  "tags": ["tool", "name", "formatting", "display"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Read the README.md file"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "Read", "timeout": "30s", "note": "Wait for tool name to display"},
+    {"action": "snapshot", "value": "tool-name-formatting"}
+  ]
+}

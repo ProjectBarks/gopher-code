@@ -1,0 +1,84 @@
+{
+  "name": "multiturn-clear-restart",
+  "category": "area-20-multiturn",
+  "tags": [
+    "multiturn",
+    "clear",
+    "restart"
+  ],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {
+      "action": "wait_for",
+      "value": "Welcome|Claude",
+      "note": "Wait for welcome screen"
+    },
+    {
+      "action": "key",
+      "value": "Enter",
+      "note": "Dismiss welcome"
+    },
+    {
+      "action": "wait_for",
+      "value": "❯",
+      "note": "Wait for prompt"
+    },
+    {
+      "action": "type",
+      "value": "say hi"
+    },
+    {
+      "action": "key",
+      "value": "Enter"
+    },
+    {
+      "action": "wait_for",
+      "value": "⏺",
+      "timeout": "60s",
+      "note": "wait for assistant response prefix"
+    },
+    {
+      "action": "wait_for",
+      "value": "shortcuts|/buddy",
+      "timeout": "60s",
+      "note": "wait for turn complete"
+    },
+    {
+      "action": "type",
+      "value": "/clear"
+    },
+    {
+      "action": "key",
+      "value": "Enter"
+    },
+    {
+      "action": "wait",
+      "value": "1s"
+    },
+    {
+      "action": "type",
+      "value": "say bye"
+    },
+    {
+      "action": "key",
+      "value": "Enter"
+    },
+    {
+      "action": "wait_for",
+      "value": "⏺",
+      "timeout": "60s",
+      "note": "wait for assistant response prefix"
+    },
+    {
+      "action": "wait_for",
+      "value": "shortcuts|/buddy",
+      "timeout": "60s",
+      "note": "wait for turn complete"
+    },
+    {
+      "action": "snapshot",
+      "value": "multiturn-clear-restart"
+    }
+  ]
+}

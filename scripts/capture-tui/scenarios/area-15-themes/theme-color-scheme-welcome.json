@@ -1,0 +1,11 @@
+{
+  "name": "theme-color-scheme-welcome",
+  "category": "area-15-themes",
+  "tags": ["theme", "color", "welcome"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "snapshot", "value": "theme-color-scheme-welcome"}
+  ]
+}

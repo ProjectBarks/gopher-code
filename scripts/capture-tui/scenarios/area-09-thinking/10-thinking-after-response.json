@@ -1,0 +1,42 @@
+{
+  "name": "thinking-after-response",
+  "category": "area-09-thinking",
+  "tags": [
+    "thinking",
+    "response",
+    "complete"
+  ],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {
+      "action": "wait_for",
+      "value": "Welcome|Claude",
+      "note": "wait for welcome screen"
+    },
+    {
+      "action": "type",
+      "value": "say hello to me"
+    },
+    {
+      "action": "key",
+      "value": "Enter"
+    },
+    {
+      "action": "wait_for",
+      "value": "⏺",
+      "timeout": "60s",
+      "note": "wait for assistant response prefix"
+    },
+    {
+      "action": "wait_for",
+      "value": "shortcuts|/buddy",
+      "timeout": "60s",
+      "note": "wait for turn complete"
+    },
+    {
+      "action": "snapshot",
+      "value": "thinking-after-response"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "tool-permission-reject",
+  "category": "area-04-tools",
+  "tags": ["tool", "permission", "reject"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Run the command: echo test"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "Allow|allow|Bash|bash", "timeout": "30s", "note": "Wait for permission"},
+    {"action": "type", "value": "n", "note": "Reject permission"},
+    {"action": "wait", "value": "2s", "note": "Wait for rejection result"},
+    {"action": "snapshot", "value": "tool-permission-reject"}
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "tasks-after-creation",
+  "category": "area-18-tasks",
+  "tags": ["tasks", "creation", "list"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "create a task to review code"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "❯", "timeout": "30s", "note": "Wait for task creation to complete"},
+    {"action": "type", "value": "/tasks"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "tasks-after-creation"}
+  ]
+}

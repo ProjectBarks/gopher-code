@@ -1,0 +1,11 @@
+{
+  "name": "welcome-default-80x24",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "default-size"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render"},
+    {"action": "snapshot", "value": "01-welcome-default", "note": "Capture full welcome screen at standard 80x24"}
+  ]
+}

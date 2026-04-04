@@ -1,0 +1,17 @@
+{
+  "name": "error-empty-submit",
+  "category": "area-10-errors",
+  "tags": ["error", "empty", "submit", "enter"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "300ms"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "300ms"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "error-empty-submit"}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "layout-responsive-60x20",
+  "category": "area-11-layout",
+  "tags": ["layout", "responsive", "60x20"],
+  "cols": 60,
+  "rows": 20,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "snapshot", "value": "layout-responsive-60x20"}
+  ]
+}

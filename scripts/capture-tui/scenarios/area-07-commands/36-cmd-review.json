@@ -1,0 +1,14 @@
+{
+  "name": "cmd-review",
+  "category": "area-07-commands",
+  "tags": ["command", "review"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "/review"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "cmd-review"}
+  ]
+}

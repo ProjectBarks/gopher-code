@@ -1,0 +1,11 @@
+{
+  "name": "welcome-wide-120x30",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "wide", "responsive"],
+  "cols": 120,
+  "rows": 30,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render at wide size"},
+    {"action": "snapshot", "value": "01-welcome-wide", "note": "Capture welcome screen at wide 120x30 terminal"}
+  ]
+}

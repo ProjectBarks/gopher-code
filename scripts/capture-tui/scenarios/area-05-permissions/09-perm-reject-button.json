@@ -1,0 +1,16 @@
+{
+  "name": "perm-reject-button",
+  "category": "area-05-permissions",
+  "tags": ["permission", "reject", "button", "ui"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Run the command: echo reject-test"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "Allow|allow|No|Deny|deny", "timeout": "30s", "note": "Wait for reject button to display"},
+    {"action": "snapshot", "value": "perm-reject-button"}
+  ]
+}

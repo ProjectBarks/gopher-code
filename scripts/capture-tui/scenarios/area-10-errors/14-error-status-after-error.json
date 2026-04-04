@@ -1,0 +1,14 @@
+{
+  "name": "error-status-after-error",
+  "category": "area-10-errors",
+  "tags": ["error", "status", "footer"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "/xyznotreal"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "error-status-after-error"}
+  ]
+}

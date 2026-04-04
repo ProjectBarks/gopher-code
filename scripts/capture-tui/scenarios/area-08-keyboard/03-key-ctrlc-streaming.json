@@ -1,0 +1,16 @@
+{
+  "name": "key-ctrlc-streaming",
+  "category": "area-08-keyboard",
+  "tags": ["keyboard", "ctrlc", "streaming", "interrupt"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "tell me a long story about mountains"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "key", "value": "Ctrl+C"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "key-ctrlc-streaming"}
+  ]
+}

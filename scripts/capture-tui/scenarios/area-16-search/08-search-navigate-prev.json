@@ -1,0 +1,22 @@
+{
+  "name": "search-navigate-prev",
+  "category": "area-16-search",
+  "tags": ["search", "navigate", "previous"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "say hello world hello again"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "❯", "timeout": "30s", "note": "Wait for response to complete"},
+    {"action": "key", "value": "Ctrl+F", "note": "Open search dialog"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "type", "value": "hello"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "key", "value": "Up", "note": "Navigate to previous match"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "search-navigate-prev"}
+  ]
+}

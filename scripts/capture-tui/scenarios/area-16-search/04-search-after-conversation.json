@@ -1,0 +1,18 @@
+{
+  "name": "search-after-conversation",
+  "category": "area-16-search",
+  "tags": ["search", "conversation", "context"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "say hello world"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "❯", "timeout": "30s", "note": "Wait for response to complete"},
+    {"action": "key", "value": "Ctrl+F", "note": "Open search dialog after conversation"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "search-after-conversation"}
+  ]
+}

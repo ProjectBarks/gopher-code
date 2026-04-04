@@ -1,0 +1,11 @@
+{
+  "name": "welcome-color-scheme",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "color", "theme", "styling"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render"},
+    {"action": "snapshot", "value": "01-welcome-colors", "note": "Capture welcome screen with cell data for color scheme analysis"}
+  ]
+}

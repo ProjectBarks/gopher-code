@@ -1,0 +1,30 @@
+{
+  "name": "prompt-history-multiple",
+  "category": "area-02-prompt",
+  "tags": ["prompt", "history", "multiple", "navigation"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "query one"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "❯", "timeout": "30s", "note": "Wait for first response"},
+    {"action": "type", "value": "query two"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "❯", "timeout": "30s", "note": "Wait for second response"},
+    {"action": "type", "value": "query three"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "❯", "timeout": "30s", "note": "Wait for third response"},
+    {"action": "key", "value": "Up", "note": "Go back one"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "prompt-history-up-1"},
+    {"action": "key", "value": "Up", "note": "Go back two"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "prompt-history-up-2"},
+    {"action": "key", "value": "Up", "note": "Go back three"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "prompt-history-up-3"}
+  ]
+}

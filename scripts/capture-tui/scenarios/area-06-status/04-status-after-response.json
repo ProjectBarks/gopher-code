@@ -1,0 +1,15 @@
+{
+  "name": "status-after-response",
+  "category": "area-06-status",
+  "tags": ["status", "response", "idle"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "say ok"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "ok", "note": "wait for response"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "status-after-response"}
+  ]
+}

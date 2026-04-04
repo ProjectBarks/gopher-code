@@ -1,0 +1,16 @@
+{
+  "name": "streaming-status-during",
+  "category": "area-03-streaming",
+  "tags": ["streaming", "status", "during", "interrupt"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Explain what a computer is in detail"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "500ms", "note": "Wait for status line to show during streaming"},
+    {"action": "snapshot", "value": "streaming-status-during"}
+  ]
+}

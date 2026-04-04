@@ -1,0 +1,1 @@
+{"name":"theme-picker","category":"area-15-themes","tags":["theme","picker"],"cols":80,"rows":24,"steps":[{"action":"wait_for","value":"Welcome|Claude"},{"action":"type","value":"a"},{"action":"wait_for","value":"❯"},{"action":"type","value":"/theme"},{"action":"key","value":"Enter"},{"action":"wait","value":"1s"},{"action":"snapshot","value":"01-theme-picker"}]}

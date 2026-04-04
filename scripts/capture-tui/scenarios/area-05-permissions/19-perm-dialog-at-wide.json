@@ -1,0 +1,16 @@
+{
+  "name": "perm-dialog-at-wide",
+  "category": "area-05-permissions",
+  "tags": ["permission", "dialog", "wide", "layout"],
+  "cols": 120,
+  "rows": 30,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Run the command: echo wide-test"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "Allow|allow|Bash|bash", "timeout": "30s", "note": "Wait for permission dialog at wide width"},
+    {"action": "snapshot", "value": "perm-dialog-at-wide"}
+  ]
+}

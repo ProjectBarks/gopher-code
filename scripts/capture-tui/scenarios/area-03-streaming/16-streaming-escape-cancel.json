@@ -1,0 +1,18 @@
+{
+  "name": "streaming-escape-cancel",
+  "category": "area-03-streaming",
+  "tags": ["streaming", "escape", "cancel", "interrupt"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Write a very long essay about the history of computers, at least 10 paragraphs"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "2s", "note": "Let streaming start"},
+    {"action": "key", "value": "Escape", "note": "Cancel the streaming"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "streaming-escape-cancel"}
+  ]
+}

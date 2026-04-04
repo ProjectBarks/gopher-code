@@ -1,0 +1,16 @@
+{
+  "name": "status-ctrlc-during-stream",
+  "category": "area-06-status",
+  "tags": ["status", "ctrlc", "streaming", "interrupt"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "tell me a long story about space exploration"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "key", "value": "Ctrl+C"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "status-ctrlc-during-stream"}
+  ]
+}

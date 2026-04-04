@@ -1,0 +1,18 @@
+{
+  "name": "error-permission-denied",
+  "category": "area-10-errors",
+  "tags": ["error", "permission", "denied", "reject"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "run rm -rf /"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "5s"},
+    {"action": "snapshot", "value": "error-permission-prompt"},
+    {"action": "type", "value": "n"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "error-permission-denied"}
+  ]
+}

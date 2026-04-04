@@ -1,0 +1,18 @@
+{
+  "name": "perm-reject-n",
+  "category": "area-05-permissions",
+  "tags": ["permission", "reject", "no"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Run the command: echo hi"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "Allow|allow|Bash|bash", "timeout": "30s", "note": "Wait for permission dialog"},
+    {"action": "type", "value": "n", "note": "Reject with n"},
+    {"action": "wait", "value": "2s", "note": "Wait for rejection result"},
+    {"action": "snapshot", "value": "perm-reject-n"}
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "name": "error-api-response",
+  "category": "area-10-errors",
+  "tags": [
+    "errors"
+  ],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {
+      "action": "wait_for",
+      "value": "Welcome|Claude",
+      "note": "wait for welcome screen"
+    },
+    {
+      "action": "type",
+      "value": "say hello"
+    },
+    {
+      "action": "key",
+      "value": "Enter"
+    },
+    {
+      "action": "wait_for",
+      "value": "⏺",
+      "timeout": "60s",
+      "note": "wait for assistant response prefix"
+    },
+    {
+      "action": "wait_for",
+      "value": "shortcuts|/buddy",
+      "timeout": "60s",
+      "note": "wait for turn complete"
+    },
+    {
+      "action": "snapshot",
+      "value": "error-api-response"
+    }
+  ]
+}

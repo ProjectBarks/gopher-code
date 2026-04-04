@@ -1,0 +1,1 @@
+{"name":"theme-default-dark","category":"area-15-themes","tags":["theme","dark","default"],"cols":80,"rows":24,"steps":[{"action":"wait_for","value":"Welcome|Claude","note":"Wait for startup"},{"action":"snapshot","value":"01-theme-default-dark","note":"Capture default dark theme"}]}

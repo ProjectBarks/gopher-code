@@ -1,0 +1,15 @@
+{
+  "name": "key-ctrlc-double",
+  "category": "area-08-keyboard",
+  "tags": ["keyboard", "ctrlc", "double", "exit"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "key", "value": "Ctrl+C"},
+    {"action": "wait", "value": "300ms"},
+    {"action": "key", "value": "Ctrl+C"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "key-ctrlc-double"}
+  ]
+}
