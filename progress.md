@@ -226,7 +226,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B22 | TestParity_ClearConversationFullReset | conversation empty, session.Messages len=0 (not nil), TurnCount=0, nil session safe, post-clear submit works, 1 message after | ✅ pass |
 | B23 | TestParity_CommandResultRouting | 6 subtests: QuitMsg→quit, ShowHelpMsg adds msg, Error+Output+both+empty CommandResult paths | ✅ pass |
 | B24 | TestParity_FocusModalPushPop | push blurs child/focuses modal, ModalActive tracking, nested push/pop, restoration to child, empty-pop no-op | ✅ pass |
-### Next B25: FocusManager Route() message dispatch
+| B25 | TestParity_FocusManagerRoute | empty→nil, routes to focused child only, cmd returned from child, modal receives when active, Next() redirects | ✅ pass |
+### Next B26: Theme color palette structural tests
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)

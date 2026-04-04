@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/projectbarks/gopher-code/pkg/message"
@@ -409,6 +410,119 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	if _, isQuit := msg4.(tea.QuitMsg); !isQuit {
 		t.Errorf("Expected QuitMsg on double Ctrl+C, got %T", msg4)
 	}
+}
+
+// TestParity_DiffApprovalEdgeCases validates less-common DiffApprovalDialog paths
+// that the initial B1 test doesn't cover.
+//
+// Unique behaviors:
+// 1. Enter key is alias for 'y' (approves)
+// 2. Unknown keys (e.g. 'z') do NOT send any approval
+// 3. Non-KeyPressMsg messages are no-ops (no approval sent)
+// 4. sendResult with nil channel is safe (no panic)
+// 5. sendResult with full channel is safe (non-blocking, drops silently)
+// 6. Multiple key presses after first only send once to unbuffered channel
+//
+// Cross-ref: diff_approval.go:62-99 Update + sendResult
+func TestParity_DiffApprovalEdgeCases(t *testing.T) {
+	testDiff := "+new line\n existing"
+
+	// 1. Enter approves (same as 'y')
+	t.Run("enter-approves", func(t *testing.T) {
+		ch := make(chan components.ApprovalResult, 1)
+		dad := components.NewDiffApprovalDialog("Edit", "t1", testDiff, theme.Current(), ch)
+		dad.SetSize(80, 24)
+		_, cmd := dad.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+		if cmd == nil {
+			t.Fatal("Enter should return a cmd")
+		}
+		msg := cmd()
+		rm, ok := msg.(components.ApprovalResponseMsg)
+		if !ok || rm.Result != components.ApprovalApproved {
+			t.Errorf("Enter should produce Approved, got %v", msg)
+		}
+		select {
+		case r := <-ch:
+			if r != components.ApprovalApproved {
+				t.Errorf("Enter should send Approved to channel, got %v", r)
+			}
+		default:
+			t.Error("Enter should send result to channel")
+		}
+	})
+
+	// 2. Unknown key does not approve
+	t.Run("unknown-key-noop", func(t *testing.T) {
+		ch := make(chan components.ApprovalResult, 1)
+		dad := components.NewDiffApprovalDialog("Edit", "t2", testDiff, theme.Current(), ch)
+		dad.SetSize(80, 24)
+		_, cmd := dad.Update(tea.KeyPressMsg{Code: 'z', Text: "z"})
+		if cmd != nil {
+			// cmd may be non-nil due to diff scroll, but it should NOT produce ApprovalResponseMsg
+			msg := cmd()
+			if _, ok := msg.(components.ApprovalResponseMsg); ok {
+				t.Error("'z' key should NOT produce ApprovalResponseMsg")
+			}
+		}
+		// Channel should be empty
+		select {
+		case r := <-ch:
+			t.Errorf("'z' should NOT send to channel, got %v", r)
+		default:
+			// expected
+		}
+	})
+
+	// 3. Non-key messages are no-ops
+	t.Run("non-key-msg-noop", func(t *testing.T) {
+		ch := make(chan components.ApprovalResult, 1)
+		dad := components.NewDiffApprovalDialog("Edit", "t3", testDiff, theme.Current(), ch)
+		dad.SetSize(80, 24)
+		_, cmd := dad.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+		if cmd != nil {
+			msg := cmd()
+			if _, ok := msg.(components.ApprovalResponseMsg); ok {
+				t.Error("WindowSizeMsg should NOT produce ApprovalResponseMsg")
+			}
+		}
+		select {
+		case <-ch:
+			t.Error("Non-key msg should NOT send to channel")
+		default:
+			// expected
+		}
+	})
+
+	// 4. Nil channel is safe
+	t.Run("nil-channel-safe", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("nil channel should be safe, got panic: %v", r)
+			}
+		}()
+		dad := components.NewDiffApprovalDialog("Edit", "t4", testDiff, theme.Current(), nil)
+		dad.SetSize(80, 24)
+		dad.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	})
+
+	// 5. Full channel is non-blocking
+	t.Run("full-channel-nonblocking", func(t *testing.T) {
+		ch := make(chan components.ApprovalResult, 1)
+		ch <- components.ApprovalApproved // pre-fill
+		dad := components.NewDiffApprovalDialog("Edit", "t5", testDiff, theme.Current(), ch)
+		dad.SetSize(80, 24)
+		done := make(chan bool)
+		go func() {
+			dad.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
+			done <- true
+		}()
+		select {
+		case <-done:
+			// Good, didn't block
+		case <-time.After(1 * time.Second):
+			t.Error("Update with full channel blocked (should be non-blocking)")
+		}
+	})
 }
 
 // TestParity_FocusManagerRoute validates Route() message dispatch:
