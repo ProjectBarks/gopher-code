@@ -222,7 +222,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B18 | TestParity_QueryDoneErrorPath | 3 subtests: success-with-text (1 msg+state reset), error-with-text (2 msgs), error-no-text (1 msg) | ✅ pass |
 | B19 | TestParity_HandleResizeLayoutBudget | width/height storage, view fits terminal height (incl 50-msg stress), small/narrow terminals don't crash, idempotent resize | ✅ pass |
 | B20 | TestParity_HeaderSegmentComposition | separator counting per segment count, empty field removes segment, getters return state, width padding exact | ✅ pass |
-### Next B21: abbreviatePath / abbreviateCWD helper edge cases
+| B21 | TestParity_InputEnterSubmitFlow | SubmitMsg with trimmed text, buffer cleared, empty Enter no-op, whitespace-only Enter no-op (buffer preserved) | ✅ pass |
+### Next B22: Slash command full pipeline (/clear batch through handler)
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
