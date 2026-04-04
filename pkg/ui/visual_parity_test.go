@@ -409,6 +409,86 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_QueryEventDispatchAllTypes validates AppModel.handleQueryEvent
+// correctly dispatches all 5 QueryEvent types and accumulates usage.
+//
+// Unique behaviors (QueryEventFlow only covers TextDelta/Usage/TurnComplete with 1 usage):
+// 1. QEventToolUseStart adds tool to activeToolCalls + sets ModeToolRunning
+// 2. QEventToolResult removes from activeToolCalls
+// 3. QEventUsage accumulates InputTokens across multiple events (50+30=80)
+// 4. QEventUsage accumulates OutputTokens independently (25+15=40)
+// 5. Unknown event type is a no-op (no panic, no state change)
+// 6. Multiple event types in sequence produce correct final state
+//
+// Cross-ref: app.go:474-503 handleQueryEvent dispatch
+func TestParity_QueryEventDispatchAllTypes(t *testing.T) {
+	config := session.DefaultConfig()
+	sess := session.New(config, "/tmp")
+	app := NewAppModel(sess, nil)
+	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// Need streaming state for tool events to make sense
+	app.Update(components.SubmitMsg{Text: "test"})
+
+	// 1. QEventToolUseStart dispatches to handleToolUseStart
+	app.Update(QueryEventMsg{Event: query.QueryEvent{
+		Type: query.QEventToolUseStart, ToolUseID: "t1", ToolName: "Bash",
+	}})
+	if _, ok := app.activeToolCalls["t1"]; !ok {
+		t.Error("QEventToolUseStart should add to activeToolCalls")
+	}
+	if app.mode != ModeToolRunning {
+		t.Errorf("QEventToolUseStart should set ModeToolRunning, got %v", app.mode)
+	}
+
+	// 2. QEventToolResult dispatches to handleToolResult
+	app.Update(QueryEventMsg{Event: query.QueryEvent{
+		Type: query.QEventToolResult, ToolUseID: "t1", Content: "ok", IsError: false,
+	}})
+	if _, ok := app.activeToolCalls["t1"]; ok {
+		t.Error("QEventToolResult should remove from activeToolCalls")
+	}
+
+	// 3-4. QEventUsage accumulates both token types across multiple events
+	app.Update(QueryEventMsg{Event: query.QueryEvent{
+		Type: query.QEventUsage, InputTokens: 50, OutputTokens: 25,
+	}})
+	if sess.TotalInputTokens != 50 {
+		t.Errorf("First usage: expected 50 input tokens, got %d", sess.TotalInputTokens)
+	}
+	if sess.TotalOutputTokens != 25 {
+		t.Errorf("First usage: expected 25 output tokens, got %d", sess.TotalOutputTokens)
+	}
+
+	// Second usage event should accumulate
+	app.Update(QueryEventMsg{Event: query.QueryEvent{
+		Type: query.QEventUsage, InputTokens: 30, OutputTokens: 15,
+	}})
+	if sess.TotalInputTokens != 80 {
+		t.Errorf("Second usage: expected 80 input tokens (50+30), got %d", sess.TotalInputTokens)
+	}
+	if sess.TotalOutputTokens != 40 {
+		t.Errorf("Second usage: expected 40 output tokens (25+15), got %d", sess.TotalOutputTokens)
+	}
+
+	// 5. Unknown event type (not in switch) is no-op
+	stateBefore := app.mode
+	tokensBefore := sess.TotalInputTokens
+	app.Update(QueryEventMsg{Event: query.QueryEvent{Type: query.QueryEventType("unknown")}})
+	if app.mode != stateBefore {
+		t.Error("Unknown event type should not change mode")
+	}
+	if sess.TotalInputTokens != tokensBefore {
+		t.Error("Unknown event type should not change tokens")
+	}
+
+	// 6. TurnComplete finalizes the turn
+	app.Update(QueryEventMsg{Event: query.QueryEvent{Type: query.QEventTurnComplete}})
+	if app.mode != ModeIdle {
+		t.Errorf("After TurnComplete, expected ModeIdle, got %v", app.mode)
+	}
+}
+
 // TestParity_DispatcherParsingAndErrorPaths validates the slash command
 // dispatcher's parsing logic and error handling.
 //
