@@ -221,7 +221,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B17 | TestParity_TextDeltaBufferAccumulation | exact concatenation, length matches sum, empty delta still sets mode, ToolRunning→Streaming transition, TurnComplete resets buffer | ✅ pass |
 | B18 | TestParity_QueryDoneErrorPath | 3 subtests: success-with-text (1 msg+state reset), error-with-text (2 msgs), error-no-text (1 msg) | ✅ pass |
 | B19 | TestParity_HandleResizeLayoutBudget | width/height storage, view fits terminal height (incl 50-msg stress), small/narrow terminals don't crash, idempotent resize | ✅ pass |
-### Next B20: Header SetModel + SetCWD + title line structure
+| B20 | TestParity_HeaderSegmentComposition | separator counting per segment count, empty field removes segment, getters return state, width padding exact | ✅ pass |
+### Next B21: abbreviatePath / abbreviateCWD helper edge cases
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
