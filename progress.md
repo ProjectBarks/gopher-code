@@ -217,7 +217,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B13 | TestParity_QueryEventDispatchAllTypes | ToolUseStart→activeToolCalls+ModeToolRunning, ToolResult removes, Usage accumulates both token counts, unknown type no-op, TurnComplete→idle | ✅ pass |
 | B14 | TestParity_StatusLineHintLifecycle | idle default, CtrlCHintMsg switches text, streaming/tool overrides hint, mode→idle clears hint, defensive hint reset | ✅ pass |
 | B15 | TestParity_WelcomeResponsiveSizing | width = terminal-2, minimum 20 clamp, rendered width matches, growth expands box, idempotent SetSize | ✅ pass |
-### Next B16: Header SetModel/SetCWD component OR MessageBubble user message row styling
+| B16 | TestParity_UserMessageWrappingAndPrefix | short→1line, first-line ❯ prefix, long text wraps 2+, continuation without ❯, unknown block types dropped | ✅ pass |
+### Next B17: handleTextDelta streaming buffer accumulation OR SubmitMsg whitespace handling
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)

@@ -409,6 +409,88 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_TextDeltaBufferAccumulation validates handleTextDelta
+// buffer behavior: accumulation, mode transition, exact concatenation.
+//
+// Unique behaviors (no existing test validates streamingText buffer directly):
+// 1. First delta sets mode ModeIdle → ModeStreaming
+// 2. Delta FROM ModeToolRunning also sets back to ModeStreaming
+// 3. streamingText accumulates text exactly (no separators injected)
+// 4. streamingText.Len() matches sum of all delta lengths
+// 5. Empty delta still sets mode to ModeStreaming (side-effect)
+// 6. Sequential deltas produce exact concatenation "HelloWorld" not "Hello World"
+//
+// Cross-ref: app.go:506-522 handleTextDelta
+func TestParity_TextDeltaBufferAccumulation(t *testing.T) {
+	config := session.DefaultConfig()
+	sess := session.New(config, "/tmp")
+	app := NewAppModel(sess, nil)
+	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// 1. Initial state
+	if app.mode != ModeIdle {
+		t.Fatalf("Initial mode should be Idle, got %v", app.mode)
+	}
+
+	// 2. First delta: Idle → Streaming
+	app.Update(TextDeltaMsg{Text: "Hello"})
+	if app.mode != ModeStreaming {
+		t.Errorf("After delta, expected ModeStreaming, got %v", app.mode)
+	}
+	if app.streamingText.String() != "Hello" {
+		t.Errorf("Buffer should be 'Hello', got %q", app.streamingText.String())
+	}
+
+	// 3. Multiple deltas accumulate exactly (no spaces/separators added)
+	app.Update(TextDeltaMsg{Text: "World"})
+	if app.streamingText.String() != "HelloWorld" {
+		t.Errorf("Expected exact concatenation 'HelloWorld', got %q", app.streamingText.String())
+	}
+
+	// 4. Length matches sum of delta lengths
+	app.Update(TextDeltaMsg{Text: "!"})
+	if app.streamingText.Len() != len("HelloWorld!") {
+		t.Errorf("Buffer length should be %d, got %d", len("HelloWorld!"), app.streamingText.Len())
+	}
+	if app.streamingText.String() != "HelloWorld!" {
+		t.Errorf("Expected 'HelloWorld!', got %q", app.streamingText.String())
+	}
+
+	// 5. Empty delta still sets mode to Streaming
+	// Force mode to something else first
+	app.mode = ModeToolRunning
+	app.Update(TextDeltaMsg{Text: ""})
+	if app.mode != ModeStreaming {
+		t.Errorf("Empty delta should set ModeStreaming, got %v", app.mode)
+	}
+	// Buffer should NOT have grown from empty delta
+	if app.streamingText.String() != "HelloWorld!" {
+		t.Errorf("Empty delta should not modify buffer, got %q", app.streamingText.String())
+	}
+
+	// 6. Delta transitions mode back from ToolRunning to Streaming
+	app.mode = ModeToolRunning
+	app.Update(TextDeltaMsg{Text: " continued"})
+	if app.mode != ModeStreaming {
+		t.Errorf("Delta from ToolRunning should return to Streaming, got %v", app.mode)
+	}
+	if app.streamingText.String() != "HelloWorld! continued" {
+		t.Errorf("Expected 'HelloWorld! continued', got %q", app.streamingText.String())
+	}
+
+	// 7. After TurnComplete, buffer resets
+	app.Update(TurnCompleteMsg{})
+	if app.streamingText.Len() != 0 {
+		t.Errorf("TurnComplete should reset buffer, got len=%d", app.streamingText.Len())
+	}
+
+	// 8. New delta after TurnComplete starts fresh
+	app.Update(TextDeltaMsg{Text: "Fresh"})
+	if app.streamingText.String() != "Fresh" {
+		t.Errorf("New delta after turn should start fresh, got %q", app.streamingText.String())
+	}
+}
+
 // TestParity_UserMessageWrappingAndPrefix validates user message rendering:
 // text wrapping at width-4, first-line ❯ prefix vs continuation 2-space prefix.
 //
