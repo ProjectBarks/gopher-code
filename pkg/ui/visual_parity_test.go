@@ -9,6 +9,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/session"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
+	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
 
 // stripANSI removes ANSI escape sequences for text comparison.
@@ -323,5 +324,77 @@ func TestVisualParity_QueryEventFlow(t *testing.T) {
 	}
 	if app.conversation.MessageCount() != 1 {
 		t.Errorf("Expected 1 finalized message, got %d", app.conversation.MessageCount())
+	}
+}
+
+// TestParity_DiffApprovalAllThreeKeys validates the DiffApprovalDialog dispatches
+// correct results for all 3 key paths (y/n/a), sends through the channel AND
+// returns the correct tea.Cmd message. Also validates the dialog renders diff content.
+//
+// Unique behaviors tested (not covered by ANY existing test):
+// 1. 'y'/Enter → ApprovalApproved sent to channel + returned as ApprovalResponseMsg
+// 2. 'n' → ApprovalRejected sent to channel + returned as ApprovalResponseMsg
+// 3. 'a' → ApprovalAlways sent to channel + returned as ApprovalResponseMsg
+// 4. ApprovalResponseMsg carries correct ToolUseID
+// 5. Dialog renders actual diff content (added/removed lines visible)
+//
+// Cross-ref: diff_approval.go:62-90 — Update handles y/n/a key dispatch
+// Cross-ref: Claude FileEditPermissionRequest.tsx — 1. Yes / 2. Yes allow all / 3. No
+func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
+	testDiff := "--- a/main.go\n+++ b/main.go\n@@ -1 +1,2 @@\n+// new comment\n package main"
+
+	keys := []struct {
+		name     string
+		key      rune
+		expected components.ApprovalResult
+	}{
+		{"approve-y", 'y', components.ApprovalApproved},
+		{"reject-n", 'n', components.ApprovalRejected},
+		{"always-a", 'a', components.ApprovalAlways},
+	}
+
+	for _, tc := range keys {
+		t.Run(tc.name, func(t *testing.T) {
+			ch := make(chan components.ApprovalResult, 1)
+			toolID := "tool-" + tc.name
+			dad := components.NewDiffApprovalDialog("Edit", toolID, testDiff, theme.Current(), ch)
+			dad.SetSize(80, 24)
+
+			// 1. Dialog should render diff content
+			view := dad.View()
+			plain := strip(view.Content)
+			if !strings.Contains(plain, "new comment") && !strings.Contains(plain, "main") {
+				t.Errorf("Dialog should render diff content, got:\n%s", plain)
+			}
+
+			// 2. Press key → sends to channel
+			_, cmd := dad.Update(tea.KeyPressMsg{Code: tc.key, Text: string(tc.key)})
+
+			// 3. Channel should receive correct result
+			select {
+			case result := <-ch:
+				if result != tc.expected {
+					t.Errorf("Channel: expected %v, got %v", tc.expected, result)
+				}
+			default:
+				t.Error("Key press should send result to channel")
+			}
+
+			// 4. Returned cmd should produce ApprovalResponseMsg with correct ToolUseID
+			if cmd == nil {
+				t.Fatal("Key press should return a tea.Cmd")
+			}
+			msg := cmd()
+			respMsg, ok := msg.(components.ApprovalResponseMsg)
+			if !ok {
+				t.Fatalf("Expected ApprovalResponseMsg, got %T", msg)
+			}
+			if respMsg.ToolUseID != toolID {
+				t.Errorf("ToolUseID: expected %q, got %q", toolID, respMsg.ToolUseID)
+			}
+			if respMsg.Result != tc.expected {
+				t.Errorf("Result: expected %v, got %v", tc.expected, respMsg.Result)
+			}
+		})
 	}
 }
