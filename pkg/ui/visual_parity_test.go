@@ -407,6 +407,78 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_ToolUseStateMachine validates the full tool use lifecycle on AppModel:
+// submit → tool start → tool result → text → turn complete.
+//
+// Unique behaviors (not covered by QueryEventFlow which only tests text deltas):
+// 1. ToolUseStartMsg sets mode to ModeToolRunning
+// 2. ToolUseStartMsg tracks tool in activeToolCalls[toolUseID]
+// 3. ToolResultMsg removes tool from activeToolCalls
+// 4. Streaming text accumulates tool indicators inline
+// 5. TurnCompleteMsg finalizes: creates conversation message, resets streamingText,
+//    clears activeToolCalls, stops spinner, returns to ModeIdle
+// 6. Multiple sequential tools tracked independently
+//
+// Cross-ref: app.go:504-560 — handleToolUseStart/handleToolResult/handleTurnComplete
+func TestParity_ToolUseStateMachine(t *testing.T) {
+	config := session.DefaultConfig()
+	sess := session.New(config, "/tmp")
+	app := NewAppModel(sess, nil)
+	app.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+
+	app.Update(components.SubmitMsg{Text: "read two files"})
+
+	// 1. First tool starts → ModeToolRunning, tracked in map
+	app.Update(ToolUseStartMsg{ToolUseID: "t1", ToolName: "Read"})
+	if app.mode != ModeToolRunning {
+		t.Errorf("After ToolUseStart, expected ModeToolRunning, got %v", app.mode)
+	}
+	if _, ok := app.activeToolCalls["t1"]; !ok {
+		t.Error("activeToolCalls should track t1 after ToolUseStart")
+	}
+
+	// 2. First tool result → removed from map
+	app.Update(ToolResultMsg{ToolUseID: "t1", Content: "file1 content", IsError: false})
+	if _, ok := app.activeToolCalls["t1"]; ok {
+		t.Error("activeToolCalls should remove t1 after ToolResult")
+	}
+
+	// 3. Second tool starts → both can coexist briefly
+	app.Update(ToolUseStartMsg{ToolUseID: "t2", ToolName: "Read"})
+	if _, ok := app.activeToolCalls["t2"]; !ok {
+		t.Error("activeToolCalls should track t2")
+	}
+	app.Update(ToolResultMsg{ToolUseID: "t2", Content: "file2 content", IsError: false})
+
+	// 4. Streaming text should have accumulated tool indicators
+	streamText := app.streamingText.String()
+	if streamText == "" {
+		t.Error("streamingText should have accumulated tool indicators")
+	}
+
+	// 5. Text delta arrives, then turn completes
+	app.Update(TextDeltaMsg{Text: "Here are both files."})
+	app.Update(TurnCompleteMsg{})
+
+	// 6. After TurnComplete: all state reset
+	if app.mode != ModeIdle {
+		t.Errorf("After TurnComplete, expected ModeIdle, got %v", app.mode)
+	}
+	if app.streamingText.Len() != 0 {
+		t.Errorf("streamingText should be empty after TurnComplete, len=%d", app.streamingText.Len())
+	}
+	if len(app.activeToolCalls) != 0 {
+		t.Errorf("activeToolCalls should be empty after TurnComplete, len=%d", len(app.activeToolCalls))
+	}
+	if app.spinner.IsActive() {
+		t.Error("spinner should be stopped after TurnComplete")
+	}
+	// Conversation should have the finalized message
+	if app.conversation.MessageCount() < 2 {
+		t.Errorf("Expected 2+ messages (user+assistant), got %d", app.conversation.MessageCount())
+	}
+}
+
 // TestParity_DiffApprovalAllThreeKeys validates the DiffApprovalDialog dispatches
 // correct results for all 3 key paths (y/n/a), sends through the channel AND
 // returns the correct tea.Cmd message. Also validates the dialog renders diff content.

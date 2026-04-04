@@ -203,7 +203,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | # | Test | Behaviors validated | Status |
 |---|------|-------------------|--------|
 | B1 | TestParity_DiffApprovalAllThreeKeys | y→Approved, n→Rejected, a→Always (channel+cmd), ToolUseID propagation, diff content rendered | ✅ pass |
-### Next B2: /model switch pipeline or Ctrl+C-clears-input flow
+| B2 | TestParity_CtrlCFourStateMachine | text→clear, empty→hint, hint-reset-on-key, double-empty→quit, HasText check | ✅ pass |
+### Next B3: /model switch pipeline, tool-use-start/result flow, or responsive welcome sizing
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
