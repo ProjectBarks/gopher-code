@@ -412,6 +412,93 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_ToolEventStreamingBuffer validates the streamingText buffer
+// changes produced by ToolUseStart and ToolResult events.
+//
+// Unique behaviors (no existing test checks buffer content after tool events):
+// 1. ToolUseStart appends "\n⏺ {ToolName}" to streamingText
+// 2. ToolResult success appends "\n  ✓ {toolName}"
+// 3. ToolResult error appends "\n  ✗ {toolName} error"
+// 4. ToolResult with EMPTY content skips the ✓ indicator
+// 5. ToolResult with unknown toolID uses empty toolName string
+// 6. activeToolCalls map lookup provides toolName to the result indicator
+//
+// Cross-ref: app.go:524-567 handleToolUseStart/handleToolResult
+func TestParity_ToolEventStreamingBuffer(t *testing.T) {
+	config := session.DefaultConfig()
+	sess := session.New(config, "/tmp")
+	app := NewAppModel(sess, nil)
+	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// Enter streaming state
+	app.Update(components.SubmitMsg{Text: "run tools"})
+	bufStart := app.streamingText.String()
+
+	// 1. ToolUseStart appends ⏺ {ToolName}
+	app.Update(ToolUseStartMsg{ToolUseID: "t1", ToolName: "Bash"})
+	buf1 := app.streamingText.String()
+	if !strings.Contains(buf1, "⏺ Bash") {
+		t.Errorf("ToolUseStart should add '⏺ Bash' to buffer, got %q", buf1[len(bufStart):])
+	}
+	grown := len(buf1) > len(bufStart)
+	if !grown {
+		t.Error("streamingText should grow after ToolUseStart")
+	}
+
+	// 2. ToolResult success appends ✓ {toolName}
+	app.Update(ToolResultMsg{ToolUseID: "t1", Content: "output", IsError: false})
+	buf2 := app.streamingText.String()
+	if !strings.Contains(buf2, "✓ Bash") {
+		t.Errorf("ToolResult success should add '✓ Bash', got suffix: %q", buf2[len(buf1):])
+	}
+
+	// 3. ToolResult error appends ✗ {toolName} error
+	app.Update(ToolUseStartMsg{ToolUseID: "t2", ToolName: "Read"})
+	buf3 := app.streamingText.String()
+	app.Update(ToolResultMsg{ToolUseID: "t2", Content: "not found", IsError: true})
+	buf4 := app.streamingText.String()
+	if !strings.Contains(buf4, "✗ Read error") {
+		t.Errorf("ToolResult error should add '✗ Read error', got suffix: %q", buf4[len(buf3):])
+	}
+
+	// 4. ToolResult with EMPTY content skips ✓ indicator
+	app.Update(ToolUseStartMsg{ToolUseID: "t3", ToolName: "Grep"})
+	buf5 := app.streamingText.String()
+	// Count ✓ before and after
+	checksBefore := strings.Count(buf5, "✓")
+	app.Update(ToolResultMsg{ToolUseID: "t3", Content: "", IsError: false})
+	buf6 := app.streamingText.String()
+	checksAfter := strings.Count(buf6, "✓")
+	if checksAfter != checksBefore {
+		t.Errorf("Empty content should NOT add ✓, count changed %d→%d", checksBefore, checksAfter)
+	}
+
+	// 5. Unknown toolID (not started) → empty toolName in error indicator
+	// Buffer should get "✗  error" (2 spaces between ✗ and error, name empty)
+	buf7 := app.streamingText.String()
+	app.Update(ToolResultMsg{ToolUseID: "unknown", Content: "x", IsError: true})
+	buf8 := app.streamingText.String()
+	suffix := buf8[len(buf7):]
+	if !strings.Contains(suffix, "✗") || !strings.Contains(suffix, "error") {
+		t.Errorf("Unknown toolID error should still write ✗ and 'error', got %q", suffix)
+	}
+
+	// 6. activeToolCalls correctly maps toolID → toolName for result lookup
+	// Set up a tool, inspect map, fire result, inspect map again
+	app.Update(ToolUseStartMsg{ToolUseID: "t4", ToolName: "Glob"})
+	if app.activeToolCalls["t4"] != "Glob" {
+		t.Errorf("activeToolCalls[t4] should be 'Glob', got %q", app.activeToolCalls["t4"])
+	}
+	app.Update(ToolResultMsg{ToolUseID: "t4", Content: "files.go", IsError: false})
+	if _, exists := app.activeToolCalls["t4"]; exists {
+		t.Error("activeToolCalls[t4] should be deleted after ToolResult")
+	}
+	// Final buffer should have '✓ Glob' (from the result using looked-up name)
+	if !strings.Contains(app.streamingText.String(), "✓ Glob") {
+		t.Error("Result should use looked-up name 'Glob'")
+	}
+}
+
 // TestParity_EffortLevelIconMapping validates that each effort level produces
 // a VISUALLY DIFFERENT glyph in the spinner view.
 //

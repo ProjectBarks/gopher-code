@@ -229,7 +229,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B25 | TestParity_FocusManagerRoute | empty→nil, routes to focused child only, cmd returned from child, modal receives when active, Next() redirects | ✅ pass |
 | B26 | TestParity_DiffApprovalEdgeCases | Enter=y alias, unknown key no-op, non-key msg no-op, nil channel safe, full channel non-blocking | ✅ pass |
 | B27 | TestParity_InputCursorMovementAndDelete | Left/Right bounds, Delete at cursor (not moving), Delete at end no-op, Left at 0 no-op, round-trip cursor, position-aware insertion | ✅ pass |
-### Next B28: EffortLevel icon display (●●●/●●/●)
+| B28 | TestParity_EffortLevelIconMapping | 4 effort→glyph mappings, uniqueness, no-effort default, unknown→empty, stopped shows completion | ✅ pass |
+### Next B29: Spinner Verb/Tip randomization + state isolation
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
