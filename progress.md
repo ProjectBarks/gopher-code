@@ -218,7 +218,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B14 | TestParity_StatusLineHintLifecycle | idle default, CtrlCHintMsg switches text, streaming/tool overrides hint, mode→idle clears hint, defensive hint reset | ✅ pass |
 | B15 | TestParity_WelcomeResponsiveSizing | width = terminal-2, minimum 20 clamp, rendered width matches, growth expands box, idempotent SetSize | ✅ pass |
 | B16 | TestParity_UserMessageWrappingAndPrefix | short→1line, first-line ❯ prefix, long text wraps 2+, continuation without ❯, unknown block types dropped | ✅ pass |
-### Next B17: handleTextDelta streaming buffer accumulation OR SubmitMsg whitespace handling
+| B17 | TestParity_TextDeltaBufferAccumulation | exact concatenation, length matches sum, empty delta still sets mode, ToolRunning→Streaming transition, TurnComplete resets buffer | ✅ pass |
+### Next B18: handleSubmit whitespace-only handling OR handleQueryDone error path
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)

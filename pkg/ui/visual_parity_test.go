@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -407,6 +408,122 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	if _, isQuit := msg4.(tea.QuitMsg); !isQuit {
 		t.Errorf("Expected QuitMsg on double Ctrl+C, got %T", msg4)
 	}
+}
+
+// TestParity_QueryDoneErrorPath validates handleQueryDone's state reset
+// and error-message handling, covering both success and error paths.
+//
+// Unique behaviors (no existing test covers queryDone error path):
+// 1. cancelQuery and queryCtx both reset to nil
+// 2. Spinner stopped (IsActive=false after)
+// 3. Partial streamingText finalized as assistant message before reset
+// 4. streamingText buffer cleared after finalization
+// 5. activeToolCalls map cleared
+// 6. Error case: adds "Error: {msg}" as additional assistant message
+// 7. Success case (err=nil): does NOT add error message
+// 8. Mode always set to ModeIdle
+//
+// Cross-ref: app.go:595-633 handleQueryDone
+func TestParity_QueryDoneErrorPath(t *testing.T) {
+	// Test success path (no error)
+	t.Run("success-with-partial-text", func(t *testing.T) {
+		config := session.DefaultConfig()
+		sess := session.New(config, "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+		// Set up streaming state
+		app.Update(components.SubmitMsg{Text: "test"})
+		app.Update(TextDeltaMsg{Text: "partial response"})
+		app.activeToolCalls["t1"] = "Bash"
+		app.cancelQuery = func() {}
+
+		msgCountBefore := app.conversation.MessageCount()
+
+		// Fire queryDoneMsg with no error
+		app.Update(queryDoneMsg{err: nil})
+
+		// 1-2. cancelQuery/queryCtx reset + spinner stopped
+		if app.cancelQuery != nil {
+			t.Error("cancelQuery should be nil after queryDone")
+		}
+		if app.spinner.IsActive() {
+			t.Error("spinner should be stopped after queryDone")
+		}
+
+		// 3-4. Partial text finalized + buffer cleared
+		if app.streamingText.Len() != 0 {
+			t.Errorf("streamingText should be reset, len=%d", app.streamingText.Len())
+		}
+
+		// 5. activeToolCalls cleared
+		if len(app.activeToolCalls) != 0 {
+			t.Errorf("activeToolCalls should be cleared, got %d", len(app.activeToolCalls))
+		}
+
+		// 7. Success path: 1 new message (finalized partial text), no error message
+		gained := app.conversation.MessageCount() - msgCountBefore
+		if gained != 1 {
+			t.Errorf("Success: expected +1 message (partial finalized), got +%d", gained)
+		}
+
+		// 8. Mode idle
+		if app.mode != ModeIdle {
+			t.Errorf("Mode should be Idle after queryDone, got %v", app.mode)
+		}
+	})
+
+	// Test error path
+	t.Run("error-adds-error-message", func(t *testing.T) {
+		config := session.DefaultConfig()
+		sess := session.New(config, "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+		app.Update(components.SubmitMsg{Text: "test"})
+		app.Update(TextDeltaMsg{Text: "some text"})
+		msgCountBefore := app.conversation.MessageCount()
+
+		// Fire queryDoneMsg WITH error
+		testErr := fmt.Errorf("network timeout")
+		app.Update(queryDoneMsg{err: testErr})
+
+		// 6. Error path: 2 new messages (finalized partial + error message)
+		gained := app.conversation.MessageCount() - msgCountBefore
+		if gained != 2 {
+			t.Errorf("Error: expected +2 messages (partial + error), got +%d", gained)
+		}
+
+		// Error message should contain the error text
+		v := strip(app.View().Content)
+		if !strings.Contains(v, "network timeout") {
+			t.Errorf("Error message should contain error text 'network timeout'.\nGot:\n%s", v)
+		}
+
+		if app.mode != ModeIdle {
+			t.Error("Mode should be Idle even on error")
+		}
+	})
+
+	// Test error with no partial text
+	t.Run("error-no-partial-text", func(t *testing.T) {
+		config := session.DefaultConfig()
+		sess := session.New(config, "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+		app.Update(components.SubmitMsg{Text: "test"})
+		msgCountBefore := app.conversation.MessageCount()
+
+		// queryDoneMsg with error BUT no partial text
+		app.Update(queryDoneMsg{err: fmt.Errorf("failed")})
+
+		// Only 1 new message (the error) since no partial text to finalize
+		gained := app.conversation.MessageCount() - msgCountBefore
+		if gained != 1 {
+			t.Errorf("Error with no partial text: expected +1 message (error only), got +%d", gained)
+		}
+	})
 }
 
 // TestParity_TextDeltaBufferAccumulation validates handleTextDelta
