@@ -4,19 +4,21 @@ import "strings"
 
 // UI characters matching Claude Code's visual language.
 const (
-	// PromptPrefix is the "›" (U+203A) character used for input prompts and user messages.
+	// PromptPrefix is the "❯" (U+276F) character used for input prompts and user messages.
 	// Claude Code uses figures.pointer from the npm figures package.
-	PromptPrefix = "› "
+	PromptPrefix = "❯ "
 
-	// ResponseConnector is the "└" (U+2514) box-drawing character for tool results/responses.
-	// Rendered with 2-space indent: "  └ "
-	ResponseConnector = "  └ "
+	// ResponseConnector is the "⎿" (U+23BF) character for tool results/responses.
+	// Claude uses ⎿ (DENTISTRY SYMBOL LIGHT DOWN AND HORIZONTAL), not └ (U+2514).
+	// Source: GrepTool/UI.tsx:66 — <Text dimColor={true}>  ⎿  </Text>
+	ResponseConnector = "  ⎿  "
 
 	// ResponseContinuation is the indent for continuation lines under a connector.
 	ResponseContinuation = "    "
 
-	// DividerChar is the heavy horizontal line (U+2501) for section dividers.
-	DividerChar = "━"
+	// DividerChar is the light horizontal line (U+2500) for section dividers.
+	// Claude Code uses ─ (light), not ━ (heavy).
+	DividerChar = "─"
 )
 
 // FuzzyMatch returns true if needle is a subsequence of haystack.
