@@ -224,7 +224,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B20 | TestParity_HeaderSegmentComposition | separator counting per segment count, empty field removes segment, getters return state, width padding exact | ✅ pass |
 | B21 | TestParity_InputEnterSubmitFlow | SubmitMsg with trimmed text, buffer cleared, empty Enter no-op, whitespace-only Enter no-op (buffer preserved) | ✅ pass |
 | B22 | TestParity_ClearConversationFullReset | conversation empty, session.Messages len=0 (not nil), TurnCount=0, nil session safe, post-clear submit works, 1 message after | ✅ pass |
-### Next B23: QuitMsg/ShowHelpMsg command results OR handleToolUseStart tool tracking
+| B23 | TestParity_CommandResultRouting | 6 subtests: QuitMsg→quit, ShowHelpMsg adds msg, Error+Output+both+empty CommandResult paths | ✅ pass |
+### Next B24: Permission modal push/pop via FocusManager
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)

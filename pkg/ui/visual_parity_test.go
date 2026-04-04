@@ -12,6 +12,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/session"
 	"github.com/projectbarks/gopher-code/pkg/ui/commands"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
+	"github.com/projectbarks/gopher-code/pkg/ui/core"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
 
@@ -409,6 +410,108 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 		t.Errorf("Expected QuitMsg on double Ctrl+C, got %T", msg4)
 	}
 }
+
+// TestParity_FocusModalPushPop validates the FocusManager modal stack
+// lifecycle: push transfers focus, pop restores, stack nesting works.
+//
+// Unique behaviors (Tab test only covered normal ring, not modal stack):
+// 1. PushModal Blur()s current child and Focus()es modal
+// 2. ModalActive() reports true after push
+// 3. Focused() returns top modal (not child) when modal active
+// 4. Nested PushModal Blur()s previous modal, Focus()es new top
+// 5. PopModal Blur()s top modal and restores previous modal focus (nested case)
+// 6. PopModal on last modal restores focus to underlying child
+// 7. PopModal on empty stack is no-op (no crash)
+// 8. ModalActive() returns false after all modals popped
+//
+// Cross-ref: core/focus.go:35-102 modal stack implementation
+func TestParity_FocusModalPushPop(t *testing.T) {
+	// Use fake focusables to track state
+	child1 := &fakeFocusable{name: "child1"}
+	child2 := &fakeFocusable{name: "child2"}
+	modal1 := &fakeFocusable{name: "modal1"}
+	modal2 := &fakeFocusable{name: "modal2"}
+
+	fm := core.NewFocusManager(child1, child2)
+	// Manually focus child1 (NewFocusManager doesn't call Focus)
+	child1.Focus()
+
+	// 1-3. Push modal1
+	fm.PushModal(modal1)
+	if child1.Focused() {
+		t.Error("child1 should be Blur'd after PushModal")
+	}
+	if !modal1.Focused() {
+		t.Error("modal1 should be Focused after PushModal")
+	}
+	if !fm.ModalActive() {
+		t.Error("ModalActive should be true after push")
+	}
+	if fm.Focused() != modal1 {
+		t.Error("Focused() should return modal1 when modal active")
+	}
+
+	// 4. Nested push: modal2 on top
+	fm.PushModal(modal2)
+	if modal1.Focused() {
+		t.Error("modal1 should be Blur'd after nested push")
+	}
+	if !modal2.Focused() {
+		t.Error("modal2 should be Focused after push")
+	}
+	if fm.Focused() != modal2 {
+		t.Error("Focused() should return modal2 (top)")
+	}
+
+	// 5. Pop modal2 → modal1 focused again
+	fm.PopModal()
+	if modal2.Focused() {
+		t.Error("modal2 should be Blur'd after pop")
+	}
+	if !modal1.Focused() {
+		t.Error("modal1 should be re-Focused after modal2 popped")
+	}
+	if fm.Focused() != modal1 {
+		t.Error("Focused() should return modal1 after modal2 popped")
+	}
+
+	// 6. Pop modal1 → child1 focused
+	fm.PopModal()
+	if modal1.Focused() {
+		t.Error("modal1 should be Blur'd after pop")
+	}
+	if !child1.Focused() {
+		t.Error("child1 should be Focused after last modal popped")
+	}
+	if fm.ModalActive() {
+		t.Error("ModalActive should be false after all modals popped")
+	}
+	if fm.Focused() != child1 {
+		t.Error("Focused() should return child1 after all modals popped")
+	}
+
+	// 7. Pop on empty stack → no-op
+	fm.PopModal() // should not panic
+	if fm.ModalActive() {
+		t.Error("ModalActive should still be false")
+	}
+	if !child1.Focused() {
+		t.Error("child1 should still be Focused after no-op pop")
+	}
+}
+
+// fakeFocusable is a test helper implementing core.Focusable.
+type fakeFocusable struct {
+	name    string
+	focused bool
+}
+
+func (f *fakeFocusable) Focus()                             { f.focused = true }
+func (f *fakeFocusable) Blur()                              { f.focused = false }
+func (f *fakeFocusable) Focused() bool                      { return f.focused }
+func (f *fakeFocusable) Init() tea.Cmd                      { return nil }
+func (f *fakeFocusable) Update(msg tea.Msg) (tea.Model, tea.Cmd) { return f, nil }
+func (f *fakeFocusable) View() tea.View                     { return tea.NewView("") }
 
 // TestParity_CommandResultRouting validates how AppModel routes the three
 // command result message types: QuitMsg, ShowHelpMsg, CommandResult.
