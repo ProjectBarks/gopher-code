@@ -42,12 +42,12 @@ func TestVisualParity_StartupShowsWelcome(t *testing.T) {
 		t.Error("Startup should show Tips section")
 	}
 	// Prompt should be visible below welcome
-	if !strings.Contains(plain, "›") {
-		t.Error("Prompt › should be visible below welcome")
+	if !strings.Contains(plain, "❯") {
+		t.Error("Prompt ❯ should be visible below welcome")
 	}
 	// Divider should be visible
-	if !strings.Contains(plain, "━") {
-		t.Error("Heavy divider should be visible")
+	if !strings.Contains(plain, "─") {
+		t.Error("Divider should be visible")
 	}
 }
 
@@ -86,8 +86,8 @@ func TestVisualParity_UserMessageStyling(t *testing.T) {
 	plain := strip(view.Content)
 
 	// User message should use › prefix
-	if !strings.Contains(plain, "› explain this code") {
-		t.Errorf("Expected '› explain this code' in view, got:\n%s", plain)
+	if !strings.Contains(plain, "❯ explain this code") {
+		t.Errorf("Expected '❯ explain this code' in view, got:\n%s", plain)
 	}
 }
 
@@ -146,8 +146,8 @@ func TestVisualParity_ToolResultUsesConnector(t *testing.T) {
 		},
 	}
 	result := mb.Render(msg)
-	if !strings.Contains(result, "└") {
-		t.Error("Expected └ connector in tool result rendering")
+	if !strings.Contains(result, "⎿") {
+		t.Error("Expected ⎿ connector in tool result rendering")
 	}
 }
 
@@ -189,8 +189,8 @@ func TestVisualParity_FullConversationFlow(t *testing.T) {
 	if strings.Contains(v2, "Welcome") {
 		t.Error("Step 2: Welcome should be gone")
 	}
-	if !strings.Contains(v2, "› hello world") {
-		t.Error("Step 2: Expected user message with › prefix")
+	if !strings.Contains(v2, "❯ hello world") {
+		t.Error("Step 2: Expected user message with ❯ prefix")
 	}
 	if !strings.Contains(v2, "esc to interrupt") {
 		t.Error("Step 2: Expected 'esc to interrupt' during streaming")
@@ -271,22 +271,25 @@ func TestVisualParity_DividerSpansFullWidth(t *testing.T) {
 	foundDivider := false
 	for _, line := range lines {
 		plain := strip(line)
-		if strings.Count(plain, "━") >= 50 {
+		if strings.Count(plain, "─") >= 50 {
 			foundDivider = true
 			break
 		}
 	}
 	if !foundDivider {
-		t.Error("Expected divider line of ━ characters spanning width")
+		t.Error("Expected divider line of ─ characters spanning width")
 	}
 }
 
-// TestVisualParity_CtrlCQuitsWhenIdle verifies Ctrl+C quits.
+// TestVisualParity_CtrlCQuitsWhenIdle verifies double Ctrl+C quits.
 func TestVisualParity_CtrlCQuitsWhenIdle(t *testing.T) {
 	app := NewAppModel(nil, nil)
+	// First Ctrl+C: shows hint
+	app.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	// Second Ctrl+C: quits
 	_, cmd := app.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if cmd == nil {
-		t.Fatal("Ctrl+C should produce quit command")
+		t.Fatal("Double Ctrl+C should produce quit command")
 	}
 	msg := cmd()
 	if _, ok := msg.(tea.QuitMsg); !ok {
