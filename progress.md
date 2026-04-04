@@ -220,7 +220,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B16 | TestParity_UserMessageWrappingAndPrefix | short→1line, first-line ❯ prefix, long text wraps 2+, continuation without ❯, unknown block types dropped | ✅ pass |
 | B17 | TestParity_TextDeltaBufferAccumulation | exact concatenation, length matches sum, empty delta still sets mode, ToolRunning→Streaming transition, TurnComplete resets buffer | ✅ pass |
 | B18 | TestParity_QueryDoneErrorPath | 3 subtests: success-with-text (1 msg+state reset), error-with-text (2 msgs), error-no-text (1 msg) | ✅ pass |
-### Next B19: SubmitMsg whitespace handling OR handleResize layout calculation
+| B19 | TestParity_HandleResizeLayoutBudget | width/height storage, view fits terminal height (incl 50-msg stress), small/narrow terminals don't crash, idempotent resize | ✅ pass |
+### Next B20: Header SetModel + SetCWD + title line structure
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)

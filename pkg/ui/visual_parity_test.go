@@ -410,6 +410,99 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_HeaderSegmentComposition validates the Header component's
+// segment composition logic (only non-empty fields produce segments).
+//
+// Unique behaviors (no existing test validates Header composition):
+// 1. Default: only "✻ Claude" logo segment (no │ separators)
+// 2. SetModel adds model as separate segment with │ separator
+// 3. SetCWD adds cwd segment
+// 4. SetSessionName adds session segment
+// 5. All three set → 4 segments joined by 3 │ separators
+// 6. Empty strings don't produce empty segments (segment skipping)
+// 7. Width > 0 pads rendered output to exact width
+//
+// Cross-ref: header.go:71-111 View composition logic
+func TestParity_HeaderSegmentComposition(t *testing.T) {
+	h := components.NewHeader(theme.Current())
+	h.SetSize(80, 1)
+
+	// 1. Default: only logo, no separators
+	v1 := strip(h.View().Content)
+	// Count │ separators — should be 0
+	sepCount1 := strings.Count(v1, "│")
+	if sepCount1 != 0 {
+		t.Errorf("Default header should have 0 │ separators (only logo), got %d: %q", sepCount1, strings.TrimSpace(v1))
+	}
+
+	// Logo "✻ Claude" must be present
+	if !strings.Contains(v1, "✻ Claude") {
+		t.Errorf("Default header should show '✻ Claude' logo, got: %q", v1)
+	}
+
+	// 2. SetModel → adds 1 separator (1 segment + logo = 2 segments)
+	h.SetModel("claude-opus-4-6")
+	v2 := strip(h.View().Content)
+	sepCount2 := strings.Count(v2, "│")
+	if sepCount2 != 1 {
+		t.Errorf("Header with model should have 1 │ separator, got %d", sepCount2)
+	}
+	if !strings.Contains(v2, "claude-opus-4-6") {
+		t.Errorf("Model name should appear, got: %q", v2)
+	}
+
+	// 3. SetCWD → 2 separators total (3 segments: logo, model, cwd)
+	h.SetCWD("/some/dir")
+	v3 := strip(h.View().Content)
+	sepCount3 := strings.Count(v3, "│")
+	if sepCount3 != 2 {
+		t.Errorf("Header with model+cwd should have 2 │ separators, got %d", sepCount3)
+	}
+
+	// 4. SetSessionName → 3 separators total (4 segments)
+	h.SetSessionName("my-session")
+	v4 := strip(h.View().Content)
+	sepCount4 := strings.Count(v4, "│")
+	if sepCount4 != 3 {
+		t.Errorf("Header with all fields should have 3 │ separators, got %d", sepCount4)
+	}
+	if !strings.Contains(v4, "my-session") {
+		t.Errorf("Session name should appear, got: %q", v4)
+	}
+
+	// 5. Empty strings: setting model back to "" drops the segment
+	h.SetModel("")
+	v5 := strip(h.View().Content)
+	sepCount5 := strings.Count(v5, "│")
+	if sepCount5 != 2 {
+		t.Errorf("After SetModel(''), should have 2 │ separators (logo+cwd+session), got %d", sepCount5)
+	}
+	if strings.Contains(v5, "claude-opus-4-6") {
+		t.Errorf("Empty model should be removed from view, got: %q", v5)
+	}
+
+	// 6. Getters reflect current state
+	if h.ModelName() != "" {
+		t.Errorf("ModelName() should return '' after clear, got %q", h.ModelName())
+	}
+	if h.CWD() != "/some/dir" {
+		t.Errorf("CWD() should return '/some/dir', got %q", h.CWD())
+	}
+	if h.SessionName() != "my-session" {
+		t.Errorf("SessionName() should return 'my-session', got %q", h.SessionName())
+	}
+
+	// 7. Width padding: ensure rendered output matches width
+	h2 := components.NewHeader(theme.Current())
+	h2.SetSize(60, 1)
+	h2.SetModel("sonnet")
+	v7 := strip(h2.View().Content)
+	// Output should be padded to 60 chars
+	if len([]rune(v7)) != 60 {
+		t.Errorf("Width=60 should pad to 60 chars, got %d: %q", len([]rune(v7)), v7)
+	}
+}
+
 // TestParity_HandleResizeLayoutBudget validates handleResize's layout budget
 // correctly accounts for ALL chrome elements: header, 2 dividers, input, status.
 //
