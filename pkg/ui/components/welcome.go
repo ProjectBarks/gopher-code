@@ -50,18 +50,14 @@ func (ws *WelcomeScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (ws *WelcomeScreen) View() tea.View {
 	cs := ws.theme.Colors()
 	boxWidth := ws.width
-	if boxWidth < 40 {
-		boxWidth = 40
+	if boxWidth < 20 {
+		boxWidth = 20
 	}
 
 	// Build the bordered welcome box
 	titleStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(cs.Primary)).
 		Bold(true)
-	dimStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(cs.TextMuted))
-	accentStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(cs.Accent))
 	labelStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(cs.Warning)).
 		Bold(true)
@@ -70,25 +66,32 @@ func (ws *WelcomeScreen) View() tea.View {
 	subtleStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(cs.TextSecondary))
 
-	// Left panel content
+	// Left panel content — mascot is multi-line, so split into individual lines
+	mascotLines := strings.Split(ws.renderMascot(cs), "\n")
 	leftLines := []string{
 		"",
 		titleStyle.Render("  Welcome!"),
 		"",
-		ws.renderMascot(cs),
+	}
+	leftLines = append(leftLines, mascotLines...)
+	leftLines = append(leftLines,
 		"",
 		subtleStyle.Render(fmt.Sprintf("  %s", ws.model)),
 		subtleStyle.Render(fmt.Sprintf("  %s", abbreviateCWD(ws.cwd, 30))),
 		"",
-	}
+	)
 
 	// Right panel content
+	// Source: LogoV2 renders Tips, a ──── separator, then Recent activity
+	sepLine := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(cs.BorderSubtle)).
+		Render(strings.Repeat("─", boxWidth/2-1))
 	rightLines := []string{
 		"",
 		labelStyle.Render("Tips for getting started"),
 		textStyle.Render("Run /init to create a CLAUDE.md"),
 		textStyle.Render("file with project instructions"),
-		"",
+		sepLine,
 		labelStyle.Render("Recent activity"),
 		subtleStyle.Render("No recent activity"),
 		"",
@@ -114,52 +117,71 @@ func (ws *WelcomeScreen) View() tea.View {
 			right = rightLines[i]
 		}
 
-		// Pad left column to fixed width
+		// Pad left column to fixed width, add │ separator, then right column
+		// Claude renders: │ left-content │ right-content │
+		sepStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(cs.BorderSubtle))
 		leftPad := lipgloss.NewStyle().Width(leftWidth).Render(left)
-		rightPad := lipgloss.NewStyle().Width(rightWidth).Render(right)
-		bodyLines = append(bodyLines, leftPad+rightPad)
+		rightPad := lipgloss.NewStyle().Width(rightWidth - 1).Render(right) // -1 for separator
+		bodyLines = append(bodyLines, leftPad+sepStyle.Render("│")+rightPad)
 	}
 
-	body := strings.Join(bodyLines, "\n")
+	// Build a manually-drawn border with title integrated into the top line.
+	// Claude renders: ╭─── Claude Code v2.1.92 ──...╮
+	borderStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(cs.BorderSubtle))
 
-	// Wrap in a bordered box
-	border := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(cs.BorderSubtle)).
-		Width(boxWidth)
+	// Top border with integrated title — total width = boxWidth + 2 (for ╭ and ╮)
+	titleText := fmt.Sprintf(" Claude Code v%s ", ws.version)
+	// Available space between ╭─── and ╮
+	availForTitle := boxWidth - 3 // boxWidth minus "───" prefix
+	if len([]rune(titleText)) > availForTitle {
+		// Truncate title if box too narrow
+		titleText = " Claude Code "
+	}
+	topPadding := boxWidth - 3 - len([]rune(titleText))
+	if topPadding < 0 {
+		topPadding = 0
+	}
+	topLine := borderStyle.Render("╭───" + titleText + strings.Repeat("─", topPadding) + "╮")
 
-	boxContent := border.Render(body)
+	// Body lines with │ borders
+	var boxLines []string
+	boxLines = append(boxLines, topLine)
+	for _, bl := range bodyLines {
+		boxLines = append(boxLines, borderStyle.Render("│")+bl+borderStyle.Render("│"))
+	}
 
-	// Prepend the title line above the box
-	// Product name matches TS: "Claude Code" (not "Gopher")
-	// Source: components/LogoV2/CondensedLogo.tsx — shows "Claude Code" branding
-	titleLine := accentStyle.Render("── Claude Code ") + dimStyle.Render("v"+ws.version) + accentStyle.Render(" ──")
+	// Bottom border
+	bottomLine := borderStyle.Render("╰" + strings.Repeat("─", boxWidth) + "╯")
+	boxLines = append(boxLines, bottomLine)
 
-	return tea.NewView(titleLine + "\n" + boxContent)
+	return tea.NewView(strings.Join(boxLines, "\n"))
 }
 
 // SetSize updates the screen dimensions.
+// The box adapts to the terminal width — it can be narrower than
+// WelcomeScreenWidth for small terminals, or expand up to terminal width.
 func (ws *WelcomeScreen) SetSize(width, height int) {
-	ws.width = width
-	if ws.width > WelcomeScreenWidth {
-		ws.width = WelcomeScreenWidth
+	// Box content width = terminal width - 2 (for │ borders)
+	ws.width = width - 2
+	if ws.width < 20 {
+		ws.width = 20
 	}
 	ws.height = height
 }
 
-// renderMascot renders a small ASCII gopher using block characters.
+// renderMascot renders Claude's "Clawd" mascot using quadrant block characters.
+// Source: components/LogoV2/Clawd.tsx — default pose uses ▗ ▖ for eyes, ▘▘ ▝▝ for mouth.
 func (ws *WelcomeScreen) renderMascot(cs theme.ColorScheme) string {
 	bodyStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(cs.Accent))
-	eyeStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(cs.TextPrimary))
 
-	// Simple gopher face using block elements
+	// Clawd face using quadrant block elements (matching Claude Code)
 	lines := []string{
-		bodyStyle.Render("       ░░░░░░░"),
-		bodyStyle.Render("      ░░") + eyeStyle.Render("█") + bodyStyle.Render("░░") + eyeStyle.Render("█") + bodyStyle.Render("░░"),
-		bodyStyle.Render("      ░░░░░░░░░"),
-		bodyStyle.Render("       ░░███░░"),
+		bodyStyle.Render("    ▗ ▗   ▖ ▖"),
+		"",
+		bodyStyle.Render("      ▘▘ ▝▝"),
 	}
 	return strings.Join(lines, "\n")
 }
