@@ -410,6 +410,133 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_CommandResultRouting validates how AppModel routes the three
+// command result message types: QuitMsg, ShowHelpMsg, CommandResult.
+//
+// Unique behaviors (no existing test validates message routing):
+// 1. QuitMsg produces tea.Quit cmd
+// 2. ShowHelpMsg adds a help text message to conversation
+// 3. CommandResult with Error → adds "Error: {msg}" message
+// 4. CommandResult with Output → adds Output as message
+// 5. CommandResult with BOTH Error and Output → Error takes precedence, Output dropped
+// 6. CommandResult with neither set → no message added (no-op)
+//
+// Cross-ref: app.go:237-263 quit/help/result handlers
+func TestParity_CommandResultRouting(t *testing.T) {
+	// 1. QuitMsg → tea.Quit
+	t.Run("quit", func(t *testing.T) {
+		app := NewAppModel(nil, nil)
+		_, cmd := app.Update(commands.QuitMsg{})
+		if cmd == nil {
+			t.Fatal("QuitMsg should produce a cmd")
+		}
+		if _, ok := cmd().(tea.QuitMsg); !ok {
+			t.Error("QuitMsg should produce tea.QuitMsg cmd")
+		}
+	})
+
+	// 2. ShowHelpMsg → adds message to conversation
+	t.Run("help", func(t *testing.T) {
+		config := session.DefaultConfig()
+		sess := session.New(config, "/tmp")
+		app := NewAppModel(sess, nil)
+		countBefore := app.conversation.MessageCount()
+		app.Update(commands.ShowHelpMsg{})
+		if app.conversation.MessageCount() != countBefore+1 {
+			t.Errorf("ShowHelpMsg should add 1 message, got %d→%d", countBefore, app.conversation.MessageCount())
+		}
+	})
+
+	// 3. CommandResult with error → error message added
+	t.Run("result-error", func(t *testing.T) {
+		config := session.DefaultConfig()
+		sess := session.New(config, "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		// Dismiss welcome so conversation pane is visible
+		app.showWelcome = false
+		countBefore := app.conversation.MessageCount()
+		app.Update(commands.CommandResult{
+			Command: "/test",
+			Error:   fmt.Errorf("something failed"),
+		})
+		if app.conversation.MessageCount() != countBefore+1 {
+			t.Errorf("Error CommandResult should add 1 message, got %d→%d", countBefore, app.conversation.MessageCount())
+		}
+		// View should show the error text
+		v := strip(app.View().Content)
+		if !strings.Contains(v, "something failed") {
+			t.Errorf("View should contain error text, got:\n%s", v)
+		}
+	})
+
+	// 4. CommandResult with output → output message added
+	t.Run("result-output", func(t *testing.T) {
+		config := session.DefaultConfig()
+		sess := session.New(config, "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		// Dismiss welcome so conversation pane is visible
+		app.showWelcome = false
+		countBefore := app.conversation.MessageCount()
+		app.Update(commands.CommandResult{
+			Command: "/test",
+			Output:  "success output",
+		})
+		if app.conversation.MessageCount() != countBefore+1 {
+			t.Errorf("Output CommandResult should add 1 message, got %d→%d", countBefore, app.conversation.MessageCount())
+		}
+		v := strip(app.View().Content)
+		if !strings.Contains(v, "success output") {
+			t.Errorf("View should contain output text, got:\n%s", v)
+		}
+	})
+
+	// 5. CommandResult with BOTH → Error wins
+	t.Run("result-both-error-wins", func(t *testing.T) {
+		config := session.DefaultConfig()
+		sess := session.New(config, "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		// Dismiss welcome so conversation pane is visible
+		app.showWelcome = false
+		countBefore := app.conversation.MessageCount()
+		app.Update(commands.CommandResult{
+			Command: "/test",
+			Error:   fmt.Errorf("error wins"),
+			Output:  "should be dropped",
+		})
+		// Only ONE message added (the error), not two
+		if app.conversation.MessageCount() != countBefore+1 {
+			t.Errorf("CommandResult with both should add 1 message (error wins), got %d→%d",
+				countBefore, app.conversation.MessageCount())
+		}
+		v := strip(app.View().Content)
+		if !strings.Contains(v, "error wins") {
+			t.Error("Error should win — view should contain error text")
+		}
+		if strings.Contains(v, "should be dropped") {
+			t.Error("Output should be dropped when Error is set")
+		}
+	})
+
+	// 6. CommandResult with neither → no message added
+	t.Run("result-empty", func(t *testing.T) {
+		config := session.DefaultConfig()
+		sess := session.New(config, "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		// Dismiss welcome so conversation pane is visible
+		app.showWelcome = false
+		countBefore := app.conversation.MessageCount()
+		app.Update(commands.CommandResult{Command: "/test"})
+		if app.conversation.MessageCount() != countBefore {
+			t.Errorf("Empty CommandResult should NOT add message, got %d→%d",
+				countBefore, app.conversation.MessageCount())
+		}
+	})
+}
+
 // TestParity_ClearConversationFullReset validates ClearConversationMsg's
 // full cleanup across conversation pane AND session state.
 //

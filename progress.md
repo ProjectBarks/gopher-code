@@ -223,7 +223,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B19 | TestParity_HandleResizeLayoutBudget | width/height storage, view fits terminal height (incl 50-msg stress), small/narrow terminals don't crash, idempotent resize | ✅ pass |
 | B20 | TestParity_HeaderSegmentComposition | separator counting per segment count, empty field removes segment, getters return state, width padding exact | ✅ pass |
 | B21 | TestParity_InputEnterSubmitFlow | SubmitMsg with trimmed text, buffer cleared, empty Enter no-op, whitespace-only Enter no-op (buffer preserved) | ✅ pass |
-### Next B22: Slash command full pipeline (/clear batch through handler)
+| B22 | TestParity_ClearConversationFullReset | conversation empty, session.Messages len=0 (not nil), TurnCount=0, nil session safe, post-clear submit works, 1 message after | ✅ pass |
+### Next B23: QuitMsg/ShowHelpMsg command results OR handleToolUseStart tool tracking
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
