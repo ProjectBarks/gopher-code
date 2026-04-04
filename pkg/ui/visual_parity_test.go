@@ -412,6 +412,101 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_InputCursorMovementAndDelete validates Left/Right/Delete
+// key semantics with exact buffer state verification.
+//
+// Unique behaviors (no existing test validates cursor arithmetic):
+// 1. Left decrements cursor, bounded at 0 (no underflow)
+// 2. Right increments cursor, bounded at len (no overflow)
+// 3. Delete removes char AT cursor (unlike Backspace which removes BEFORE)
+// 4. Delete at end of buffer is no-op (no panic, no change)
+// 5. Delete does NOT move cursor (unlike Backspace which decrements)
+// 6. After Left then type: insert at new cursor position
+// 7. After Right-past-end then type: appends at real end
+// 8. Left×many then Right×many returns to original position
+//
+// Cross-ref: input.go:137-168 cursor keys + Delete
+func TestParity_InputCursorMovementAndDelete(t *testing.T) {
+	inp := components.NewInputPane()
+	inp.SetSize(80, 3)
+	inp.Focus()
+
+	// Type "abcde"
+	for _, ch := range "abcde" {
+		inp.Update(tea.KeyPressMsg{Code: rune(ch), Text: string(ch)})
+	}
+	if inp.Value() != "abcde" {
+		t.Fatalf("Setup: expected 'abcde', got %q", inp.Value())
+	}
+
+	// 1. Left×2 → cursor at position 3 (between 'c' and 'd')
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	// Insert 'X' → should be at position 3: "abcXde"
+	inp.Update(tea.KeyPressMsg{Code: 'X', Text: "X"})
+	if inp.Value() != "abcXde" {
+		t.Errorf("Left×2 + 'X' should give 'abcXde', got %q", inp.Value())
+	}
+
+	// 3,5. Delete at cursor position (now pos 4, char 'd') → removes 'd'
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
+	if inp.Value() != "abcXe" {
+		t.Errorf("Delete at pos 4 should remove 'd', got %q", inp.Value())
+	}
+
+	// 5. Delete did not move cursor (still at pos 4) — next insert there
+	inp.Update(tea.KeyPressMsg{Code: 'Y', Text: "Y"})
+	if inp.Value() != "abcXYe" {
+		t.Errorf("After Delete + 'Y', expected 'abcXYe', got %q", inp.Value())
+	}
+
+	// 7. Move to end via Ctrl+E, then Right past end → no-op
+	inp.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	// Append still works
+	inp.Update(tea.KeyPressMsg{Code: 'Z', Text: "Z"})
+	if inp.Value() != "abcXYeZ" {
+		t.Errorf("Right-past-end + 'Z' should append, got %q", inp.Value())
+	}
+
+	// 4. Delete at end of buffer → no-op
+	lenBefore := len(inp.Value())
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
+	if len(inp.Value()) != lenBefore {
+		t.Errorf("Delete at end should be no-op, length changed %d→%d", lenBefore, len(inp.Value()))
+	}
+
+	// 1. Left at position 0 → no-op
+	inp.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl}) // Ctrl+A to pos 0
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	// Insert 'Q' → should be at position 0: "Q" + rest
+	inp.Update(tea.KeyPressMsg{Code: 'Q', Text: "Q"})
+	if inp.Value() != "QabcXYeZ" {
+		t.Errorf("Left-at-0 + 'Q' should prefix, got %q", inp.Value())
+	}
+
+	// 8. Round trip: Left×3 then Right×3 returns to same position
+	inp.Clear()
+	for _, ch := range "12345" {
+		inp.Update(tea.KeyPressMsg{Code: rune(ch), Text: string(ch)})
+	}
+	// cursor at 5 (end)
+	for i := 0; i < 3; i++ {
+		inp.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	}
+	for i := 0; i < 3; i++ {
+		inp.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	}
+	// Should be at end again — inserting appends
+	inp.Update(tea.KeyPressMsg{Code: '!', Text: "!"})
+	if inp.Value() != "12345!" {
+		t.Errorf("Left×3 + Right×3 round-trip + '!' should give '12345!', got %q", inp.Value())
+	}
+}
+
 // TestParity_DiffApprovalEdgeCases validates less-common DiffApprovalDialog paths
 // that the initial B1 test doesn't cover.
 //
