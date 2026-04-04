@@ -208,7 +208,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B4 | TestParity_ModelSwitchDispatch | /model no-args→error, /model sonnet→ModelSwitchMsg, session update, header re-render, mode stays idle, old model replaced | ✅ pass |
 | B5 | TestParity_EscapeDuringStreamingCancel | Escape idle no-op, Escape→cancelQuery, queryDone finalizes state, partial text preserved | ✅ pass |
 | B6 | TestParity_InputPaneEditingFlow | type+buffer, Ctrl+A preserves text, prefix insert, Ctrl+E+append, Ctrl+W word-delete (3x), Ctrl+U prefix-kill with suffix preservation | ✅ pass |
-### Next B7: InputPane history navigation save/restore flow
+| B7 | TestParity_InputPaneHistorySaveRestore | no-history no-op, non-empty blocks nav, 3-entry traversal, oldest stops, restore savedInput | ✅ pass |
+### Next B8: ConversationPane scroll behavior OR Spinner verb randomization
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
