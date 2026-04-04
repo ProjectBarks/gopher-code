@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/session"
+	"github.com/projectbarks/gopher-code/pkg/ui/commands"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
@@ -404,6 +405,84 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	msg4 := cmd4()
 	if _, isQuit := msg4.(tea.QuitMsg); !isQuit {
 		t.Errorf("Expected QuitMsg on double Ctrl+C, got %T", msg4)
+	}
+}
+
+// TestParity_ModelSwitchDispatch validates the /model command dispatch pipeline.
+//
+// Unique behaviors (no existing test covers slash command dispatch + state update):
+// 1. "/model" with no args returns CommandResult carrying an error
+// 2. "/model sonnet" dispatches a ModelSwitchMsg
+// 3. ModelSwitchMsg updates session.Config.Model to the new value
+// 4. Header.SetModel is called (verifiable via re-rendered view)
+// 5. Mode stays ModeIdle (local command, no streaming triggered)
+// 6. New model name appears in the rendered header
+//
+// Cross-ref: commands/handlers.go:111-118 /model dispatch
+// Cross-ref: app.go:230-235 ModelSwitchMsg handler
+func TestParity_ModelSwitchDispatch(t *testing.T) {
+	config := session.DefaultConfig()
+	config.Model = "claude-opus-4-6"
+	sess := session.New(config, "/tmp")
+	app := NewAppModel(sess, nil)
+	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// Dismiss welcome to see header
+	app.Update(components.SubmitMsg{Text: "hi"})
+	app.Update(TurnCompleteMsg{})
+
+	// 1. "/model" with no args → CommandResult with error
+	_, cmdErr := app.Update(components.SubmitMsg{Text: "/model"})
+	if cmdErr == nil {
+		t.Fatal("/model with no args should return a command")
+	}
+	errMsg := cmdErr()
+	cr, ok := errMsg.(commands.CommandResult)
+	if !ok {
+		t.Fatalf("/model with no args should return CommandResult, got %T", errMsg)
+	}
+	if cr.Error == nil {
+		t.Error("/model with no args should have a non-nil Error")
+	}
+
+	// 2. "/model sonnet" dispatches ModelSwitchMsg
+	_, cmdSwitch := app.Update(components.SubmitMsg{Text: "/model sonnet"})
+	if cmdSwitch == nil {
+		t.Fatal("/model sonnet should return a command")
+	}
+	switchMsg := cmdSwitch()
+	switchTyped, ok := switchMsg.(commands.ModelSwitchMsg)
+	if !ok {
+		t.Fatalf("Expected ModelSwitchMsg, got %T", switchMsg)
+	}
+	if switchTyped.Model != "sonnet" {
+		t.Errorf("ModelSwitchMsg.Model expected 'sonnet', got %q", switchTyped.Model)
+	}
+
+	// 3. Feeding ModelSwitchMsg updates session
+	oldModel := sess.Config.Model
+	app.Update(switchTyped)
+	if sess.Config.Model != "sonnet" {
+		t.Errorf("session.Config.Model: expected 'sonnet', got %q", sess.Config.Model)
+	}
+	if sess.Config.Model == oldModel {
+		t.Error("session model should have changed")
+	}
+
+	// 4. Mode stays idle (no streaming)
+	if app.mode != ModeIdle {
+		t.Errorf("Model switch should not change mode, got %v", app.mode)
+	}
+
+	// 5. Header displays new model name (structural check)
+	view := app.View()
+	plain := strip(view.Content)
+	firstLine := strings.Split(plain, "\n")[0]
+	if !strings.Contains(firstLine, "sonnet") {
+		t.Errorf("Header should show new model 'sonnet', first line: %s", firstLine)
+	}
+	if strings.Contains(firstLine, "claude-opus-4-6") {
+		t.Errorf("Header should not show old model, first line: %s", firstLine)
 	}
 }
 
