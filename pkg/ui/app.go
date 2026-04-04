@@ -114,6 +114,11 @@ type AppModel struct {
 	// Welcome screen
 	showWelcome bool
 	welcome     *components.WelcomeScreen
+
+	// Ctrl+C double-press tracking
+	// Claude requires two Ctrl+C presses on empty idle input to quit.
+	// First press shows "Press Ctrl-C again to exit" hint.
+	ctrlCPending bool
 }
 
 // NewAppModel creates a new AppModel with the given session and bridge.
@@ -290,6 +295,9 @@ func (a *AppModel) View() tea.View {
 	// Input pane (always visible)
 	sections = append(sections, a.input.View().Content)
 
+	// Second divider below input (Claude has dividers above AND below prompt)
+	sections = append(sections, dividerStyle.Render(strings.Repeat(components.DividerChar, a.width)))
+
 	// Status line (always visible)
 	sections = append(sections, a.statusLine.View().Content)
 
@@ -323,25 +331,48 @@ func (a *AppModel) handleResize(msg tea.WindowSizeMsg) (*AppModel, tea.Cmd) {
 	a.statusLine.SetSize(a.width, statusHeight)
 	a.bubble.SetWidth(a.width)
 	a.streaming.SetSize(a.width, 0)
+	a.welcome.SetSize(a.width, a.height)
 
 	return a, nil
 }
 
 func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
+	// Reset Ctrl+C pending on any non-Ctrl+C key
+	if !(msg.Code == 'c' && msg.Mod == tea.ModCtrl) && a.ctrlCPending {
+		a.ctrlCPending = false
+		a.statusLine.Update(components.ModeChangeMsg{Mode: components.ModeIdle})
+	}
+
 	// Dismiss welcome screen on any printable key
 	if a.showWelcome && msg.Text != "" {
 		a.showWelcome = false
 	}
 
 	switch {
-	// Quit: Ctrl+C
+	// Ctrl+C behavior (matching Claude Code):
+	// 1. During streaming → cancel the query
+	// 2. With text in input → clear input (stash behavior)
+	// 3. Empty input, first press → show "Press Ctrl-C again to exit" hint
+	// 4. Empty input, second press → quit
+	// Source: data/claude/area-06-status/status-ctrlc-first snapshot
 	case msg.Code == 'c' && msg.Mod == tea.ModCtrl:
 		if a.mode != ModeIdle && a.cancelQuery != nil {
-			// Cancel the running query, don't quit
 			a.cancelQuery()
+			a.ctrlCPending = false
 			return a, nil
 		}
-		return a, tea.Quit
+		if a.input.HasText() {
+			a.input.Clear()
+			a.ctrlCPending = false
+			return a, nil
+		}
+		// Empty input: double-press to quit
+		if a.ctrlCPending {
+			return a, tea.Quit
+		}
+		a.ctrlCPending = true
+		a.statusLine.Update(components.CtrlCHintMsg{})
+		return a, nil
 
 	// Focus cycling
 	case msg.Code == tea.KeyTab && msg.Mod == 0:
@@ -370,13 +401,15 @@ func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
 }
 
 func (a *AppModel) handleSubmit(msg components.SubmitMsg) (*AppModel, tea.Cmd) {
-	// Dismiss welcome screen on any submit
-	a.showWelcome = false
-
 	text := strings.TrimSpace(msg.Text)
 	if text == "" {
+		// Claude returns early on empty submit — welcome stays visible
+		// Source: REPL.tsx line 1368: if (inputValue.trim().length === 0) return;
 		return a, nil
 	}
+
+	// Dismiss welcome screen only when there's actual content to submit
+	a.showWelcome = false
 
 	// Add to input history
 	a.input.AddToHistory(text)
@@ -494,7 +527,7 @@ func (a *AppModel) handleToolUseStart(msg ToolUseStartMsg) (*AppModel, tea.Cmd) 
 
 	// Show tool name in streaming area (matching TS inline tool display).
 	// Source: components/messages/AssistantToolUseMessage.tsx
-	toolLine := fmt.Sprintf("\n⚙ %s", msg.ToolName)
+	toolLine := fmt.Sprintf("\n⏺ %s", msg.ToolName)
 	a.streamingText.WriteString(toolLine)
 	streamContent := a.streamingText.String()
 	if a.spinner.IsActive() {

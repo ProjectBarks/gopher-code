@@ -101,6 +101,11 @@ func (ip *InputPane) SetValue(v string) {
 	ip.cursor = len(ip.runes)
 }
 
+// HasText returns true if the input buffer contains any text.
+func (ip *InputPane) HasText() bool {
+	return len(ip.runes) > 0
+}
+
 // Clear clears the input text.
 func (ip *InputPane) Clear() {
 	ip.runes = ip.runes[:0]
