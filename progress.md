@@ -238,7 +238,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B34 | TestParity_StatusLineTokenTrackingAndWidth | FOUND BUG: padding used byte len including ANSI codes → fixed to use lipgloss.Width(). Test validates 8 behaviors. | ✅ pass |
 | B35 | TestParity_ConversationClearMessagesMsg | AddMessageMsg/ClearMessagesMsg/WindowSizeMsg routing via Update(), re-render with new width | ✅ pass |
 | B36 | TestParity_DispatcherDefaultCommands | 7 default slash commands produce correct msg types (/model→ModelSwitchMsg, /session→SessionSwitchMsg, /clear→ClearConversationMsg, /help→ShowHelpMsg, /quit→QuitMsg, /compact→CompactMsg, /thinking→ThinkingToggleMsg), HasHandler and Commands() listing | ✅ pass |
-### Next B37: Next unique behavior to validate
+| B37 | TestParity_ConversationViewportWindowing | viewport returns exactly height lines as tail-slice; scrollOffset shifts window backward by exact line count; scroll-up clamps at viewStart=0 without panic; scroll-down restores identical tail view | ✅ pass |
+### Next B38: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)

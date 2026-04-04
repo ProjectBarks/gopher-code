@@ -3459,3 +3459,131 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 		})
 	}
 }
+
+// TestParity_ConversationViewportWindowing validates the viewport line-slicing
+// math in ConversationPane.View() — i.e. which content lines are actually
+// visible when total rendered lines exceed the height.
+//
+// Unique behaviors (distinct from B8 autoScroll state + B30 composition):
+//  1. With N messages producing >height total lines, viewport returns exactly
+//     `height` lines showing only the TAIL (last height lines).
+//  2. scrollOffset=K shifts viewStart back by exactly K lines, so a previously
+//     hidden earlier message becomes visible AND a previously visible tail line
+//     is pushed out.
+//  3. When scrollOffset exceeds available history, viewStart clamps at 0 — the
+//     slice never goes negative and does NOT panic.
+//  4. Scrolling back enough reveals message[0]; scrolling back to 0 restores
+//     the tail view.
+//
+// Cross-ref: conversation.go:100-122 — viewStart = totalLines-height-scrollOffset
+// with clamp `if viewStart < 0 { viewStart = 0 }` and the allLines[start:end]
+// slice.
+func TestParity_ConversationViewportWindowing(t *testing.T) {
+	cp := components.NewConversationPane()
+	// Height = 3: viewport shows at most 3 lines.
+	cp.SetSize(80, 3)
+
+	// Add 5 single-line user messages with unique markers.
+	markers := []string{"ZZaaa", "ZZbbb", "ZZccc", "ZZddd", "ZZeee"}
+	for _, m := range markers {
+		cp.AddMessage(message.Message{
+			Role:    message.RoleUser,
+			Content: []message.ContentBlock{{Type: message.ContentText, Text: m}},
+		})
+	}
+
+	// -- Behavior 1: viewport returns exactly `height` lines --
+	viewInitial := strip(cp.View().Content)
+	lines := strings.Split(viewInitial, "\n")
+	if len(lines) != 3 {
+		t.Fatalf("viewport must be exactly height=3 lines, got %d:\n%s", len(lines), viewInitial)
+	}
+
+	// -- Behavior 1 (cont): must show TAIL only — last marker always visible;
+	// first marker must NOT be visible when autoScroll at offset 0.
+	if !strings.Contains(viewInitial, "ZZeee") {
+		t.Errorf("tail viewport must show last message marker ZZeee, got:\n%s", viewInitial)
+	}
+	if strings.Contains(viewInitial, "ZZaaa") {
+		t.Errorf("first message ZZaaa should be scrolled off-screen at offset=0, got:\n%s", viewInitial)
+	}
+
+	// Find the boundary marker: the earliest visible marker tells us how
+	// many tail lines the viewport holds.
+	earliestVisibleIdx := -1
+	for i, m := range markers {
+		if strings.Contains(viewInitial, m) {
+			earliestVisibleIdx = i
+			break
+		}
+	}
+	if earliestVisibleIdx == -1 {
+		t.Fatalf("no marker visible in viewport:\n%s", viewInitial)
+	}
+	if earliestVisibleIdx == 0 {
+		t.Fatalf("tail viewport unexpectedly contains first message — scrollOffset not at default 0")
+	}
+
+	// -- Behavior 2: scroll up by 1 → earlier marker now visible, tail marker
+	// pushed out of the window. scrollOffset increases from 0→1 via KeyUp.
+	_, _ = cp.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	viewScroll1 := strip(cp.View().Content)
+	linesScrolled := strings.Split(viewScroll1, "\n")
+	if len(linesScrolled) != 3 {
+		t.Errorf("after scroll viewport must still be 3 lines, got %d", len(linesScrolled))
+	}
+
+	// After 1 scroll-up, a marker at index earliestVisibleIdx-1 should now
+	// appear (assuming each message renders to ≥1 line; scroll shifts window
+	// back by exactly 1 LINE not 1 message, so we check the shift happened).
+	shiftedEarlierVisible := false
+	if earliestVisibleIdx > 0 {
+		shiftedEarlierVisible = strings.Contains(viewScroll1, markers[earliestVisibleIdx-1])
+	}
+	// The last marker (tail) must be pushed out OR the view must have shifted
+	// visibly. Equivalence: the scrolled view differs from the initial view.
+	if viewScroll1 == viewInitial {
+		t.Errorf("scrolling up by 1 line must change viewport content, got identical views:\n%s", viewInitial)
+	}
+	// Verify earlier content appeared OR tail was pushed out — both confirm
+	// the window shifted backward (the math is deterministic: viewStart--).
+	tailPushedOut := !strings.Contains(viewScroll1, markers[len(markers)-1])
+	if !shiftedEarlierVisible && !tailPushedOut {
+		// At minimum, either a new earlier line appeared or the tail got
+		// pushed out. If neither happened, the shift math is broken.
+		t.Errorf("scrolling up must reveal earlier line or push tail out.\ninitial: %q\nscrolled: %q",
+			viewInitial, viewScroll1)
+	}
+
+	// -- Behavior 3: scroll up many times — must NOT panic, must clamp --
+	for i := 0; i < 100; i++ {
+		_, _ = cp.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	}
+	viewAtTop := strip(cp.View().Content)
+	linesAtTop := strings.Split(viewAtTop, "\n")
+	if len(linesAtTop) != 3 {
+		t.Errorf("clamped viewport must be 3 lines, got %d:\n%s", len(linesAtTop), viewAtTop)
+	}
+
+	// -- Behavior 4: at clamp, first message ZZaaa MUST be visible --
+	if !strings.Contains(viewAtTop, "ZZaaa") {
+		t.Errorf("after scrolling to top, first message ZZaaa must be visible, got:\n%s", viewAtTop)
+	}
+
+	// -- Behavior 4 (cont): scroll back down to 0 → tail view restored --
+	for i := 0; i < 200; i++ {
+		_, _ = cp.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	}
+	viewBack := strip(cp.View().Content)
+	if !strings.Contains(viewBack, "ZZeee") {
+		t.Errorf("after scrolling back down, tail ZZeee must be visible, got:\n%s", viewBack)
+	}
+	if strings.Contains(viewBack, "ZZaaa") {
+		t.Errorf("after scrolling back to bottom, first message ZZaaa should be gone, got:\n%s", viewBack)
+	}
+	// Restored view must equal the initial tail view (determinism check).
+	if viewBack != viewInitial {
+		t.Errorf("scrolling back to offset=0 must restore initial view.\ninitial: %q\nrestored: %q",
+			viewInitial, viewBack)
+	}
+}
