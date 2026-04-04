@@ -408,6 +408,83 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_EscapeDuringStreamingCancel validates Escape's behavior in different modes.
+//
+// Unique behaviors (no existing test validates Escape key paths):
+// 1. Escape when ModeIdle and no modal → no-op (no cmd, no state change)
+// 2. Escape when ModeStreaming with active cancelQuery → cancelQuery is invoked
+// 3. After cancel, queryDoneMsg finalizes partial streaming text into conversation
+// 4. handleQueryDone resets streamingText, activeToolCalls, stops spinner
+// 5. Mode returns to ModeIdle after queryDone
+// 6. Partial text is preserved as an assistant message (not lost)
+//
+// Cross-ref: app.go:385-395 Escape handler, app.go:595-625 handleQueryDone
+// Cross-ref: REPL.tsx — Escape triggers abort on streaming controller
+func TestParity_EscapeDuringStreamingCancel(t *testing.T) {
+	config := session.DefaultConfig()
+	sess := session.New(config, "/tmp")
+	app := NewAppModel(sess, nil)
+	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// 1. Escape when idle → no-op
+	initialMode := app.mode
+	initialCount := app.conversation.MessageCount()
+	_, cmd := app.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd != nil {
+		msg := cmd()
+		if msg != nil {
+			t.Errorf("Escape when idle should be no-op, got msg %T", msg)
+		}
+	}
+	if app.mode != initialMode {
+		t.Error("Escape when idle should not change mode")
+	}
+	if app.conversation.MessageCount() != initialCount {
+		t.Error("Escape when idle should not modify conversation")
+	}
+
+	// Set up streaming state manually (can't actually trigger real async query)
+	app.Update(components.SubmitMsg{Text: "write essay"})
+	if app.mode != ModeStreaming {
+		t.Fatalf("Setup: expected ModeStreaming, got %v", app.mode)
+	}
+
+	// Add partial streaming text
+	app.Update(TextDeltaMsg{Text: "Once upon a time"})
+
+	// Install a fake cancelQuery function to verify it's called
+	cancelCalled := false
+	app.cancelQuery = func() { cancelCalled = true }
+
+	// 2. Escape during streaming → calls cancelQuery
+	app.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if !cancelCalled {
+		t.Error("Escape during streaming should call cancelQuery")
+	}
+
+	// 3. Simulate queryDoneMsg (what happens after cancel completes)
+	msgCountBefore := app.conversation.MessageCount()
+	app.Update(queryDoneMsg{err: nil})
+
+	// 4. After queryDone: mode=idle, streamingText empty, partial text preserved
+	if app.mode != ModeIdle {
+		t.Errorf("After queryDone, expected ModeIdle, got %v", app.mode)
+	}
+	if app.streamingText.Len() != 0 {
+		t.Errorf("streamingText should be empty, got len=%d", app.streamingText.Len())
+	}
+	if len(app.activeToolCalls) != 0 {
+		t.Error("activeToolCalls should be empty after queryDone")
+	}
+	if app.spinner.IsActive() {
+		t.Error("spinner should be stopped after queryDone")
+	}
+	// 5. Partial text "Once upon a time" should be preserved as a message
+	if app.conversation.MessageCount() <= msgCountBefore {
+		t.Error("partial streaming text should be finalized as a conversation message")
+	}
+}
+
 // TestParity_ModelSwitchDispatch validates the /model command dispatch pipeline.
 //
 // Unique behaviors (no existing test covers slash command dispatch + state update):
