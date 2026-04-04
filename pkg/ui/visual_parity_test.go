@@ -20,8 +20,9 @@ func strip(s string) string {
 	return ansiRegex.ReplaceAllString(s, "")
 }
 
-// TestVisualParity_StartupShowsWelcome verifies the welcome screen on startup.
-func TestVisualParity_StartupShowsWelcome(t *testing.T) {
+// TestVisualParity_StartupWelcomeBoxIntegrity validates the welcome screen
+// renders a structurally complete bordered box with proper layout.
+func TestVisualParity_StartupWelcomeBoxIntegrity(t *testing.T) {
 	config := session.DefaultConfig()
 	config.Model = "claude-opus-4-6"
 	sess := session.New(config, "/Users/test/project")
@@ -30,24 +31,83 @@ func TestVisualParity_StartupShowsWelcome(t *testing.T) {
 
 	view := app.View()
 	plain := strip(view.Content)
+	lines := strings.Split(plain, "\n")
 
-	// Welcome screen should be visible
-	if !strings.Contains(plain, "Welcome") {
-		t.Error("Startup should show Welcome screen")
+	// 1. Find top border ╭...╮ with title integrated
+	topIdx := -1
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "╭") {
+			topIdx = i
+			if !strings.HasSuffix(trimmed, "╮") {
+				t.Errorf("Top border incomplete: %s", trimmed)
+			}
+			if !strings.Contains(trimmed, "Claude Code") {
+				t.Errorf("Title must be in top border line: %s", trimmed)
+			}
+			break
+		}
 	}
-	if !strings.Contains(plain, "Claude") {
-		t.Error("Startup should show Gopher branding")
+	if topIdx < 0 {
+		t.Fatalf("No top border ╭...╮ found.\nView:\n%s", plain)
 	}
-	if !strings.Contains(plain, "Tips") {
-		t.Error("Startup should show Tips section")
+
+	// 2. Find bottom border ╰...╯
+	botIdx := -1
+	for i := len(lines) - 1; i > topIdx; i-- {
+		trimmed := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(trimmed, "╰") {
+			botIdx = i
+			if !strings.HasSuffix(trimmed, "╯") {
+				t.Errorf("Bottom border incomplete: %s", trimmed)
+			}
+			break
+		}
 	}
-	// Prompt should be visible below welcome
-	if !strings.Contains(plain, "❯") {
-		t.Error("Prompt ❯ should be visible below welcome")
+	if botIdx < 0 {
+		t.Fatalf("No bottom border found")
 	}
-	// Divider should be visible
-	if !strings.Contains(plain, "─") {
-		t.Error("Divider should be visible")
+
+	// 3. Every body line between borders must start and end with │
+	bodyCount := 0
+	for i := topIdx + 1; i < botIdx; i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "" {
+			continue
+		}
+		if !strings.HasPrefix(trimmed, "│") || !strings.HasSuffix(trimmed, "│") {
+			t.Errorf("Body line %d breaks box: %s", i, lines[i])
+		}
+		bodyCount++
+	}
+	if bodyCount < 3 {
+		t.Errorf("Box needs 3+ body lines, got %d", bodyCount)
+	}
+
+	// 4. Top and bottom widths must match
+	topW := len([]rune(strings.TrimSpace(lines[topIdx])))
+	botW := len([]rune(strings.TrimSpace(lines[botIdx])))
+	if topW != botW {
+		t.Errorf("Border width mismatch: top=%d bot=%d", topW, botW)
+	}
+
+	// 5. Two-column layout: body lines should have 3+ │ chars (left border, separator, right)
+	colSepCount := 0
+	for i := topIdx + 1; i < botIdx; i++ {
+		if strings.Count(lines[i], "│") >= 3 {
+			colSepCount++
+		}
+	}
+	if colSepCount < 3 {
+		t.Errorf("Expected two-column layout (3+ │ per row in 3+ rows), got %d rows", colSepCount)
+	}
+
+	// 6. showWelcome should be true, mode idle
+	if !app.showWelcome {
+		t.Error("showWelcome should be true on startup")
+	}
+	if app.mode != ModeIdle {
+		t.Errorf("Mode should be idle on startup, got %v", app.mode)
 	}
 }
 
