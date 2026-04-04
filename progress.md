@@ -225,7 +225,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B21 | TestParity_InputEnterSubmitFlow | SubmitMsg with trimmed text, buffer cleared, empty Enter no-op, whitespace-only Enter no-op (buffer preserved) | ✅ pass |
 | B22 | TestParity_ClearConversationFullReset | conversation empty, session.Messages len=0 (not nil), TurnCount=0, nil session safe, post-clear submit works, 1 message after | ✅ pass |
 | B23 | TestParity_CommandResultRouting | 6 subtests: QuitMsg→quit, ShowHelpMsg adds msg, Error+Output+both+empty CommandResult paths | ✅ pass |
-### Next B24: Permission modal push/pop via FocusManager
+| B24 | TestParity_FocusModalPushPop | push blurs child/focuses modal, ModalActive tracking, nested push/pop, restoration to child, empty-pop no-op | ✅ pass |
+### Next B25: FocusManager Route() message dispatch
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)

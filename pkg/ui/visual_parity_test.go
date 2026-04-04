@@ -411,6 +411,102 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_FocusManagerRoute validates Route() message dispatch:
+// messages go to the currently focused element, including modals.
+//
+// Unique behaviors:
+// 1. Route with empty FocusManager → nil
+// 2. Route forwards message to focused child's Update
+// 3. Route returns the cmd from child's Update
+// 4. Route delivers to modal (not child) when modal active
+// 5. Child does NOT receive message when modal is focused
+// 6. After Tab (focus change), Route delivers to new focused child
+//
+// Cross-ref: core/focus.go:104-113 Route()
+func TestParity_FocusManagerRoute(t *testing.T) {
+	// 1. Empty manager → nil
+	emptyFM := core.NewFocusManager()
+	if emptyFM.Route(tea.KeyPressMsg{Code: 'a'}) != nil {
+		t.Error("Route on empty manager should return nil")
+	}
+
+	// Trackable focusables record messages received
+	child1 := &trackingFocusable{name: "child1", wantCmd: "cmd1"}
+	child2 := &trackingFocusable{name: "child2", wantCmd: "cmd2"}
+	modal := &trackingFocusable{name: "modal", wantCmd: "modalCmd"}
+
+	fm := core.NewFocusManager(child1, child2)
+	child1.Focus()
+
+	// 2-3. Route to focused child AND returns its cmd
+	testMsg := tea.KeyPressMsg{Code: 'x', Text: "x"}
+	cmd := fm.Route(testMsg)
+	if child1.received == nil {
+		t.Fatal("child1 should have received the message")
+	}
+	if _, ok := child1.received.(tea.KeyPressMsg); !ok {
+		t.Errorf("child1 should receive KeyPressMsg, got %T", child1.received)
+	}
+	if child2.received != nil {
+		t.Error("child2 should NOT receive message (not focused)")
+	}
+	// cmd should produce the expected marker
+	if cmd == nil {
+		t.Fatal("Route should return child's cmd")
+	}
+	marker, ok := cmd().(string)
+	if !ok || marker != "cmd1" {
+		t.Errorf("Expected child1's cmd result 'cmd1', got %v", marker)
+	}
+
+	// Reset
+	child1.received = nil
+
+	// 4-5. Push modal, Route should go to modal
+	fm.PushModal(modal)
+	fm.Route(testMsg)
+	if modal.received == nil {
+		t.Error("modal should receive message when active")
+	}
+	if child1.received != nil {
+		t.Error("child1 should NOT receive message when modal active")
+	}
+
+	// Clean up
+	modal.received = nil
+	fm.PopModal()
+
+	// 6. After Tab, new focused child gets messages
+	fm.Next() // focus child2
+	child1.received = nil
+	fm.Route(testMsg)
+	if child2.received == nil {
+		t.Error("child2 should receive message after Tab")
+	}
+	if child1.received != nil {
+		t.Error("child1 should NOT receive message after Blur")
+	}
+}
+
+// trackingFocusable records received messages and returns a marker cmd.
+type trackingFocusable struct {
+	name     string
+	focused  bool
+	received tea.Msg
+	wantCmd  string
+}
+
+func (tf *trackingFocusable) Focus()        { tf.focused = true }
+func (tf *trackingFocusable) Blur()         { tf.focused = false }
+func (tf *trackingFocusable) Focused() bool { return tf.focused }
+func (tf *trackingFocusable) Init() tea.Cmd { return nil }
+func (tf *trackingFocusable) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	tf.received = msg
+	marker := tf.wantCmd
+	return tf, func() tea.Msg { return marker }
+}
+func (tf *trackingFocusable) View() tea.View { return tea.NewView("") }
+
 // TestParity_FocusModalPushPop validates the FocusManager modal stack
 // lifecycle: push transfers focus, pop restores, stack nesting works.
 //
