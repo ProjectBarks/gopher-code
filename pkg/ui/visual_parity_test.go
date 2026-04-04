@@ -112,25 +112,50 @@ func TestVisualParity_StartupWelcomeBoxIntegrity(t *testing.T) {
 }
 
 // TestVisualParity_WelcomeDismissOnSubmit verifies welcome dismisses on input.
-func TestVisualParity_WelcomeDismissOnSubmit(t *testing.T) {
+// TestVisualParity_WelcomeDismissLifecycle validates the full welcome dismiss lifecycle:
+// empty submit keeps welcome, non-empty submit dismisses, state transitions correctly.
+func TestVisualParity_WelcomeDismissLifecycle(t *testing.T) {
 	config := session.DefaultConfig()
 	sess := session.New(config, "/tmp")
 	app := NewAppModel(sess, nil)
 	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	// Submit a message
-	app.Update(components.SubmitMsg{Text: "hello"})
-
-	view := app.View()
-	plain := strip(view.Content)
-
-	// Welcome should be gone
-	if strings.Contains(plain, "Welcome") {
-		t.Error("Welcome screen should be dismissed after submit")
+	// 1. Initial state: welcome visible
+	if !app.showWelcome {
+		t.Fatal("showWelcome must be true initially")
 	}
-	// Header should now show
-	if !strings.Contains(plain, "Claude") {
-		t.Error("Header should show after welcome dismiss")
+
+	// 2. Empty submit: welcome must STAY (Claude REPL.tsx:1368)
+	app.Update(components.SubmitMsg{Text: ""})
+	if !app.showWelcome {
+		t.Error("Empty submit should NOT dismiss welcome")
+	}
+	if app.mode != ModeIdle {
+		t.Error("Empty submit should keep mode idle")
+	}
+
+	// 3. Non-empty submit: welcome dismissed, mode changes, message added
+	app.Update(components.SubmitMsg{Text: "hello"})
+	if app.showWelcome {
+		t.Error("Non-empty submit should dismiss welcome")
+	}
+	if app.mode != ModeStreaming {
+		t.Errorf("Submit should enter ModeStreaming, got %v", app.mode)
+	}
+	if len(sess.Messages) < 1 {
+		t.Error("Submit should add user message to session")
+	}
+	if app.conversation.MessageCount() < 1 {
+		t.Error("Submit should add message to conversation pane")
+	}
+
+	// 4. View should render header (not welcome box) — structural check
+	v := strip(app.View().Content)
+	lines := strings.Split(v, "\n")
+	// First line should be header (✻ Claude), NOT a border (╭)
+	first := strings.TrimSpace(lines[0])
+	if strings.HasPrefix(first, "╭") {
+		t.Error("After dismiss, first line should be header, not welcome box border")
 	}
 }
 
