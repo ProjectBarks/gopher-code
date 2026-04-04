@@ -408,6 +408,91 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_InputPaneEditingFlow validates the InputPane editing operations
+// work correctly in combination (cursor moves, insertions, word-kill, line-kill).
+//
+// Unique behaviors (no existing test validates the InputPane buffer directly):
+// 1. Typing characters inserts at cursor position and advances cursor
+// 2. Ctrl+A moves cursor to 0 WITHOUT deleting text
+// 3. After Ctrl+A, typing inserts at position 0 (prefix) not end
+// 4. Ctrl+E moves cursor to end after being at 0
+// 5. Ctrl+W deletes word backward from cursor, not entire buffer
+// 6. Ctrl+U kills from cursor to beginning, preserving suffix after cursor
+//
+// Cross-ref: input.go:123 handleKey, input.go:215 deleteWordBackward
+// Cross-ref: Claude PromptInput.tsx — standard readline-style editing
+func TestParity_InputPaneEditingFlow(t *testing.T) {
+	inp := components.NewInputPane()
+	inp.SetSize(80, 3)
+	inp.Focus()
+
+	// 1. Type "hello" — buffer should be "hello"
+	for _, ch := range "hello" {
+		inp.Update(tea.KeyPressMsg{Code: rune(ch), Text: string(ch)})
+	}
+	if inp.Value() != "hello" {
+		t.Errorf("After typing 'hello', buffer should be 'hello', got %q", inp.Value())
+	}
+
+	// 2. Ctrl+A → cursor to 0, text preserved
+	inp.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
+	if inp.Value() != "hello" {
+		t.Errorf("Ctrl+A should not modify text, got %q", inp.Value())
+	}
+
+	// 3. Type "X" → should insert at position 0 → "Xhello"
+	inp.Update(tea.KeyPressMsg{Code: 'X', Text: "X"})
+	if inp.Value() != "Xhello" {
+		t.Errorf("Insert at start should give 'Xhello', got %q", inp.Value())
+	}
+
+	// 4. Ctrl+E → cursor to end
+	inp.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	// Type "!" → should append → "Xhello!"
+	inp.Update(tea.KeyPressMsg{Code: '!', Text: "!"})
+	if inp.Value() != "Xhello!" {
+		t.Errorf("After Ctrl+E and '!', expected 'Xhello!', got %q", inp.Value())
+	}
+
+	// 5. Clear and test Ctrl+W word-delete
+	inp.Clear()
+	for _, ch := range "foo bar baz" {
+		inp.Update(tea.KeyPressMsg{Code: rune(ch), Text: string(ch)})
+	}
+	// Ctrl+W at end → deletes "baz" word (standard readline keeps trailing space)
+	inp.Update(tea.KeyPressMsg{Code: 'w', Mod: tea.ModCtrl})
+	if inp.Value() != "foo bar " {
+		t.Errorf("Ctrl+W should delete 'baz' word, expected 'foo bar ', got %q", inp.Value())
+	}
+	// Another Ctrl+W → deletes trailing space + "bar"
+	inp.Update(tea.KeyPressMsg{Code: 'w', Mod: tea.ModCtrl})
+	if inp.Value() != "foo " {
+		t.Errorf("Second Ctrl+W: expected 'foo ', got %q", inp.Value())
+	}
+	// Third Ctrl+W → deletes "foo "
+	inp.Update(tea.KeyPressMsg{Code: 'w', Mod: tea.ModCtrl})
+	if inp.Value() != "" {
+		t.Errorf("Third Ctrl+W should empty buffer, got %q", inp.Value())
+	}
+
+	// 6. Ctrl+U from middle preserves suffix
+	inp.Clear()
+	for _, ch := range "abcdef" {
+		inp.Update(tea.KeyPressMsg{Code: rune(ch), Text: string(ch)})
+	}
+	// Move cursor to position 3 (after "abc")
+	inp.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl}) // to 0
+	// Move right 3 times — use Right arrow
+	for i := 0; i < 3; i++ {
+		inp.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	}
+	// Ctrl+U → kills "abc", keeps "def"
+	inp.Update(tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
+	if inp.Value() != "def" {
+		t.Errorf("Ctrl+U from middle should kill prefix, expected 'def', got %q", inp.Value())
+	}
+}
+
 // TestParity_EscapeDuringStreamingCancel validates Escape's behavior in different modes.
 //
 // Unique behaviors (no existing test validates Escape key paths):
