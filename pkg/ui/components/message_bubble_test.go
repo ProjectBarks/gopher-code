@@ -117,8 +117,8 @@ func TestMessageBubbleToolResultSuccess(t *testing.T) {
 	if !strings.Contains(result, "file1.go") {
 		t.Errorf("Expected result content in output, got %q", result)
 	}
-	if !strings.Contains(result, "└") {
-		t.Errorf("Expected connector character └ in output, got %q", result)
+	if !strings.Contains(result, "⎿") {
+		t.Errorf("Expected connector character ⎿ in output, got %q", result)
 	}
 }
 

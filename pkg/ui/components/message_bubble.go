@@ -137,11 +137,20 @@ func (mb *MessageBubble) renderUserMessage(msg *message.Message) string {
 // --- Assistant message rendering ---
 
 func (mb *MessageBubble) renderAssistantMessage(msg *message.Message) string {
+	cs := mb.theme.Colors()
+	prefixStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(cs.Accent))
 	var parts []string
+	firstText := true
 
 	for _, block := range msg.Content {
 		rendered := mb.RenderContent(block)
 		if rendered != "" {
+			// Claude Code prefixes the first text block with ⏺ (U+23FA)
+			if firstText && block.Type == message.ContentText {
+				rendered = prefixStyle.Render("⏺") + " " + rendered
+				firstText = false
+			}
 			parts = append(parts, rendered)
 		}
 	}
@@ -186,9 +195,9 @@ func (mb *MessageBubble) renderToolUseBlock(block message.ContentBlock) string {
 	iconStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(cs.Spinner))
 
-	// Tool name header
+	// Tool name header — Claude uses ⏺ (U+23FA) prefix for tool use too
 	header := fmt.Sprintf("%s %s",
-		iconStyle.Render("⚡"),
+		iconStyle.Render("⏺"),
 		toolStyle.Render(block.Name),
 	)
 
