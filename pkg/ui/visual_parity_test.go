@@ -412,6 +412,94 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_EffortLevelIconMapping validates that each effort level produces
+// a VISUALLY DIFFERENT glyph in the spinner view.
+//
+// Unique behaviors (existing EffortLevelDisplay only checked high=●):
+// 1. "low" → ○ (U+25CB WHITE CIRCLE)
+// 2. "medium" → ◐ (U+25D0 HALF BLACK)
+// 3. "high" → ● (U+25CF BLACK CIRCLE)
+// 4. "max" → ◉ (U+25C9 FISHEYE)
+// 5. Each glyph is DIFFERENT from the others (no duplicates)
+// 6. No effort (default) → "(thinking)" without glyph suffix
+// 7. Unknown effort level → same as no effort (empty string)
+// 8. After Stop, view does NOT contain effort glyph
+//
+// Cross-ref: spinner_verbs.go:94-97 glyph constants, :156-170 SetEffort
+func TestParity_EffortLevelIconMapping(t *testing.T) {
+	glyphs := map[string]string{
+		"low":    "○",
+		"medium": "◐",
+		"high":   "●",
+		"max":    "◉",
+	}
+
+	seenGlyphs := make(map[string]string) // glyph → level (for uniqueness)
+
+	for level, expectedGlyph := range glyphs {
+		ts := components.NewThinkingSpinner(theme.Current())
+		ts.Start()
+		ts.SetEffort(level)
+		view := strip(ts.View())
+
+		if !strings.Contains(view, expectedGlyph) {
+			t.Errorf("Level %q should contain glyph %q, got: %s", level, expectedGlyph, view)
+		}
+
+		// Check uniqueness
+		if prev, seen := seenGlyphs[expectedGlyph]; seen {
+			t.Errorf("Glyph %q used for both %q and %q", expectedGlyph, prev, level)
+		}
+		seenGlyphs[expectedGlyph] = level
+
+		// Verify the "(thinking X)" format
+		if !strings.Contains(view, "(thinking "+expectedGlyph+")") {
+			t.Errorf("Level %q should render '(thinking %s)' in view, got: %s", level, expectedGlyph, view)
+		}
+	}
+
+	// No effort set → just "(thinking)" without glyph
+	tsNone := components.NewThinkingSpinner(theme.Current())
+	tsNone.Start()
+	viewNone := strip(tsNone.View())
+	if !strings.Contains(viewNone, "(thinking)") {
+		t.Errorf("No effort should render '(thinking)', got: %s", viewNone)
+	}
+	// And should NOT contain any of the effort glyphs
+	for glyph := range seenGlyphs {
+		if strings.Contains(viewNone, glyph) {
+			t.Errorf("No-effort view should not contain any effort glyph, found %q", glyph)
+		}
+	}
+
+	// Unknown effort → empty effort (same as no effort)
+	tsUnknown := components.NewThinkingSpinner(theme.Current())
+	tsUnknown.Start()
+	tsUnknown.SetEffort("bogus")
+	viewUnk := strip(tsUnknown.View())
+	if !strings.Contains(viewUnk, "(thinking)") {
+		t.Errorf("Unknown effort should render '(thinking)', got: %s", viewUnk)
+	}
+	for glyph := range seenGlyphs {
+		if strings.Contains(viewUnk, glyph) {
+			t.Errorf("Unknown effort view should not contain any effort glyph, found %q", glyph)
+		}
+	}
+
+	// After Stop, view should show "thought for Xs" without effort
+	tsStopped := components.NewThinkingSpinner(theme.Current())
+	tsStopped.Start()
+	tsStopped.SetEffort("high")
+	tsStopped.Stop()
+	viewStop := strip(tsStopped.View())
+	if strings.Contains(viewStop, "(thinking") {
+		t.Errorf("Stopped view should not say '(thinking', got: %s", viewStop)
+	}
+	if !strings.Contains(viewStop, "for") {
+		t.Errorf("Stopped view should contain 'for Xs', got: %s", viewStop)
+	}
+}
+
 // TestParity_InputCursorMovementAndDelete validates Left/Right/Delete
 // key semantics with exact buffer state verification.
 //

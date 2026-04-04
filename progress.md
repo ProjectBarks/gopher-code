@@ -228,7 +228,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B24 | TestParity_FocusModalPushPop | push blurs child/focuses modal, ModalActive tracking, nested push/pop, restoration to child, empty-pop no-op | ✅ pass |
 | B25 | TestParity_FocusManagerRoute | empty→nil, routes to focused child only, cmd returned from child, modal receives when active, Next() redirects | ✅ pass |
 | B26 | TestParity_DiffApprovalEdgeCases | Enter=y alias, unknown key no-op, non-key msg no-op, nil channel safe, full channel non-blocking | ✅ pass |
-### Next B27: InputPane KeyDelete / Right-arrow cursor movement
+| B27 | TestParity_InputCursorMovementAndDelete | Left/Right bounds, Delete at cursor (not moving), Delete at end no-op, Left at 0 no-op, round-trip cursor, position-aware insertion | ✅ pass |
+### Next B28: EffortLevel icon display (●●●/●●/●)
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
