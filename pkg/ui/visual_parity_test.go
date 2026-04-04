@@ -409,6 +409,109 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_ToolResultTruncationAndStyling validates renderToolResultBlock's
+// truncation rules and the error-vs-success path divergence.
+//
+// Unique behaviors (no existing test validates truncation rules):
+// 1. Error result >300 chars → truncated to 300 + "…"
+// 2. Success result with >10 lines → keeps 10 + "…[truncated]" marker
+// 3. Success result >500 chars (single line) → truncated to 500 + "…"
+// 4. Empty content → shows "(no content)" placeholder
+// 5. Multi-line success: first line prefixed with ResponseConnector (⎿),
+//    subsequent lines prefixed with ResponseContinuation (no connector)
+// 6. block.Content takes precedence over block.Text when both set
+// 7. Empty Content falls through to block.Text
+//
+// Cross-ref: message_bubble.go:213-265 renderToolResultBlock
+func TestParity_ToolResultTruncationAndStyling(t *testing.T) {
+	mb := components.NewMessageBubble(theme.Current(), 80)
+
+	// 1. Error truncation at 300 chars
+	longErr := strings.Repeat("x", 400)
+	errOut := strip(mb.RenderContent(message.ContentBlock{
+		Type: message.ContentToolResult, Content: longErr, IsError: true,
+	}))
+	// Should contain truncation marker
+	if !strings.Contains(errOut, "…") {
+		t.Errorf("Error >300 chars should contain truncation …, got len=%d", len(errOut))
+	}
+	// Should NOT contain all 400 'x' chars
+	if strings.Count(errOut, "x") >= 400 {
+		t.Error("Error should be truncated, contains all 400 chars")
+	}
+
+	// 2. Success line truncation: 15 lines → 10 + …[truncated]
+	manyLines := strings.Repeat("line\n", 15)
+	manyOut := strip(mb.RenderContent(message.ContentBlock{
+		Type: message.ContentToolResult, Content: manyLines, IsError: false,
+	}))
+	if !strings.Contains(manyOut, "…[truncated]") {
+		t.Errorf("15-line result should show …[truncated] marker, got:\n%s", manyOut)
+	}
+	lineCount := strings.Count(manyOut, "line")
+	if lineCount > 11 { // 10 kept + "line" inside "…[truncated]"? no, max 10
+		t.Errorf("Should keep max 10 'line' occurrences, got %d", lineCount)
+	}
+
+	// 3. Success char truncation: 600 chars single line → 500 + …
+	longSingle := strings.Repeat("a", 600)
+	longOut := strip(mb.RenderContent(message.ContentBlock{
+		Type: message.ContentToolResult, Content: longSingle, IsError: false,
+	}))
+	if strings.Count(longOut, "a") >= 600 {
+		t.Error("600-char result should be truncated")
+	}
+	if !strings.Contains(longOut, "…") {
+		t.Error("Truncated result should have … marker")
+	}
+
+	// 4. Empty content → "(no content)"
+	emptyOut := strip(mb.RenderContent(message.ContentBlock{
+		Type: message.ContentToolResult, Content: "", IsError: false,
+	}))
+	if !strings.Contains(emptyOut, "(no content)") {
+		t.Errorf("Empty result should show '(no content)', got: %s", emptyOut)
+	}
+
+	// 5. Multi-line indentation: first line gets ⎿, rest get spaces
+	multiOut := strip(mb.RenderContent(message.ContentBlock{
+		Type: message.ContentToolResult, Content: "first\nsecond\nthird", IsError: false,
+	}))
+	multiLines := strings.Split(multiOut, "\n")
+	if len(multiLines) < 3 {
+		t.Fatalf("Expected 3+ output lines, got %d: %s", len(multiLines), multiOut)
+	}
+	// First line should contain ⎿ connector
+	if !strings.Contains(multiLines[0], "⎿") {
+		t.Errorf("First line should have ⎿ connector: %q", multiLines[0])
+	}
+	// Subsequent lines should NOT have ⎿ (continuation uses spaces)
+	if strings.Contains(multiLines[1], "⎿") {
+		t.Errorf("Continuation line should NOT have ⎿: %q", multiLines[1])
+	}
+	if strings.Contains(multiLines[2], "⎿") {
+		t.Errorf("Third line should NOT have ⎿: %q", multiLines[2])
+	}
+
+	// 6-7. Content vs Text precedence
+	bothOut := strip(mb.RenderContent(message.ContentBlock{
+		Type: message.ContentToolResult, Content: "CONTENT", Text: "TEXT",
+	}))
+	if !strings.Contains(bothOut, "CONTENT") {
+		t.Errorf("Content should take precedence, got: %s", bothOut)
+	}
+	if strings.Contains(bothOut, "TEXT") {
+		t.Errorf("Text should be ignored when Content is set, got: %s", bothOut)
+	}
+	// Empty Content → falls through to Text
+	textOnlyOut := strip(mb.RenderContent(message.ContentBlock{
+		Type: message.ContentToolResult, Content: "", Text: "TEXT_FALLBACK",
+	}))
+	if !strings.Contains(textOnlyOut, "TEXT_FALLBACK") {
+		t.Errorf("Empty Content should fall through to Text, got: %s", textOnlyOut)
+	}
+}
+
 // TestParity_ConversationScrollAutoScroll validates scroll state transitions
 // and the auto-scroll contract: user scrolling disables auto-scroll, and
 // scrolling back to bottom re-enables it, affecting new message behavior.

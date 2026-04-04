@@ -209,7 +209,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B5 | TestParity_EscapeDuringStreamingCancel | Escape idle no-op, Escape→cancelQuery, queryDone finalizes state, partial text preserved | ✅ pass |
 | B6 | TestParity_InputPaneEditingFlow | type+buffer, Ctrl+A preserves text, prefix insert, Ctrl+E+append, Ctrl+W word-delete (3x), Ctrl+U prefix-kill with suffix preservation | ✅ pass |
 | B7 | TestParity_InputPaneHistorySaveRestore | no-history no-op, non-empty blocks nav, 3-entry traversal, oldest stops, restore savedInput | ✅ pass |
-### Next B8: ConversationPane scroll behavior OR Spinner verb randomization
+| B8 | TestParity_ConversationScrollAutoScroll | Up disables autoScroll, Down re-enables at 0, PgUp/PgDown clamping, AddMessage respects autoScroll state | ✅ pass |
+### Next B9: MessageBubble tool result truncation + error styling differentiation
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
