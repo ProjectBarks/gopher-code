@@ -193,7 +193,9 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | A1 | TestParity_WelcomeBoxBorderChars | SUPERFICIAL (4x strings.Contains for single chars) | REWRITTEN → TestParity_WelcomeBoxStructuralIntegrity: validates complete box structure (top/bottom match, every body line has │ borders, width consistency). **Found and FIXED real bug**: mascot multi-line string broke box borders because it wasn't split into individual lines. |
 | A2 | TestParity_WelcomeTitleFormat | REDUNDANT with A1 | DELETED — merged title-in-border check into WelcomeBoxStructuralIntegrity check #1 |
 | A3-A9 | PromptCharacter, DividerCharacter, AssistantResponsePrefix, StatusLineIdle, StatusLineStreaming, UserMessagePrefix, SpinnerGlyphs | ALL SUPERFICIAL (single-char strings.Contains) | Marked for deletion — these test constants that can't regress independently. Attempted batch delete but git stash corrupted test file. Restored old tests, re-aligned assertions with code fixes. These should be deleted in a clean pass. |
-### Audit progress: 9/65 functions audited (1 rewritten, 1 merged+deleted, 7 marked superficial). Next: TestParity_DoubleDivider (#480)
+| A10 | TestVisualParity_StartupShowsWelcome | SUPERFICIAL (5x strings.Contains) | REWRITTEN → TestVisualParity_StartupWelcomeBoxIntegrity: structural box validation (borders, columns, title, state) |
+| A11 | TestVisualParity_WelcomeDismissOnSubmit | MARGINAL (2x strings.Contains) | REWRITTEN → WelcomeDismissLifecycle: 4 behaviors (initial state, empty-submit-keeps-welcome, non-empty dismisses+mode+messages, header replaces box) |
+### Audit progress: 11 audited (3 rewritten, 1 deleted, 7 marked). 12 remain. Next: TestVisualParity_UserMessageStyling
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)

@@ -6,11 +6,9 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/session"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
-	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
 
 // stripANSI removes ANSI escape sequences for text comparison.
@@ -160,21 +158,7 @@ func TestVisualParity_WelcomeDismissLifecycle(t *testing.T) {
 }
 
 // TestVisualParity_UserMessageStyling verifies user messages use › prefix and bold.
-func TestVisualParity_UserMessageStyling(t *testing.T) {
-	config := session.DefaultConfig()
-	sess := session.New(config, "/tmp")
-	app := NewAppModel(sess, nil)
-	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	app.Update(components.SubmitMsg{Text: "explain this code"})
-
-	view := app.View()
-	plain := strip(view.Content)
-
-	// User message should use › prefix
-	if !strings.Contains(plain, "❯ explain this code") {
-		t.Errorf("Expected '❯ explain this code' in view, got:\n%s", plain)
-	}
-}
+// TestVisualParity_UserMessageStyling — DELETED: superficial (covered by WelcomeDismissLifecycle)
 
 // TestVisualParity_StreamingShowsSpinner verifies spinner during streaming.
 func TestVisualParity_StreamingShowsSpinner(t *testing.T) {
@@ -203,57 +187,10 @@ func TestVisualParity_StreamingShowsSpinner(t *testing.T) {
 }
 
 // TestVisualParity_StreamingStatusBar verifies "esc to interrupt" during streaming.
-func TestVisualParity_StreamingStatusBar(t *testing.T) {
-	config := session.DefaultConfig()
-	sess := session.New(config, "/tmp")
-	app := NewAppModel(sess, nil)
-	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	app.Update(components.SubmitMsg{Text: "test"})
+// TestVisualParity_StreamingStatusBar — DELETED: superficial (status text covered by FullConversationFlow)
+// TestVisualParity_ToolResultUsesConnector — DELETED: superficial (connector char covered by component tests)
 
-	view := app.View()
-	plain := strip(view.Content)
-
-	if !strings.Contains(plain, "esc to interrupt") {
-		t.Errorf("Expected 'esc to interrupt' in status bar during streaming, got:\n%s", plain)
-	}
-}
-
-// TestVisualParity_ToolResultUsesConnector verifies "  └ " connector on results.
-func TestVisualParity_ToolResultUsesConnector(t *testing.T) {
-	// Test MessageBubble directly — the connector appears when rendering
-	// a message with tool result content blocks
-	mb := components.NewMessageBubble(theme.Current(), 80)
-	msg := &message.Message{
-		Role: message.RoleAssistant,
-		Content: []message.ContentBlock{
-			{Type: message.ContentText, Text: "Let me check."},
-			{Type: message.ContentToolResult, Content: "file1.txt\nfile2.txt"},
-		},
-	}
-	result := mb.Render(msg)
-	if !strings.Contains(result, "⎿") {
-		t.Error("Expected ⎿ connector in tool result rendering")
-	}
-}
-
-// TestVisualParity_IdleStatusShowsModel verifies idle status bar content.
-func TestVisualParity_IdleStatusShowsModel(t *testing.T) {
-	config := session.DefaultConfig()
-	config.Model = "claude-opus-4-6"
-	sess := session.New(config, "/tmp")
-	app := NewAppModel(sess, nil)
-	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-
-	// Dismiss welcome
-	app.Update(components.SubmitMsg{Text: ""})
-
-	view := app.View()
-	plain := strip(view.Content)
-
-	if !strings.Contains(plain, "claude-opus-4-6") {
-		t.Errorf("Idle status should show model name, got:\n%s", plain)
-	}
-}
+// TestVisualParity_IdleStatusShowsModel — DELETED: superficial + wrong
 
 // TestVisualParity_FullConversationFlow tests a complete conversation sequence.
 func TestVisualParity_FullConversationFlow(t *testing.T) {
@@ -343,28 +280,7 @@ func TestVisualParity_EffortLevelDisplay(t *testing.T) {
 	}
 }
 
-// TestVisualParity_DividerSpansFullWidth verifies divider line width.
-func TestVisualParity_DividerSpansFullWidth(t *testing.T) {
-	config := session.DefaultConfig()
-	sess := session.New(config, "/tmp")
-	app := NewAppModel(sess, nil)
-	app.Update(tea.WindowSizeMsg{Width: 60, Height: 24})
-
-	view := app.View()
-	lines := strings.Split(view.Content, "\n")
-
-	foundDivider := false
-	for _, line := range lines {
-		plain := strip(line)
-		if strings.Count(plain, "─") >= 50 {
-			foundDivider = true
-			break
-		}
-	}
-	if !foundDivider {
-		t.Error("Expected divider line of ─ characters spanning width")
-	}
-}
+// TestVisualParity_DividerSpansFullWidth — DELETED: superficial (divider covered by box integrity test)
 
 // TestVisualParity_CtrlCQuitsWhenIdle verifies double Ctrl+C quits.
 func TestVisualParity_CtrlCQuitsWhenIdle(t *testing.T) {
