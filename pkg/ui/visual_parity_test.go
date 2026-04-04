@@ -409,6 +409,95 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_DispatcherParsingAndErrorPaths validates the slash command
+// dispatcher's parsing logic and error handling.
+//
+// Unique behaviors (no existing test validates parsing/error paths):
+// 1. Non-slash input returns nil (not a command)
+// 2. Whitespace-only input returns nil
+// 3. Leading whitespace + slash → IsCommand=true, Dispatch still parses
+// 4. Unknown command returns CommandResult with unknown-command error
+// 5. Command parsing is case-insensitive (/HELP == /help)
+// 6. Args after command are trimmed of surrounding whitespace
+// 7. Multi-word args after first space are passed intact
+//
+// Cross-ref: commands/handlers.go:64-93 Dispatch/IsCommand
+func TestParity_DispatcherParsingAndErrorPaths(t *testing.T) {
+	d := commands.NewDispatcher()
+
+	// 1. Non-slash input → nil
+	if cmd := d.Dispatch("hello world"); cmd != nil {
+		t.Error("Non-slash input should return nil cmd")
+	}
+
+	// 2. Whitespace-only → nil
+	if cmd := d.Dispatch("   "); cmd != nil {
+		t.Error("Whitespace-only input should return nil cmd")
+	}
+
+	// 3. IsCommand detects leading slash after trim
+	if !commands.IsCommand("  /help  ") {
+		t.Error("IsCommand should detect slash after trim")
+	}
+	if commands.IsCommand("hello /help") {
+		t.Error("IsCommand should be false for slash not at start")
+	}
+
+	// 4. Unknown command → CommandResult with error
+	unkCmd := d.Dispatch("/definitelynotacommand")
+	if unkCmd == nil {
+		t.Fatal("Unknown command should return a cmd")
+	}
+	result := unkCmd()
+	cr, ok := result.(commands.CommandResult)
+	if !ok {
+		t.Fatalf("Expected CommandResult, got %T", result)
+	}
+	if cr.Error == nil {
+		t.Error("Unknown command should have non-nil Error")
+	}
+	if !strings.Contains(cr.Error.Error(), "unknown command") {
+		t.Errorf("Error should mention 'unknown command', got: %v", cr.Error)
+	}
+	if cr.Command != "/definitelynotacommand" {
+		t.Errorf("CommandResult.Command should be '/definitelynotacommand', got %q", cr.Command)
+	}
+
+	// 5. Case-insensitive parsing: /HELP == /help (uses lowercase lookup)
+	// Register a handler and verify uppercase input hits it
+	seen := ""
+	d.Register("/testcmd", func(args string) tea.Cmd {
+		return func() tea.Msg {
+			seen = args
+			return nil
+		}
+	})
+	cmd := d.Dispatch("/TESTCMD hello")
+	if cmd == nil {
+		t.Fatal("/TESTCMD should dispatch to /testcmd (case-insensitive)")
+	}
+	cmd()
+	if seen != "hello" {
+		t.Errorf("Handler should receive args 'hello', got %q", seen)
+	}
+
+	// 6. Args trimmed of surrounding whitespace
+	seen = ""
+	cmd2 := d.Dispatch("/testcmd   spaced  ")
+	cmd2()
+	if seen != "spaced" {
+		t.Errorf("Args should be trimmed, got %q", seen)
+	}
+
+	// 7. Multi-word args preserved after first space
+	seen = ""
+	cmd3 := d.Dispatch("/testcmd one two three")
+	cmd3()
+	if seen != "one two three" {
+		t.Errorf("Multi-word args should be preserved, got %q", seen)
+	}
+}
+
 // TestParity_AppFocusCyclingTabShiftTab validates Tab/Shift+Tab key routing
 // and the FocusManager's ring cycling behavior through AppModel.Update.
 //
