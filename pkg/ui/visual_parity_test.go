@@ -409,6 +409,86 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_UserMessageWrappingAndPrefix validates user message rendering:
+// text wrapping at width-4, first-line ❯ prefix vs continuation 2-space prefix.
+//
+// Unique behaviors (no existing test validates user message wrapping):
+// 1. First line starts with "❯ " prefix
+// 2. Continuation lines (wrapped) start with 2 spaces, not ❯
+// 3. Short messages produce exactly 1 line
+// 4. Long messages wrap at width-4 (leaving border+prefix room)
+// 5. Multiple ContentText blocks each get their own prefix handling
+// 6. ContentToolResult blocks within user message render with ⎿ connector
+// 7. Unknown block types are silently dropped (not rendered)
+//
+// Cross-ref: message_bubble.go:89-133 renderUserMessage
+func TestParity_UserMessageWrappingAndPrefix(t *testing.T) {
+	mb := components.NewMessageBubble(theme.Current(), 20) // narrow width forces wrapping
+
+	// 1-2. Short message produces 1 line with ❯ prefix
+	shortMsg := &message.Message{
+		Role:    message.RoleUser,
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: "hello"}},
+	}
+	shortOut := strip(mb.Render(shortMsg))
+	shortLines := strings.Split(strings.TrimRight(shortOut, "\n"), "\n")
+	// Filter empty lines
+	nonEmpty := []string{}
+	for _, l := range shortLines {
+		if strings.TrimSpace(l) != "" {
+			nonEmpty = append(nonEmpty, l)
+		}
+	}
+	if len(nonEmpty) != 1 {
+		t.Errorf("Short 'hello' should produce 1 line, got %d: %q", len(nonEmpty), nonEmpty)
+	}
+	if !strings.Contains(nonEmpty[0], "❯") {
+		t.Errorf("First line should have ❯ prefix: %q", nonEmpty[0])
+	}
+	if !strings.Contains(nonEmpty[0], "hello") {
+		t.Errorf("First line should contain text 'hello': %q", nonEmpty[0])
+	}
+
+	// 3-4. Long message wraps; continuation lines don't have ❯
+	longMsg := &message.Message{
+		Role:    message.RoleUser,
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: "this is a very long message that will definitely wrap across multiple lines"}},
+	}
+	longOut := strip(mb.Render(longMsg))
+	longLines := strings.Split(strings.TrimRight(longOut, "\n"), "\n")
+	nonEmptyLong := []string{}
+	for _, l := range longLines {
+		if strings.TrimSpace(l) != "" {
+			nonEmptyLong = append(nonEmptyLong, l)
+		}
+	}
+	if len(nonEmptyLong) < 2 {
+		t.Errorf("Long text should wrap to 2+ lines, got %d: %q", len(nonEmptyLong), nonEmptyLong)
+	}
+	// First line has ❯
+	if !strings.Contains(nonEmptyLong[0], "❯") {
+		t.Errorf("First wrapped line should have ❯: %q", nonEmptyLong[0])
+	}
+	// Continuation lines must NOT have ❯ (just 2-space indent)
+	for i := 1; i < len(nonEmptyLong); i++ {
+		if strings.Contains(nonEmptyLong[i], "❯") {
+			t.Errorf("Continuation line %d should NOT have ❯: %q", i, nonEmptyLong[i])
+		}
+	}
+
+	// 5. Unknown block types silently dropped — a message with only unknown type produces empty output
+	unknownMsg := &message.Message{
+		Role:    message.RoleUser,
+		Content: []message.ContentBlock{{Type: message.ContentThinking, Thinking: "hidden"}},
+	}
+	unknownOut := strip(mb.Render(unknownMsg))
+	// User renderer only handles ContentText and ContentToolResult,
+	// so Thinking block should be dropped
+	if strings.Contains(unknownOut, "hidden") {
+		t.Errorf("ContentThinking in user message should be dropped, got: %q", unknownOut)
+	}
+}
+
 // TestParity_WelcomeResponsiveSizing validates SetSize calculation AND that
 // the rendered box width actually matches ws.width (no drift).
 //

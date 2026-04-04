@@ -216,7 +216,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B12 | TestParity_DispatcherParsingAndErrorPaths | non-slash→nil, whitespace→nil, IsCommand detects trimmed slash, unknown→error CommandResult, case-insensitive, args trimmed, multi-word preserved | ✅ pass |
 | B13 | TestParity_QueryEventDispatchAllTypes | ToolUseStart→activeToolCalls+ModeToolRunning, ToolResult removes, Usage accumulates both token counts, unknown type no-op, TurnComplete→idle | ✅ pass |
 | B14 | TestParity_StatusLineHintLifecycle | idle default, CtrlCHintMsg switches text, streaming/tool overrides hint, mode→idle clears hint, defensive hint reset | ✅ pass |
-### Next B15: WelcomeScreen SetSize responsive width calculation
+| B15 | TestParity_WelcomeResponsiveSizing | width = terminal-2, minimum 20 clamp, rendered width matches, growth expands box, idempotent SetSize | ✅ pass |
+### Next B16: Header SetModel/SetCWD component OR MessageBubble user message row styling
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
