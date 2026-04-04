@@ -234,7 +234,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B30 | TestParity_ConversationViewComposition | empty→placeholder, streaming appears after messages (index order), padded to height, clear preserves messages | ✅ pass |
 | B31 | TestParity_InputCursorBlockRendering | focused cursor at start/end/middle (exact split), blur hides cursor, refocus restores | ✅ pass |
 | B32 | TestParity_MessageBubbleRoleDispatch | nil safe, role→prefix mapping (❯/⏺/none), thinking truncation, SetWidth wrap change, unknown type → empty | ✅ pass |
-### Next B33: Spinner Tick/SpinnerTickMsg cmd scheduling
+| B33 | TestParity_InputBufferLifecycle | SetValue+cursor, Clear resets, HasText transitions, Unicode rune-boundary splitting | ✅ pass |
+### Next B34: StatusLine TokenUpdateMsg + width padding
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)

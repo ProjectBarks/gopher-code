@@ -105,11 +105,15 @@ func (sl *StatusLine) View() tea.View {
 		}
 	}
 
-	// Pad to fill width
-	if sl.width > 0 && len(content) < sl.width {
-		content = content + strings.Repeat(" ", sl.width-len(content))
-	} else if sl.width > 0 {
-		content = truncateField(content, sl.width)
+	// Pad to fill width — use lipgloss.Width to count VISUAL chars (not bytes)
+	// because content includes ANSI escape sequences from styling.
+	if sl.width > 0 {
+		visualWidth := lipgloss.Width(content)
+		if visualWidth < sl.width {
+			content = content + strings.Repeat(" ", sl.width-visualWidth)
+		} else if visualWidth > sl.width {
+			content = truncateField(content, sl.width)
+		}
 	}
 
 	style := t.StatusBar()
