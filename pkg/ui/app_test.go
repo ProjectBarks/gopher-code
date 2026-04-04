@@ -122,8 +122,8 @@ func TestAppModelRenderHeader(t *testing.T) {
 	app := newTestApp()
 	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	view := app.View()
-	if !strings.Contains(view.Content, "Gopher") {
-		t.Error("Header should contain 'Gopher'")
+	if !strings.Contains(view.Content, "Claude") {
+		t.Error("Header should contain 'Claude'")
 	}
 }
 

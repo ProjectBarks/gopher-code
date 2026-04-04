@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -15,6 +18,13 @@ import (
 const (
 	DefaultBashTimeoutMs = 120_000 // 2 minutes
 	MaxBashTimeoutMs     = 600_000 // 10 minutes
+)
+
+// Output truncation constants matching TS source.
+// Source: utils/shell/outputLimits.ts
+const (
+	BashMaxOutputDefault    = 30_000  // Default max output length in chars
+	BashMaxOutputUpperLimit = 150_000 // Upper limit for env var override
 )
 
 // AssistantBlockingBudgetMs is the threshold after which long-running commands
@@ -89,7 +99,11 @@ func (b *BashTool) Execute(ctx context.Context, tc *ToolContext, input json.RawM
 	cmdCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
 
-	cmd := exec.CommandContext(cmdCtx, "sh", "-c", in.Command)
+	// Use user's shell, falling back to bash.
+	// Source: BashTool.tsx:881 — exec(command, ..., 'bash', ...)
+	// Source: utils/shell/bashProvider.ts — uses $SHELL or /bin/bash
+	shell := getUserShell()
+	cmd := exec.CommandContext(cmdCtx, shell, "-c", in.Command)
 	cmd.Dir = tc.CWD
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
@@ -99,13 +113,104 @@ func (b *BashTool) Execute(ctx context.Context, tc *ToolContext, input json.RawM
 
 	err := cmd.Run()
 
-	output := stdout.String() + stderr.String()
+	// Build output: stdout + stderr combined, then truncate.
+	// Source: BashTool.tsx:686-699
+	stdoutStr := stdout.String()
+	stderrStr := stderr.String()
+	var outputBuilder strings.Builder
+	outputBuilder.WriteString(stdoutStr)
+	if stderrStr != "" {
+		if stdoutStr != "" && !strings.HasSuffix(stdoutStr, "\n") {
+			outputBuilder.WriteByte('\n')
+		}
+		outputBuilder.WriteString(stderrStr)
+	}
+
+	output := stripEmptyLines(outputBuilder.String())
+
 	if err != nil {
 		if cmdCtx.Err() == context.DeadlineExceeded {
 			return ErrorOutput(fmt.Sprintf("command timed out after %d seconds", timeoutMs/1000)), nil
 		}
-		return ErrorOutput(fmt.Sprintf("command failed: %s\n%s", err, output)), nil
+		// Append exit code to output, matching TS behavior.
+		// Source: BashTool.tsx:698-699 — stdoutAccumulator.append(`Exit code ${result.code}`)
+		exitCode := getExitCode(err)
+		if output != "" {
+			output += "\n"
+		}
+		output += fmt.Sprintf("Exit code %d", exitCode)
 	}
 
+	// Truncate output to max length.
+	// Source: BashTool/utils.ts:133-165 — formatOutput()
+	output = truncateBashOutput(output)
+
 	return SuccessOutput(output), nil
+}
+
+// getUserShell returns the user's preferred shell from $SHELL, falling back to bash.
+// Source: utils/shell/bashProvider.ts — shell detection
+func getUserShell() string {
+	if shell := os.Getenv("SHELL"); shell != "" {
+		return shell
+	}
+	// Fallback to bash
+	if path, err := exec.LookPath("bash"); err == nil {
+		return path
+	}
+	return "/bin/sh"
+}
+
+// getExitCode extracts the exit code from an exec error.
+func getExitCode(err error) int {
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		return exitErr.ExitCode()
+	}
+	return 1
+}
+
+// getMaxBashOutputLength returns the max output length, respecting BASH_MAX_OUTPUT_LENGTH env var.
+// Source: utils/shell/outputLimits.ts
+func getMaxBashOutputLength() int {
+	if envVal := os.Getenv("BASH_MAX_OUTPUT_LENGTH"); envVal != "" {
+		if n, err := strconv.Atoi(envVal); err == nil && n > 0 {
+			if n > BashMaxOutputUpperLimit {
+				return BashMaxOutputUpperLimit
+			}
+			return n
+		}
+	}
+	return BashMaxOutputDefault
+}
+
+// truncateBashOutput truncates output to the configured max length.
+// Source: BashTool/utils.ts:133-165 — formatOutput()
+func truncateBashOutput(output string) string {
+	maxLen := getMaxBashOutputLength()
+	if len(output) <= maxLen {
+		return output
+	}
+	truncated := output[:maxLen]
+	// Count remaining lines
+	remaining := strings.Count(output[maxLen:], "\n") + 1
+	return fmt.Sprintf("%s\n\n... [%d lines truncated] ...", truncated, remaining)
+}
+
+// stripEmptyLines strips leading and trailing lines that contain only whitespace.
+// Source: BashTool/utils.ts:22-44
+func stripEmptyLines(content string) string {
+	lines := strings.Split(content, "\n")
+
+	start := 0
+	for start < len(lines) && strings.TrimSpace(lines[start]) == "" {
+		start++
+	}
+	end := len(lines) - 1
+	for end >= 0 && strings.TrimSpace(lines[end]) == "" {
+		end--
+	}
+	if start > end {
+		return ""
+	}
+	return strings.Join(lines[start:end+1], "\n")
 }

@@ -84,8 +84,23 @@ func TestThinkingSpinnerViewComplete(t *testing.T) {
 	ts.Stop()
 	view := ts.View()
 	plain := stripANSI(view)
-	if !strings.Contains(plain, "thought for") {
-		t.Errorf("Expected 'thought for' in complete view, got %q", plain)
+	// Should contain one of the turn completion verbs + "for Xs"
+	// Source: constants/turnCompletionVerbs.ts
+	hasVerb := false
+	for _, v := range TurnCompletionVerbs {
+		if strings.Contains(plain, v+" for") {
+			hasVerb = true
+			break
+		}
+	}
+	if !hasVerb {
+		t.Errorf("Expected a turn completion verb in complete view, got %q", plain)
+	}
+}
+
+func TestTurnCompletionVerbsCount(t *testing.T) {
+	if len(TurnCompletionVerbs) != 8 {
+		t.Errorf("Expected 8 turn completion verbs, got %d", len(TurnCompletionVerbs))
 	}
 }
 

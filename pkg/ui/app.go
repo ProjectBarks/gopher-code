@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -292,7 +293,12 @@ func (a *AppModel) View() tea.View {
 	// Status line (always visible)
 	sections = append(sections, a.statusLine.View().Content)
 
-	return tea.NewView(strings.Join(sections, "\n"))
+	v := tea.NewView(strings.Join(sections, "\n"))
+	// Enable alternate screen buffer so the user's terminal history is
+	// preserved when the TUI exits.
+	// Source: ink/ink.tsx — TS Ink uses alternate screen
+	v.AltScreen = true
+	return v
 }
 
 // --- Message handlers ---
@@ -345,10 +351,15 @@ func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
 		a.focus.Prev()
 		return a, nil
 
-	// Escape closes modal
+	// Escape: cancel running query OR close modal
+	// Source: screens/REPL.tsx — Escape cancels running queries
 	case msg.Code == tea.KeyEscape:
 		if a.focus.ModalActive() {
 			a.focus.PopModal()
+			return a, nil
+		}
+		if a.mode != ModeIdle && a.cancelQuery != nil {
+			a.cancelQuery()
 			return a, nil
 		}
 	}
@@ -481,13 +492,44 @@ func (a *AppModel) handleToolUseStart(msg ToolUseStartMsg) (*AppModel, tea.Cmd) 
 	a.mode = ModeToolRunning
 	a.activeToolCalls[msg.ToolUseID] = msg.ToolName
 
+	// Show tool name in streaming area (matching TS inline tool display).
+	// Source: components/messages/AssistantToolUseMessage.tsx
+	toolLine := fmt.Sprintf("\n⚙ %s", msg.ToolName)
+	a.streamingText.WriteString(toolLine)
+	streamContent := a.streamingText.String()
+	if a.spinner.IsActive() {
+		streamContent = a.spinner.View() + "\n" + streamContent
+	}
+	a.conversation.SetStreamingText(streamContent)
+
 	a.statusLine.Update(components.ModeChangeMsg{Mode: components.ModeToolRunning})
 
 	return a, nil
 }
 
 func (a *AppModel) handleToolResult(msg ToolResultMsg) (*AppModel, tea.Cmd) {
+	toolName := a.activeToolCalls[msg.ToolUseID]
 	delete(a.activeToolCalls, msg.ToolUseID)
+
+	// Show brief result indicator in streaming area.
+	// Source: components/messages/UserToolResultMessage — shows ✓/✗ with truncated content
+	if msg.IsError {
+		a.streamingText.WriteString(fmt.Sprintf("\n  ✗ %s error", toolName))
+	} else {
+		content := msg.Content
+		if len(content) > 100 {
+			content = content[:100] + "..."
+		}
+		if content != "" {
+			a.streamingText.WriteString(fmt.Sprintf("\n  ✓ %s", toolName))
+		}
+	}
+	streamContent := a.streamingText.String()
+	if a.spinner.IsActive() {
+		streamContent = a.spinner.View() + "\n" + streamContent
+	}
+	a.conversation.SetStreamingText(streamContent)
+
 	return a, nil
 }
 
@@ -520,6 +562,24 @@ func (a *AppModel) handleTurnComplete(msg TurnCompleteMsg) (*AppModel, tea.Cmd) 
 func (a *AppModel) handleQueryDone(msg queryDoneMsg) (*AppModel, tea.Cmd) {
 	a.cancelQuery = nil
 	a.queryCtx = nil
+
+	// Stop spinner and clean up streaming state.
+	// Source: screens/REPL.tsx — error paths must reset UI state
+	a.spinner.Stop()
+	if a.streamingText.Len() > 0 {
+		// Finalize any partial streaming text before showing error
+		assistantMsg := message.Message{
+			Role: message.RoleAssistant,
+			Content: []message.ContentBlock{
+				{Type: message.ContentText, Text: a.streamingText.String()},
+			},
+		}
+		a.conversation.AddMessage(assistantMsg)
+	}
+	a.streamingText.Reset()
+	a.streaming.Reset()
+	a.conversation.ClearStreamingText()
+	a.activeToolCalls = make(map[string]string)
 
 	if msg.err != nil {
 		// Show error as a system message in conversation

@@ -19,8 +19,9 @@ const (
 	BetaTaskBudgets         = "task-budgets-2026-03-13"           // Source: betas.ts:16
 	BetaPromptCachingScope  = "prompt-caching-scope-2026-01-05"   // Source: betas.ts:17-18
 	BetaFastMode            = "fast-mode-2026-02-01"              // Source: betas.ts:19
-	BetaRedactThinking      = "redact-thinking-2026-02-12"        // Source: betas.ts:20
-	BetaAdvisor             = "advisor-tool-2026-03-01"           // Source: betas.ts:31
+	BetaRedactThinking       = "redact-thinking-2026-02-12"        // Source: betas.ts:20
+	BetaTokenEfficientTools  = "token-efficient-tools-2026-03-28"  // Source: betas.ts:21-22
+	BetaAdvisor              = "advisor-tool-2026-03-01"           // Source: betas.ts:31
 )
 
 // BedrockExtraParamsHeaders are betas that go in Bedrock extraBodyParams, not headers.

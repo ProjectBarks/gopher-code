@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/message"
@@ -19,7 +19,13 @@ import (
 
 const microCompactThreshold = 10000
 
-const maxRetries = 3
+// maxRetries is the general retry limit for retryable API errors (429, 5xx).
+// Source: services/api/withRetry.ts:52 — DEFAULT_MAX_RETRIES = 10
+const maxRetries = 10
+
+// max529Retries is the 529-specific retry limit (overloaded).
+// Source: services/api/withRetry.ts:54 — MAX_529_RETRIES = 3
+const max529Retries = 3
 
 // loadClaudeMD loads CLAUDE.md files following the same hierarchy as the TS source:
 // 1. Global ~/.claude/CLAUDE.md
@@ -160,6 +166,7 @@ func Query(
 		}
 
 		// 4. Call provider.Stream - with error classification for L2
+		apiStart := time.Now()
 		ch, err := prov.Stream(ctx, req)
 		if err != nil {
 			// Fallback model switch: when 529 retries are exhausted and a fallback is configured
@@ -190,10 +197,15 @@ func Query(
 				return &AgentError{Kind: ErrProvider, Wrapped: err}
 			}
 
-			// Rate limit (429) or server errors (5xx): retry up to maxRetries
+			// Rate limit (429) or server errors (5xx): retry with appropriate limit.
+			// Source: withRetry.ts:52-54 — DEFAULT_MAX_RETRIES=10, MAX_529_RETRIES=3
 			if isRetryable(errStr) {
 				retryCount++
-				if retryCount <= maxRetries {
+				limit := maxRetries
+				if strings.Contains(errStr, "529") || strings.Contains(errStr, "overloaded") {
+					limit = max529Retries
+				}
+				if retryCount <= limit {
 					continue
 				}
 				return &AgentError{Kind: ErrProvider, Wrapped: err}
@@ -253,6 +265,11 @@ func Query(
 			}
 		}
 
+		// Track API call duration.
+		// Source: bootstrap/state.ts — totalAPIDuration
+		apiDuration := time.Since(apiStart)
+		sess.TotalAPIDuration += float64(apiDuration.Milliseconds())
+
 		// 6. Update session usage
 		sess.TotalInputTokens += usage.InputTokens
 		sess.TotalOutputTokens += usage.OutputTokens
@@ -265,13 +282,25 @@ func Query(
 		}
 		sess.TurnCount++
 
+		// Compute accurate cost and update session tracking.
+		// Source: bootstrap/state.ts — addToTotalCostState()
+		turnUsage := provider.TokenUsage{
+			InputTokens:  usage.InputTokens,
+			OutputTokens: usage.OutputTokens,
+		}
+		if usage.CacheReadInputTokens != nil {
+			turnUsage.CacheReadInputTokens = *usage.CacheReadInputTokens
+		}
+		if usage.CacheCreationInputTokens != nil {
+			turnUsage.CacheCreationInputTokens = *usage.CacheCreationInputTokens
+		}
+		turnCost := provider.CalculateUSDCost(sess.Config.Model, turnUsage)
+		sess.AddCost(sess.Config.Model, turnCost, turnUsage)
+
 		// Budget check: stop if spend exceeds --max-budget-usd
 		if sess.Config.MaxBudgetUSD > 0 {
-			// Rough Sonnet pricing: $3/MTok input, $15/MTok output
-			cost := float64(sess.TotalInputTokens)/1_000_000*3.0 + float64(sess.TotalOutputTokens)/1_000_000*15.0
-			cost = math.Round(cost*10000) / 10000 // round to 4 decimal places
-			if cost > sess.Config.MaxBudgetUSD {
-				return &AgentError{Kind: ErrProvider, Detail: fmt.Sprintf("budget exceeded: $%.4f > $%.2f", cost, sess.Config.MaxBudgetUSD)}
+			if sess.TotalCostUSD > sess.Config.MaxBudgetUSD {
+				return &AgentError{Kind: ErrProvider, Detail: fmt.Sprintf("budget exceeded: %s > %s", provider.FormatCost(sess.TotalCostUSD), provider.FormatCost(sess.Config.MaxBudgetUSD))}
 			}
 		}
 

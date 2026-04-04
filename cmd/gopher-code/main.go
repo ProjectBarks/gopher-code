@@ -468,6 +468,15 @@ func main() {
 		sess.Name = *sessionName
 	}
 
+	// Ensure OriginalCWD and ProjectRoot are set (may be empty on resumed sessions).
+	// Source: bootstrap/state.ts — originalCwd, projectRoot
+	if sess.OriginalCWD == "" {
+		sess.OriginalCWD = *cwd
+	}
+	if sess.ProjectRoot == "" {
+		sess.ProjectRoot = *cwd
+	}
+
 	// Wire interactive permission policy (runtime only, not serialized)
 	if permMode == permissions.Interactive {
 		sess.PermissionPolicy = permissions.NewInteractivePolicy()
@@ -577,7 +586,9 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Interactive mode: new TUI or legacy REPL
+	// Interactive mode: mark session as interactive.
+	// Source: bootstrap/state.ts — isInteractive
+	sess.IsInteractive = true
 	if cli.UseNewUI() {
 		if err := cli.RunTUIV2(ctx, sess, prov, registry); err != nil {
 			fmt.Fprintln(os.Stderr, err)

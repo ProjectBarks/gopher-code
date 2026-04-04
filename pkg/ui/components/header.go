@@ -82,7 +82,9 @@ func (h *Header) View() tea.View {
 		Foreground(lipgloss.Color(cs.TextSecondary))
 
 	var parts []string
-	parts = append(parts, logoStyle.Render("🐿 Gopher"))
+	// Claude Code branding: asterisk glyph ✻ + "Claude"
+	// Source: components/LogoV2/CondensedLogo.tsx + Spinner glyphs
+	parts = append(parts, logoStyle.Render("✻ Claude"))
 
 	if h.modelName != "" {
 		parts = append(parts, modelStyle.Render(h.modelName))

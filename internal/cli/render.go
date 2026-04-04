@@ -40,6 +40,8 @@ func PlainTextCallback(evt query.QueryEvent) {
 }
 
 // StreamJSONCallback prints each event as a JSON line (newline-delimited JSON).
+// Uses ndjsonSafeStringify to escape U+2028/U+2029 line terminators.
+// Source: cli/ndjsonSafeStringify.ts
 func StreamJSONCallback(evt query.QueryEvent) {
 	data, _ := json.Marshal(map[string]interface{}{
 		"type":    string(evt.Type),
@@ -47,7 +49,18 @@ func StreamJSONCallback(evt query.QueryEvent) {
 		"tool":    evt.ToolName,
 		"content": evt.Content,
 	})
-	fmt.Println(string(data))
+	fmt.Println(ndjsonSafeStringify(string(data)))
+}
+
+// ndjsonSafeStringify escapes U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR
+// in a JSON string so the serialized output cannot be broken by line-splitting receivers.
+// Source: cli/ndjsonSafeStringify.ts
+func ndjsonSafeStringify(jsonStr string) string {
+	// Go's encoding/json already escapes these characters in string values,
+	// but they could appear in raw pre-encoded JSON or via custom marshalers.
+	jsonStr = strings.ReplaceAll(jsonStr, "\u2028", `\u2028`)
+	jsonStr = strings.ReplaceAll(jsonStr, "\u2029", `\u2029`)
+	return jsonStr
 }
 
 // JSONCollector collects events and emits a final JSON envelope.

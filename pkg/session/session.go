@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,13 +43,27 @@ func DefaultConfig() SessionConfig {
 	}
 }
 
+// ModelUsageEntry tracks token usage for a specific model.
+// Source: bootstrap/state.ts — modelUsage
+type ModelUsageEntry struct {
+	InputTokens              int     `json:"input_tokens"`
+	OutputTokens             int     `json:"output_tokens"`
+	CacheCreationInputTokens int     `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int     `json:"cache_read_input_tokens"`
+	CostUSD                  float64 `json:"cost_usd"`
+}
+
 // SessionState holds the mutable state of a conversation session.
+// Source: bootstrap/state.ts — State type
 type SessionState struct {
 	ID                       string            `json:"id"`
+	ParentSessionID          string            `json:"parent_session_id,omitempty"`
 	Name                     string            `json:"name,omitempty"`
 	Config                   SessionConfig     `json:"config"`
 	Messages                 []message.Message `json:"messages"`
 	CWD                      string            `json:"cwd"`
+	OriginalCWD              string            `json:"original_cwd"`
+	ProjectRoot              string            `json:"project_root"`
 	TurnCount                int               `json:"turn_count"`
 	TotalInputTokens         int               `json:"total_input_tokens"`
 	TotalOutputTokens        int               `json:"total_output_tokens"`
@@ -56,6 +71,21 @@ type SessionState struct {
 	TotalCacheReadTokens     int               `json:"total_cache_read_tokens"`
 	LastInputTokens          int               `json:"last_input_tokens"`
 	CreatedAt                time.Time         `json:"created_at"`
+
+	// Cost & duration tracking — Source: bootstrap/state.ts lines 51-64
+	TotalCostUSD     float64 `json:"total_cost_usd"`
+	TotalAPIDuration float64 `json:"total_api_duration_ms"` // cumulative API call time in ms
+	TotalToolDuration float64 `json:"total_tool_duration_ms"` // cumulative tool execution time in ms
+	TotalLinesAdded  int     `json:"total_lines_added"`
+	TotalLinesRemoved int    `json:"total_lines_removed"`
+
+	// Per-model usage tracking — Source: bootstrap/state.ts line 67
+	mu         sync.Mutex               `json:"-"`
+	ModelUsage map[string]*ModelUsageEntry `json:"model_usage,omitempty"`
+
+	// IsInteractive distinguishes TUI/REPL mode from headless/pipe mode.
+	// Source: bootstrap/state.ts line 71
+	IsInteractive bool `json:"is_interactive"`
 
 	// PermissionPolicy is the runtime permission policy (not serialized).
 	PermissionPolicy interface{} `json:"-"`
@@ -72,14 +102,53 @@ type SessionState struct {
 }
 
 // New creates a new SessionState with the given config and working directory.
+// Source: bootstrap/state.ts — getInitialState()
 func New(config SessionConfig, cwd string) *SessionState {
 	return &SessionState{
-		ID:        uuid.New().String(),
-		Config:    config,
-		Messages:  make([]message.Message, 0),
-		CWD:       cwd,
-		CreatedAt: time.Now(),
+		ID:          uuid.New().String(),
+		Config:      config,
+		Messages:    make([]message.Message, 0),
+		CWD:         cwd,
+		OriginalCWD: cwd,
+		ProjectRoot: cwd,
+		CreatedAt:   time.Now(),
+		ModelUsage:  make(map[string]*ModelUsageEntry),
 	}
+}
+
+// AddCost records a cost amount and per-model usage.
+// Source: bootstrap/state.ts — addToTotalCostState()
+func (s *SessionState) AddCost(model string, costUSD float64, usage provider.TokenUsage) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.TotalCostUSD += costUSD
+	entry, ok := s.ModelUsage[model]
+	if !ok {
+		entry = &ModelUsageEntry{}
+		s.ModelUsage[model] = entry
+	}
+	entry.InputTokens += usage.InputTokens
+	entry.OutputTokens += usage.OutputTokens
+	entry.CacheCreationInputTokens += usage.CacheCreationInputTokens
+	entry.CacheReadInputTokens += usage.CacheReadInputTokens
+	entry.CostUSD += costUSD
+}
+
+// AddLinesChanged records lines added/removed by code edits.
+// Source: bootstrap/state.ts — addToTotalLinesChanged()
+func (s *SessionState) AddLinesChanged(added, removed int) {
+	s.TotalLinesAdded += added
+	s.TotalLinesRemoved += removed
+}
+
+// RegenerateSessionID creates a new session ID, optionally setting the current as parent.
+// Source: bootstrap/state.ts — regenerateSessionId()
+func (s *SessionState) RegenerateSessionID(setCurrentAsParent bool) string {
+	if setCurrentAsParent {
+		s.ParentSessionID = s.ID
+	}
+	s.ID = uuid.New().String()
+	return s.ID
 }
 
 // PushMessage appends a message to the session history.

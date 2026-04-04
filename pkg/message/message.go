@@ -82,6 +82,10 @@ func (m Message) ToolUses() []ContentBlock {
 // Source: utils/messages.ts:247
 const SyntheticToolResultPlaceholder = "[Tool result missing due to internal error]"
 
+// NoContentMessage is shown when a message or tool result has no content.
+// Source: constants/messages.ts
+const NoContentMessage = "(no content)"
+
 // MaxAttachmentSize is the maximum size for an attachment's text content
 // before it gets truncated. Roughly matches the micro-compact threshold.
 const MaxAttachmentSize = 10_000

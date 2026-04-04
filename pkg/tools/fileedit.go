@@ -24,8 +24,9 @@ const (
 	EditErrFileTooLarge  = 10 // file too large
 )
 
-// MaxEditFileSize is the maximum file size for editing (10MB).
-const MaxEditFileSize = 10 * 1024 * 1024
+// MaxEditFileSize is the maximum file size for editing (1 GiB).
+// Source: FileEditTool.ts:79-84 — V8/Bun string limit ~2^30 chars
+const MaxEditFileSize = 1024 * 1024 * 1024
 
 // FileEditTool performs string replacements in files.
 type FileEditTool struct{}
@@ -156,9 +157,20 @@ func (f *FileEditTool) Execute(_ context.Context, tc *ToolContext, input json.Ra
 		}
 	}
 
+	// Try exact match first; fall back to quote-normalized match.
+	// Source: FileEditTool/utils.ts:73-93 — findActualString()
+	oldString := in.OldString
+	count := strings.Count(content, oldString)
+	if count == 0 {
+		// Try with normalized quotes (curly → straight)
+		actualOld := findActualString(content, oldString)
+		if actualOld != "" {
+			oldString = actualOld
+			count = strings.Count(content, oldString)
+		}
+	}
 	// Error code 8: old_string not found
 	// Source: FileEditTool.ts:316-327
-	count := strings.Count(content, in.OldString)
 	if count == 0 {
 		return ErrorOutput(fmt.Sprintf("String to replace not found in file.\nString: %s", in.OldString)), nil
 	}
@@ -172,13 +184,9 @@ func (f *FileEditTool) Execute(_ context.Context, tc *ToolContext, input json.Ra
 		)), nil
 	}
 
-	// Perform replacement
-	var newContent string
-	if in.ReplaceAll {
-		newContent = strings.ReplaceAll(content, in.OldString, in.NewString)
-	} else {
-		newContent = strings.Replace(content, in.OldString, in.NewString, 1)
-	}
+	// Perform replacement using applyEditToFile logic.
+	// Source: FileEditTool/utils.ts:206-228 — special newline handling on deletion
+	newContent := applyEditToFile(content, oldString, in.NewString, in.ReplaceAll)
 
 	info, statErr := os.Stat(path)
 	mode := os.FileMode(0644)
@@ -196,4 +204,68 @@ func (f *FileEditTool) Execute(_ context.Context, tc *ToolContext, input json.Ra
 	}
 
 	return SuccessOutput(fmt.Sprintf("Successfully edited %s", path)), nil
+}
+
+// normalizeQuotes converts curly quotes to straight quotes.
+// Source: FileEditTool/utils.ts:31-37
+func normalizeQuotes(s string) string {
+	s = strings.ReplaceAll(s, "\u2018", "'")  // LEFT SINGLE CURLY QUOTE
+	s = strings.ReplaceAll(s, "\u2019", "'")  // RIGHT SINGLE CURLY QUOTE
+	s = strings.ReplaceAll(s, "\u201C", "\"") // LEFT DOUBLE CURLY QUOTE
+	s = strings.ReplaceAll(s, "\u201D", "\"") // RIGHT DOUBLE CURLY QUOTE
+	return s
+}
+
+// findActualString finds the actual string in file content that matches via
+// quote normalization. Returns the original file substring if found.
+// Source: FileEditTool/utils.ts:73-93
+func findActualString(fileContent, searchString string) string {
+	// First try exact match
+	if strings.Contains(fileContent, searchString) {
+		return searchString
+	}
+	// Try with normalized quotes. normalizeQuotes replaces each curly quote
+	// rune with a straight quote rune (1-to-1 rune mapping), so rune positions
+	// are preserved between original and normalized. Use rune indexing to map
+	// back from normalized to original.
+	normalizedSearch := normalizeQuotes(searchString)
+	normalizedFile := normalizeQuotes(fileContent)
+	byteIdx := strings.Index(normalizedFile, normalizedSearch)
+	if byteIdx == -1 {
+		return ""
+	}
+	// Convert byte offset in normalizedFile to rune offset
+	runeStart := len([]rune(normalizedFile[:byteIdx]))
+	runeLen := len([]rune(normalizedSearch))
+	// Extract from original file content by rune offset
+	fileRunes := []rune(fileContent)
+	if runeStart+runeLen > len(fileRunes) {
+		return ""
+	}
+	return string(fileRunes[runeStart : runeStart+runeLen])
+}
+
+// applyEditToFile applies a string replacement with special deletion handling.
+// When new_string is empty (deletion), also strips the trailing newline after
+// old_string to avoid leaving blank lines.
+// Source: FileEditTool/utils.ts:206-228
+func applyEditToFile(content, oldString, newString string, replaceAll bool) string {
+	if newString != "" {
+		if replaceAll {
+			return strings.ReplaceAll(content, oldString, newString)
+		}
+		return strings.Replace(content, oldString, newString, 1)
+	}
+	// Deletion: strip trailing newline if old_string doesn't end with \n
+	// but appears followed by \n in the file
+	stripTrailingNewline := !strings.HasSuffix(oldString, "\n") &&
+		strings.Contains(content, oldString+"\n")
+	target := oldString
+	if stripTrailingNewline {
+		target = oldString + "\n"
+	}
+	if replaceAll {
+		return strings.ReplaceAll(content, target, newString)
+	}
+	return strings.Replace(content, target, newString, 1)
 }

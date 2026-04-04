@@ -87,7 +87,8 @@ func (sl *StatusLine) View() tea.View {
 		content = dimStyle.Render("esc to interrupt")
 
 	default:
-		// Idle: show model + token info
+		// Idle: show model + token info + cost
+		// Source: TS status bar shows model, tokens, and cost
 		var parts []string
 
 		if sl.session != nil {
@@ -96,6 +97,14 @@ func (sl *StatusLine) View() tea.View {
 
 		if sl.inputTokens > 0 || sl.outputTokens > 0 {
 			parts = append(parts, fmt.Sprintf("%d/%d tokens", sl.inputTokens, sl.outputTokens))
+		}
+
+		if sl.session != nil && sl.session.TotalCostUSD > 0 {
+			costStr := fmt.Sprintf("$%.4f", sl.session.TotalCostUSD)
+			if sl.session.TotalCostUSD > 0.5 {
+				costStr = fmt.Sprintf("$%.2f", sl.session.TotalCostUSD)
+			}
+			parts = append(parts, costStr)
 		}
 
 		content = strings.Join(parts, " │ ")

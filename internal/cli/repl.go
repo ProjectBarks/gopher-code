@@ -92,8 +92,10 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 			fmt.Println("Conversation cleared.")
 			continue
 		case input == "/cost":
-			fmt.Printf("Input: %d tokens, Output: %d tokens\n",
-				sess.TotalInputTokens, sess.TotalOutputTokens)
+			costStr := provider.FormatCost(sess.TotalCostUSD)
+			fmt.Printf("Cost: %s (input: %d, output: %d, cache read: %d, cache write: %d)\n",
+				costStr, sess.TotalInputTokens, sess.TotalOutputTokens,
+				sess.TotalCacheReadTokens, sess.TotalCacheCreationTokens)
 			continue
 		case input == "/compact":
 			query.CompactSession(sess)
@@ -102,11 +104,20 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 		case strings.HasPrefix(input, "/model"):
 			parts := strings.Fields(input)
 			if len(parts) > 1 {
-				newModel := parts[1]
+				newModel := resolveModelAliasREPL(parts[1])
 				sess.Config.Model = newModel
-				fmt.Printf("Model set to: %s\n", newModel)
+				costs := provider.GetModelCosts(newModel)
+				fmt.Printf("Model set to: %s (%s)\n", newModel, provider.FormatModelPricing(costs))
+				// Persist model change to user settings.
+				// Source: state/onChangeAppState.ts lines 104-112
+				settings := config.Load(sess.CWD)
+				settings.Model = newModel
+				if err := settings.Save(); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: could not persist model to settings: %v\n", err)
+				}
 			} else {
-				fmt.Printf("Current model: %s\n", sess.Config.Model)
+				costs := provider.GetModelCosts(sess.Config.Model)
+				fmt.Printf("Current model: %s (%s)\n", sess.Config.Model, provider.FormatModelPricing(costs))
 			}
 			continue
 		case input == "/status":
@@ -210,28 +221,7 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 			shellCmd.Run()
 			continue
 		case input == "/doctor":
-			fmt.Println("gopher-code doctor")
-			fmt.Println()
-			// Check API key
-			if _, authErr := auth.GetAPIKey(); authErr == nil {
-				fmt.Printf("  [ok] %s\n", auth.Status())
-			} else {
-				fmt.Println("  [missing] No API key configured")
-			}
-			// Check ripgrep
-			if _, err := exec.LookPath("rg"); err == nil {
-				fmt.Println("  [ok] ripgrep (rg) found")
-			} else {
-				fmt.Println("  [warn] ripgrep (rg) not found (grep will use fallback)")
-			}
-			// Check git
-			if _, err := exec.LookPath("git"); err == nil {
-				fmt.Println("  [ok] git found")
-			} else {
-				fmt.Println("  [missing] git not found")
-			}
-			fmt.Printf("  [ok] Go %s\n", runtime.Version())
-			fmt.Printf("  [ok] Platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+			runDoctor(sess)
 			continue
 		case input == "/config":
 			cfg := config.Load(sess.CWD)
@@ -302,16 +292,21 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 			fmt.Printf("  Cache creation: %d tokens\n", sess.TotalCacheCreationTokens)
 			fmt.Printf("  Cache read:     %d tokens\n", sess.TotalCacheReadTokens)
 			fmt.Printf("  Turns:          %d\n", sess.TurnCount)
-			// Per-model cost calculation — Source: utils/modelCost.ts
-			cost := provider.CalculateUSDCost(sess.Config.Model, provider.TokenUsage{
-				InputTokens:              sess.TotalInputTokens,
-				OutputTokens:             sess.TotalOutputTokens,
-				CacheReadInputTokens:     sess.TotalCacheReadTokens,
-				CacheCreationInputTokens: sess.TotalCacheCreationTokens,
-			})
-			modelCosts := provider.GetModelCosts(sess.Config.Model)
-			fmt.Printf("  Model pricing:  %s\n", provider.FormatModelPricing(modelCosts))
-			fmt.Printf("  Est. cost:      %s\n", provider.FormatCost(cost))
+			fmt.Printf("  Total cost:     %s\n", provider.FormatCost(sess.TotalCostUSD))
+			if sess.TotalLinesAdded > 0 || sess.TotalLinesRemoved > 0 {
+				fmt.Printf("  Lines changed:  +%d / -%d\n", sess.TotalLinesAdded, sess.TotalLinesRemoved)
+			}
+			// Per-model breakdown — Source: bootstrap/state.ts — modelUsage
+			if len(sess.ModelUsage) > 0 {
+				fmt.Println("  Per-model:")
+				for model, entry := range sess.ModelUsage {
+					modelCosts := provider.GetModelCosts(model)
+					fmt.Printf("    %s (%s): in=%d out=%d cost=%s\n",
+						model, provider.FormatModelPricing(modelCosts),
+						entry.InputTokens, entry.OutputTokens,
+						provider.FormatCost(entry.CostUSD))
+				}
+			}
 			continue
 		case input == "/session":
 			fmt.Printf("Session ID:   %s\n", sess.ID)
@@ -501,6 +496,21 @@ func RunREPL(ctx context.Context, sess *session.SessionState, prov provider.Mode
 	}
 }
 
+// resolveModelAliasREPL maps short aliases to full model IDs.
+// Source: cli.tsx model alias resolution
+var modelAliasesREPL = map[string]string{
+	"haiku":  "claude-haiku-4-5-20251001",
+	"sonnet": "claude-sonnet-4-6",
+	"opus":   "claude-opus-4-6",
+}
+
+func resolveModelAliasREPL(model string) string {
+	if resolved, ok := modelAliasesREPL[model]; ok {
+		return resolved
+	}
+	return model
+}
+
 func printHelp() {
 	fmt.Println("Commands:")
 	fmt.Println("  /help              Show this help")
@@ -537,4 +547,137 @@ func printHelp() {
 	fmt.Println()
 	fmt.Println("  ! <command>        Run a shell command")
 	fmt.Println("  line ending \\      Continue input on next line")
+}
+
+// runDoctor performs comprehensive system diagnostics.
+// Source: screens/Doctor.tsx
+func runDoctor(sess *session.SessionState) {
+	fmt.Println("gopher-code doctor")
+	fmt.Printf("Version: %s\n", Version)
+	fmt.Println()
+
+	// Section 1: Authentication
+	fmt.Println("Authentication")
+	if _, authErr := auth.GetAPIKey(); authErr == nil {
+		fmt.Printf("  [ok] %s\n", auth.Status())
+	} else {
+		fmt.Println("  [missing] No API key configured")
+	}
+	fmt.Println()
+
+	// Section 2: Tools
+	fmt.Println("Tools")
+	if rgPath, err := exec.LookPath("rg"); err == nil {
+		// Check ripgrep version
+		out, verErr := exec.Command(rgPath, "--version").Output()
+		if verErr == nil {
+			ver := strings.TrimSpace(strings.Split(string(out), "\n")[0])
+			fmt.Printf("  [ok] ripgrep: %s (%s)\n", ver, rgPath)
+		} else {
+			fmt.Printf("  [ok] ripgrep found (%s)\n", rgPath)
+		}
+	} else {
+		fmt.Println("  [warn] ripgrep (rg) not found (grep will use fallback)")
+	}
+	if gitPath, err := exec.LookPath("git"); err == nil {
+		out, verErr := exec.Command(gitPath, "--version").Output()
+		if verErr == nil {
+			fmt.Printf("  [ok] %s (%s)\n", strings.TrimSpace(string(out)), gitPath)
+		} else {
+			fmt.Printf("  [ok] git found (%s)\n", gitPath)
+		}
+	} else {
+		fmt.Println("  [missing] git not found")
+	}
+	fmt.Println()
+
+	// Section 3: Environment
+	fmt.Println("Environment")
+	fmt.Printf("  [ok] Go %s\n", runtime.Version())
+	fmt.Printf("  [ok] Platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+
+	// Check environment variable overrides — Source: Doctor.tsx env var validation
+	for _, envVar := range []string{"BASH_MAX_OUTPUT_LENGTH", "TASK_MAX_OUTPUT_LENGTH", "CLAUDE_CODE_MAX_OUTPUT_TOKENS"} {
+		if val := os.Getenv(envVar); val != "" {
+			fmt.Printf("  [info] %s=%s\n", envVar, val)
+		}
+	}
+	if apiURL := os.Getenv("ANTHROPIC_BASE_URL"); apiURL != "" {
+		fmt.Printf("  [info] ANTHROPIC_BASE_URL=%s\n", apiURL)
+	}
+	fmt.Println()
+
+	// Section 4: Configuration
+	fmt.Println("Configuration")
+	home, _ := os.UserHomeDir()
+	globalSettings := filepath.Join(home, ".claude", "settings.json")
+	projectSettings := filepath.Join(sess.CWD, ".claude", "settings.json")
+
+	if _, err := os.Stat(globalSettings); err == nil {
+		fmt.Printf("  [ok] Global settings: %s\n", globalSettings)
+	} else {
+		fmt.Printf("  [info] No global settings: %s\n", globalSettings)
+	}
+	if _, err := os.Stat(projectSettings); err == nil {
+		fmt.Printf("  [ok] Project settings: %s\n", projectSettings)
+	} else {
+		fmt.Printf("  [info] No project settings: %s\n", projectSettings)
+	}
+
+	// Validate settings can parse without error
+	cfg := config.Load(sess.CWD)
+	if cfg.Model != "" {
+		fmt.Printf("  [ok] Configured model: %s\n", cfg.Model)
+	}
+	fmt.Println()
+
+	// Section 5: CLAUDE.md files — Source: Doctor.tsx context warnings
+	fmt.Println("CLAUDE.md Files")
+	claudeMDLocations := []string{
+		filepath.Join(home, ".claude", "CLAUDE.md"),
+		filepath.Join(sess.CWD, "CLAUDE.md"),
+		filepath.Join(sess.CWD, ".claude", "CLAUDE.md"),
+	}
+	foundClaudeMD := false
+	for _, path := range claudeMDLocations {
+		if info, err := os.Stat(path); err == nil {
+			foundClaudeMD = true
+			size := info.Size()
+			status := "ok"
+			// Warn if CLAUDE.md is very large (>40k chars threshold from TS)
+			if size > 40000 {
+				status = "warn"
+				fmt.Printf("  [%s] %s (%d bytes — large file may use significant context)\n", status, path, size)
+			} else {
+				fmt.Printf("  [%s] %s (%d bytes)\n", status, path, size)
+			}
+		}
+	}
+	if !foundClaudeMD {
+		fmt.Println("  [info] No CLAUDE.md files found")
+	}
+	fmt.Println()
+
+	// Section 6: Session info
+	fmt.Println("Session")
+	fmt.Printf("  Model: %s\n", sess.Config.Model)
+	fmt.Printf("  CWD: %s\n", sess.CWD)
+	if sess.OriginalCWD != "" && sess.OriginalCWD != sess.CWD {
+		fmt.Printf("  Original CWD: %s\n", sess.OriginalCWD)
+	}
+	if sess.ProjectRoot != "" && sess.ProjectRoot != sess.CWD {
+		fmt.Printf("  Project root: %s\n", sess.ProjectRoot)
+	}
+	duration := time.Since(sess.CreatedAt)
+	fmt.Printf("  Uptime: %s\n", duration.Truncate(time.Second))
+	modes := map[permissions.PermissionMode]string{
+		permissions.AutoApprove: "auto-approve",
+		permissions.Deny:       "deny",
+		permissions.Interactive: "interactive",
+	}
+	fmt.Printf("  Permission mode: %s\n", modes[sess.Config.PermissionMode])
+	if sess.Config.ThinkingEnabled {
+		fmt.Printf("  Thinking: enabled (budget: %d tokens)\n", sess.Config.ThinkingBudget)
+	}
+	fmt.Println()
 }

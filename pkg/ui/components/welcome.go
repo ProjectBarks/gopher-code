@@ -131,7 +131,9 @@ func (ws *WelcomeScreen) View() tea.View {
 	boxContent := border.Render(body)
 
 	// Prepend the title line above the box
-	titleLine := accentStyle.Render("── Gopher ") + dimStyle.Render("v"+ws.version) + accentStyle.Render(" ──")
+	// Product name matches TS: "Claude Code" (not "Gopher")
+	// Source: components/LogoV2/CondensedLogo.tsx — shows "Claude Code" branding
+	titleLine := accentStyle.Render("── Claude Code ") + dimStyle.Render("v"+ws.version) + accentStyle.Render(" ──")
 
 	return tea.NewView(titleLine + "\n" + boxContent)
 }

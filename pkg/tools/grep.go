@@ -105,7 +105,7 @@ func (g *GrepTool) executeWithRg(ctx context.Context, rgPath, searchPath string,
 
 	// VCS exclusions
 	// Source: GrepTool.ts:333-335
-	for _, dir := range []string{".git", ".hg", ".svn", ".jj", ".sl"} {
+	for _, dir := range []string{".git", ".svn", ".hg", ".bzr", ".jj", ".sl"} {
 		args = append(args, "--glob", "!"+dir)
 	}
 

@@ -26,6 +26,7 @@ func TestBetaConstants(t *testing.T) {
 		{"prompt_caching_scope", BetaPromptCachingScope},
 		{"fast_mode", BetaFastMode},
 		{"redact_thinking", BetaRedactThinking},
+		{"token_efficient_tools", BetaTokenEfficientTools},
 		{"advisor", BetaAdvisor},
 	}
 	for _, tc := range tests {
@@ -53,6 +54,9 @@ func TestBetaConstantValues(t *testing.T) {
 	}
 	if BetaRedactThinking != "redact-thinking-2026-02-12" {
 		t.Errorf("BetaRedactThinking = %q", BetaRedactThinking)
+	}
+	if BetaTokenEfficientTools != "token-efficient-tools-2026-03-28" {
+		t.Errorf("BetaTokenEfficientTools = %q", BetaTokenEfficientTools)
 	}
 }
 
