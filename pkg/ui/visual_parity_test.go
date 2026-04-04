@@ -412,6 +412,116 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_MessageBubbleRoleDispatch validates the Render() role dispatch,
+// nil safety, thinking block truncation, and SetWidth re-rendering.
+//
+// Unique behaviors (no existing test validates role dispatch or thinking):
+// 1. Render(nil) → empty string, no panic
+// 2. RoleUser → user rendering (❯ prefix)
+// 3. RoleAssistant → assistant rendering (⏺ prefix)
+// 4. Unknown role → generic rendering (plain text, no prefix)
+// 5. ContentThinking block → "💭 Thinking:" prefix + text
+// 6. ContentThinking > 200 chars → truncated with "…"
+// 7. SetWidth change produces different wrapping for long text
+// 8. Unknown ContentBlock type in RenderContent → empty string
+//
+// Cross-ref: message_bubble.go:54-85 Render + RenderContent dispatch
+func TestParity_MessageBubbleRoleDispatch(t *testing.T) {
+	mb := components.NewMessageBubble(theme.Current(), 80)
+
+	// 1. nil message
+	if got := mb.Render(nil); got != "" {
+		t.Errorf("Render(nil) should return empty, got %q", got)
+	}
+
+	// 2. User role → ❯ prefix
+	userMsg := &message.Message{
+		Role:    message.RoleUser,
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: "user-text"}},
+	}
+	userOut := strip(mb.Render(userMsg))
+	if !strings.Contains(userOut, "❯") {
+		t.Errorf("User message should have ❯ prefix, got: %q", userOut)
+	}
+	if strings.Contains(userOut, "⏺") {
+		t.Error("User message should NOT have ⏺ prefix")
+	}
+
+	// 3. Assistant role → ⏺ prefix
+	assistMsg := &message.Message{
+		Role:    message.RoleAssistant,
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: "assistant-text"}},
+	}
+	assistOut := strip(mb.Render(assistMsg))
+	if !strings.Contains(assistOut, "⏺") {
+		t.Errorf("Assistant message should have ⏺ prefix, got: %q", assistOut)
+	}
+	if strings.Contains(assistOut, "❯") {
+		t.Error("Assistant message should NOT have ❯ prefix")
+	}
+
+	// 4. Unknown role → generic rendering (text present, no role prefix)
+	genericMsg := &message.Message{
+		Role:    message.Role("unknown-role"),
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: "generic"}},
+	}
+	genOut := strip(mb.Render(genericMsg))
+	if !strings.Contains(genOut, "generic") {
+		t.Errorf("Generic message should show text, got: %q", genOut)
+	}
+	if strings.Contains(genOut, "❯") || strings.Contains(genOut, "⏺") {
+		t.Error("Generic message should NOT have role prefixes")
+	}
+
+	// 5. Thinking block
+	thinkingOut := strip(mb.RenderContent(message.ContentBlock{
+		Type:     message.ContentThinking,
+		Thinking: "short thought",
+	}))
+	if !strings.Contains(thinkingOut, "Thinking:") {
+		t.Errorf("Thinking block should have 'Thinking:' label, got: %q", thinkingOut)
+	}
+	if !strings.Contains(thinkingOut, "short thought") {
+		t.Errorf("Thinking block should show text, got: %q", thinkingOut)
+	}
+
+	// 6. Thinking > 200 chars truncated
+	longThought := strings.Repeat("x", 300)
+	longThinkingOut := strip(mb.RenderContent(message.ContentBlock{
+		Type: message.ContentThinking, Thinking: longThought,
+	}))
+	if !strings.Contains(longThinkingOut, "…") {
+		t.Error("Long thinking (>200 chars) should be truncated with …")
+	}
+	if strings.Count(longThinkingOut, "x") >= 300 {
+		t.Error("Long thinking should not contain all 300 chars")
+	}
+
+	// 7. SetWidth changes wrapping
+	longMsg := &message.Message{
+		Role:    message.RoleUser,
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: "this is a medium length text that may wrap"}},
+	}
+	mb.SetWidth(20)
+	narrowOut := strip(mb.Render(longMsg))
+	narrowLines := strings.Count(narrowOut, "\n")
+
+	mb.SetWidth(100)
+	wideOut := strip(mb.Render(longMsg))
+	wideLines := strings.Count(wideOut, "\n")
+
+	if narrowLines <= wideLines {
+		// At narrow width, we expect MORE line breaks from wrapping
+		t.Errorf("Narrow width should wrap more: narrow=%d lines, wide=%d lines", narrowLines, wideLines)
+	}
+
+	// 8. Unknown ContentBlock type → empty string
+	unkOut := mb.RenderContent(message.ContentBlock{Type: message.ContentBlockType("bogus")})
+	if unkOut != "" {
+		t.Errorf("Unknown ContentBlock type should return empty, got %q", unkOut)
+	}
+}
+
 // TestParity_InputCursorBlockRendering validates cursor visibility and position
 // in the InputPane's View() output (block character █ placement).
 //

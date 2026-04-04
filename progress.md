@@ -232,7 +232,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B28 | TestParity_EffortLevelIconMapping | 4 effort→glyph mappings, uniqueness, no-effort default, unknown→empty, stopped shows completion | ✅ pass |
 | B29 | TestParity_ToolEventStreamingBuffer | ⏺/✓/✗ buffer additions, empty content skips ✓, unknown toolID, map lookup for name | ✅ pass |
 | B30 | TestParity_ConversationViewComposition | empty→placeholder, streaming appears after messages (index order), padded to height, clear preserves messages | ✅ pass |
-### Next B31: SessionState AddCost / PushMessage integration
+| B31 | TestParity_InputCursorBlockRendering | focused cursor at start/end/middle (exact split), blur hides cursor, refocus restores | ✅ pass |
+### Next B32: Message bubble width change triggers renderer recreation
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
