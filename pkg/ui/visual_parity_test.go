@@ -408,6 +408,97 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_InputPaneHistorySaveRestore validates the history navigation
+// save/restore contract: current input is preserved when entering history
+// and restored when navigating past the newest entry.
+//
+// Unique behaviors:
+// 1. Down arrow on empty history (historyIdx == -1) is a no-op
+// 2. Up arrow when historyIdx == -1 saves current buffer to savedInput
+// 3. Up arrow enters history from newest entry and decrements index
+// 4. Up arrow at oldest entry stops (no wrap)
+// 5. Down arrow past newest restores savedInput AND clears it
+// 6. After restore, buffer matches the saved input exactly
+//
+// Cross-ref: input.go:232-259 navigateHistoryUp/Down
+func TestParity_InputPaneHistorySaveRestore(t *testing.T) {
+	inp := components.NewInputPane()
+	inp.SetSize(80, 3)
+	inp.Focus()
+
+	// 1. Down with no history → no-op
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if inp.Value() != "" {
+		t.Errorf("Down with no history should be no-op, got %q", inp.Value())
+	}
+
+	// Add 3 history entries
+	inp.AddToHistory("first")
+	inp.AddToHistory("second")
+	inp.AddToHistory("third")
+
+	// Gopher's behavior: history navigation only triggers when input is empty
+	// OR already navigating. Verify this constraint: typing blocks history nav.
+	for _, ch := range "draft" {
+		inp.Update(tea.KeyPressMsg{Code: rune(ch), Text: string(ch)})
+	}
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if inp.Value() != "draft" {
+		t.Errorf("Up with non-empty input should NOT navigate history, got %q", inp.Value())
+	}
+
+	// Clear input to enable history nav
+	inp.Clear()
+
+	// 2-3. Up on empty → saves empty, shows newest ("third")
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if inp.Value() != "third" {
+		t.Errorf("First Up should show newest 'third', got %q", inp.Value())
+	}
+
+	// Up → "second"
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if inp.Value() != "second" {
+		t.Errorf("Second Up should show 'second', got %q", inp.Value())
+	}
+
+	// Up → "first"
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if inp.Value() != "first" {
+		t.Errorf("Third Up should show 'first', got %q", inp.Value())
+	}
+
+	// 4. Up at oldest → stays on "first" (no wrap)
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if inp.Value() != "first" {
+		t.Errorf("Up past oldest should stay on 'first', got %q", inp.Value())
+	}
+
+	// Down → "second"
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if inp.Value() != "second" {
+		t.Errorf("Down from oldest should show 'second', got %q", inp.Value())
+	}
+
+	// Down → "third"
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if inp.Value() != "third" {
+		t.Errorf("Down should show 'third', got %q", inp.Value())
+	}
+
+	// 5-6. Down past newest → restores saved input (was empty) AND clears savedInput
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if inp.Value() != "" {
+		t.Errorf("Down past newest should restore empty saved input, got %q", inp.Value())
+	}
+
+	// Another Down → no-op (historyIdx back to -1)
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if inp.Value() != "" {
+		t.Errorf("Down after restore should be no-op, got %q", inp.Value())
+	}
+}
+
 // TestParity_InputPaneEditingFlow validates the InputPane editing operations
 // work correctly in combination (cursor moves, insertions, word-kill, line-kill).
 //

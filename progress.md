@@ -207,7 +207,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B3 | TestParity_ToolUseStateMachine | ToolUseStart→ModeToolRunning+tracked, ToolResult→removed, sequential tools, streamingText accumulation, TurnComplete resets all state | ✅ pass |
 | B4 | TestParity_ModelSwitchDispatch | /model no-args→error, /model sonnet→ModelSwitchMsg, session update, header re-render, mode stays idle, old model replaced | ✅ pass |
 | B5 | TestParity_EscapeDuringStreamingCancel | Escape idle no-op, Escape→cancelQuery, queryDone finalizes state, partial text preserved | ✅ pass |
-### Next B6: InputPane text editing flow (history nav + Ctrl+U/W + Home/End)
+| B6 | TestParity_InputPaneEditingFlow | type+buffer, Ctrl+A preserves text, prefix insert, Ctrl+E+append, Ctrl+W word-delete (3x), Ctrl+U prefix-kill with suffix preservation | ✅ pass |
+### Next B7: InputPane history navigation save/restore flow
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
