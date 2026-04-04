@@ -231,7 +231,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B27 | TestParity_InputCursorMovementAndDelete | Left/Right bounds, Delete at cursor (not moving), Delete at end no-op, Left at 0 no-op, round-trip cursor, position-aware insertion | ✅ pass |
 | B28 | TestParity_EffortLevelIconMapping | 4 effort→glyph mappings, uniqueness, no-effort default, unknown→empty, stopped shows completion | ✅ pass |
 | B29 | TestParity_ToolEventStreamingBuffer | ⏺/✓/✗ buffer additions, empty content skips ✓, unknown toolID, map lookup for name | ✅ pass |
-### Next B30: ConversationPane streaming text set/clear + AddMessage interleaving
+| B30 | TestParity_ConversationViewComposition | empty→placeholder, streaming appears after messages (index order), padded to height, clear preserves messages | ✅ pass |
+### Next B31: SessionState AddCost / PushMessage integration
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)

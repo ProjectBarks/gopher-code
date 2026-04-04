@@ -412,6 +412,79 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	}
 }
 
+// TestParity_InputCursorBlockRendering validates cursor visibility and position
+// in the InputPane's View() output (block character █ placement).
+//
+// Unique behaviors (no existing test validates cursor block rendering):
+// 1. Focused + empty buffer → "❯ █" (cursor at position 0)
+// 2. Focused + cursor at END → "❯ text█" (cursor appended)
+// 3. Focused + cursor at START → "❯ █text" (cursor prepended)
+// 4. Focused + cursor in MIDDLE → "❯ tex█t" (cursor splits text)
+// 5. Blurred input → NO cursor block, just "❯ text"
+// 6. Refocus restores cursor visibility
+//
+// Cross-ref: input.go:61-80 View() cursor rendering
+func TestParity_InputCursorBlockRendering(t *testing.T) {
+	// 1. Focused empty → cursor at start
+	inp := components.NewInputPane()
+	inp.SetSize(80, 3)
+	inp.Focus()
+	v1 := strip(inp.View().Content)
+	if !strings.Contains(v1, "█") {
+		t.Errorf("Focused empty input should show cursor █, got: %q", v1)
+	}
+
+	// 2. Type text → cursor at end
+	for _, ch := range "hello" {
+		inp.Update(tea.KeyPressMsg{Code: rune(ch), Text: string(ch)})
+	}
+	v2 := strip(inp.View().Content)
+	// Cursor should come AFTER "hello"
+	cursorIdx := strings.Index(v2, "█")
+	helloEnd := strings.Index(v2, "hello") + len("hello")
+	if cursorIdx <= helloEnd-1 {
+		t.Errorf("Cursor at end should come after 'hello', got view: %q", v2)
+	}
+
+	// 3. Ctrl+A → cursor to start
+	inp.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
+	v3 := strip(inp.View().Content)
+	// Cursor should come BEFORE "hello"
+	cursorIdx3 := strings.Index(v3, "█")
+	helloStart3 := strings.Index(v3, "hello")
+	if cursorIdx3 >= helloStart3 {
+		t.Errorf("Cursor at start should come before 'hello', got view: %q", v3)
+	}
+
+	// 4. Left twice from end → cursor in middle of "hello" (between 'l' and 'l')
+	inp.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}) // to end
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	v4 := strip(inp.View().Content)
+	// View should be "❯ hel█lo" — cursor splits hello
+	if !strings.Contains(v4, "hel█lo") {
+		t.Errorf("Cursor in middle should produce 'hel█lo', got: %q", v4)
+	}
+
+	// 5. Blur → no cursor block
+	inp.Blur()
+	v5 := strip(inp.View().Content)
+	if strings.Contains(v5, "█") {
+		t.Errorf("Blurred input should NOT show cursor █, got: %q", v5)
+	}
+	// But text should still be visible
+	if !strings.Contains(v5, "hello") {
+		t.Error("Blurred input should still show text")
+	}
+
+	// 6. Refocus restores cursor
+	inp.Focus()
+	v6 := strip(inp.View().Content)
+	if !strings.Contains(v6, "█") {
+		t.Errorf("Refocused input should show cursor, got: %q", v6)
+	}
+}
+
 // TestParity_ConversationViewComposition validates the ConversationPane View():
 // empty state, streaming text placement, height padding, and interleaving.
 //
