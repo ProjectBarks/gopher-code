@@ -3463,6 +3463,81 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_SpinnerTickLoopSelfTerminates validates the AppModel's
+// SpinnerTickMsg handling: the tick loop keeps running while the spinner
+// is active and self-terminates by returning nil when it stops. A bug
+// here would either leak the tick loop (returning a new Tick cmd after
+// Stop) or starve the animation (returning nil while still active).
+//
+// Unique behaviors (B10 tests ThinkingSpinner in isolation; this tests
+// the app-level tick routing):
+//  1. SpinnerTickMsg while spinner active → returns a non-nil tea.Cmd
+//     (the next Tick scheduler), keeping the animation loop alive.
+//  2. SpinnerTickMsg while spinner inactive → returns nil cmd, terminating
+//     the loop cleanly.
+//  3. SpinnerTickMsg always calls spinner.Update which advances the frame
+//     ONLY when active.
+//  4. After Stop, frame stops advancing on subsequent ticks.
+//  5. Stop→Start restores the active-tick behavior (returns non-nil cmd).
+//
+// Cross-ref: app.go:212-217 SpinnerTickMsg case.
+// Cross-ref: spinner_verbs.go:176-187 Tick() / Update() frame advance.
+func TestParity_SpinnerTickLoopSelfTerminates(t *testing.T) {
+	sess := session.New(session.DefaultConfig(), "/tmp")
+	app := NewAppModel(sess, nil)
+	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// -- Behavior 2: inactive spinner → tick returns nil cmd --
+	if app.spinner.IsActive() {
+		t.Fatal("setup: spinner should start inactive")
+	}
+	_, cmd := app.Update(components.SpinnerTickMsg{})
+	if cmd != nil {
+		t.Error("tick on INACTIVE spinner should return nil cmd (terminate loop)")
+	}
+
+	// -- Behavior 1+3: active spinner → tick returns non-nil cmd AND
+	// advances frame --
+	app.spinner.Start()
+	frameBefore := app.spinner.Frame()
+	_, cmd = app.Update(components.SpinnerTickMsg{})
+	if cmd == nil {
+		t.Error("tick on ACTIVE spinner should return non-nil cmd (keep loop alive)")
+	}
+	frameAfter := app.spinner.Frame()
+	if frameAfter == frameBefore {
+		t.Errorf("active tick should advance frame (was %d, still %d)", frameBefore, frameAfter)
+	}
+
+	// Several ticks in a row continue to keep the loop alive.
+	for i := 0; i < 5; i++ {
+		_, cmd := app.Update(components.SpinnerTickMsg{})
+		if cmd == nil {
+			t.Errorf("tick #%d while active should still return non-nil cmd", i)
+		}
+	}
+
+	// -- Behaviors 2+4: after Stop, ticks stop advancing frame AND return nil --
+	frameAtStop := app.spinner.Frame()
+	app.spinner.Stop()
+	_, cmd = app.Update(components.SpinnerTickMsg{})
+	if cmd != nil {
+		t.Error("tick AFTER Stop should return nil (terminate loop)")
+	}
+	frameAfterStop := app.spinner.Frame()
+	if frameAfterStop != frameAtStop {
+		t.Errorf("inactive tick should NOT advance frame (was %d, now %d)",
+			frameAtStop, frameAfterStop)
+	}
+
+	// -- Behavior 5: Start again → tick returns non-nil cmd once more --
+	app.spinner.Start()
+	_, cmd = app.Update(components.SpinnerTickMsg{})
+	if cmd == nil {
+		t.Error("after Restart, tick should return non-nil cmd again")
+	}
+}
+
 // TestParity_AssistantMultiBlockFirstTextPrefix validates the "first text
 // block gets ⏺" rule in renderAssistantMessage. The firstText latch MUST
 // turn off only when a non-empty text block is rendered, so subsequent

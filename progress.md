@@ -256,7 +256,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B52 | TestParity_CompactSessionContract | 6 subtests for query.CompactSession destructive reduction: empty→noop, 4-msg→unchanged (<=4 threshold), 5-msg→[m0,m3,m4], 10-msg→[m0,m8,m9], boundary-5 triggers compact, boundary-4 stays, middle msgs verified absent after compaction, per-message text preserved by content. | ✅ pass |
 | B53 | TestParity_StreamingSpinnerLeakSeparation | Dual-buffer separation contract: canonical a.streamingText has ONLY delta text (NOT spinner verb), conversation.streamingText view has BOTH spinner verb + delta, TurnComplete finalizes msg with delta-only text (no "(thinking …)" suffix leaks into history), both buffers reset after turn. Prevents spinner verb from polluting saved conversation. | ✅ pass |
 | B54 | TestParity_AssistantMultiBlockFirstTextPrefix | renderAssistantMessage "first text block gets ⏺" latch: single text→1 ⏺, two texts→exactly 1 (first only, in correct order alpha→beta), empty text block doesn't consume latch (next non-empty still gets ⏺), no text blocks→0 ⏺, empty-rendering blocks dropped (no triple-newline between survivors). | ✅ pass |
-### Next B55: Next unique behavior to validate
+| B55 | TestParity_SpinnerTickLoopSelfTerminates | App-level SpinnerTickMsg routing: inactive→nil cmd (loop terminates), active→non-nil cmd (loop continues) + frame advances, 5 consecutive active ticks keep returning non-nil, after Stop tick returns nil AND frame stops advancing, after Restart tick returns non-nil again. Prevents tick-loop leak after spinner stops. | ✅ pass |
+### Next B56: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
