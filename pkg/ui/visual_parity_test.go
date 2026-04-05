@@ -3463,6 +3463,139 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_CompactSessionContract validates query.CompactSession, which
+// drops middle messages to shrink context when the budget is exceeded.
+// This is a destructive session mutation — any bug that drops the wrong
+// messages corrupts the conversation history permanently.
+//
+// Unique behaviors (no existing test for CompactSession):
+//  1. Session with 0 messages is unchanged (no panic on empty slice).
+//  2. Session with exactly 4 messages is unchanged (<=4 threshold).
+//  3. Session with 5 messages compacts to EXACTLY 3 messages.
+//  4. First message is preserved by identity (same role+text as msgs[0]).
+//  5. Last 2 messages are preserved by identity (msgs[len-2], msgs[len-1]).
+//  6. Middle messages (indices 1..len-3) are dropped.
+//  7. Session with 10 messages compacts to 3: [msgs[0], msgs[8], msgs[9]].
+//  8. After compaction, sess.Messages length == 3.
+//  9. Sub-threshold session (<=4) length unchanged.
+//
+// Cross-ref: query/query.go:475-486 CompactSession.
+// Cross-ref: Claude Code src/query/contextLimit.ts — context-pruning policy.
+func TestParity_CompactSessionContract(t *testing.T) {
+	mkMsg := func(text string) message.Message {
+		return message.Message{
+			Role: message.RoleUser,
+			Content: []message.ContentBlock{
+				{Type: message.ContentText, Text: text},
+			},
+		}
+	}
+
+	extractText := func(m message.Message) string {
+		if len(m.Content) == 0 {
+			return ""
+		}
+		return m.Content[0].Text
+	}
+
+	// -- Behavior 1: empty session unchanged --
+	t.Run("empty-session-noop", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		query.CompactSession(sess)
+		if len(sess.Messages) != 0 {
+			t.Errorf("empty session should remain empty, got %d messages", len(sess.Messages))
+		}
+	})
+
+	// -- Behaviors 2+9: session with 4 messages unchanged (<=4 threshold) --
+	t.Run("four-messages-unchanged", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		for i := 0; i < 4; i++ {
+			sess.PushMessage(mkMsg(fmt.Sprintf("m%d", i)))
+		}
+		query.CompactSession(sess)
+		if len(sess.Messages) != 4 {
+			t.Errorf("4-msg session should be unchanged, got %d", len(sess.Messages))
+		}
+		// Verify the text of each message preserved.
+		for i, want := range []string{"m0", "m1", "m2", "m3"} {
+			if extractText(sess.Messages[i]) != want {
+				t.Errorf("msg[%d]: want %q, got %q", i, want, extractText(sess.Messages[i]))
+			}
+		}
+	})
+
+	// -- Behaviors 3+4+5+6+8: 5 messages → 3 = [m0, m3, m4] --
+	t.Run("five-messages-compact", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		for i := 0; i < 5; i++ {
+			sess.PushMessage(mkMsg(fmt.Sprintf("m%d", i)))
+		}
+		query.CompactSession(sess)
+		if len(sess.Messages) != 3 {
+			t.Fatalf("5-msg session should compact to 3, got %d: %+v",
+				len(sess.Messages), sess.Messages)
+		}
+		wantTexts := []string{"m0", "m3", "m4"}
+		for i, want := range wantTexts {
+			if got := extractText(sess.Messages[i]); got != want {
+				t.Errorf("after compact, msgs[%d] text: want %q, got %q", i, want, got)
+			}
+		}
+	})
+
+	// -- Behavior 7: 10 messages → [m0, m8, m9] --
+	t.Run("ten-messages-compact", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		for i := 0; i < 10; i++ {
+			sess.PushMessage(mkMsg(fmt.Sprintf("m%d", i)))
+		}
+		query.CompactSession(sess)
+		if len(sess.Messages) != 3 {
+			t.Fatalf("10-msg session should compact to 3, got %d", len(sess.Messages))
+		}
+		wantTexts := []string{"m0", "m8", "m9"}
+		for i, want := range wantTexts {
+			if got := extractText(sess.Messages[i]); got != want {
+				t.Errorf("10→3 compact, msgs[%d]: want %q, got %q", i, want, got)
+			}
+		}
+		// Middle messages m1..m7 must be completely absent.
+		for i := 1; i <= 7; i++ {
+			mid := fmt.Sprintf("m%d", i)
+			for _, kept := range sess.Messages {
+				if extractText(kept) == mid {
+					t.Errorf("middle message %q should have been dropped", mid)
+				}
+			}
+		}
+	})
+
+	// Edge case: exactly 5 messages — boundary from "unchanged" to "compact".
+	t.Run("boundary-5-triggers-compact", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		for i := 0; i < 5; i++ {
+			sess.PushMessage(mkMsg(fmt.Sprintf("x%d", i)))
+		}
+		query.CompactSession(sess)
+		if len(sess.Messages) != 3 {
+			t.Errorf("boundary: 5-msg must compact (>4 threshold), got %d", len(sess.Messages))
+		}
+	})
+
+	// Edge case: exactly 4 messages — must NOT compact.
+	t.Run("boundary-4-no-compact", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		for i := 0; i < 4; i++ {
+			sess.PushMessage(mkMsg(fmt.Sprintf("y%d", i)))
+		}
+		query.CompactSession(sess)
+		if len(sess.Messages) != 4 {
+			t.Errorf("boundary: 4-msg must stay at 4 (<=4 threshold), got %d", len(sess.Messages))
+		}
+	})
+}
+
 // TestParity_QueryEventDisplayThreading validates that a Display payload
 // set on a QueryEvent{Type=QEventToolResult} flows intact through
 // handleQueryEvent → ToolResultMsg → handleToolResult → conversation
