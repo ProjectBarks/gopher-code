@@ -3463,6 +3463,92 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_SlashInputViewRendering validates the SlashCommandInput.View()
+// output structure: number of lines, per-suggestion format, and visual
+// selection highlighting.
+//
+// Unique behaviors (B38 tests Update state transitions; this tests the
+// rendered View):
+//  1. Inactive input → empty view (".Content == \"\"").
+//  2. Active with zero suggestions → empty view (guard catches both).
+//  3. Active with N matching suggestions → view has exactly N lines.
+//  4. Each rendered line contains the full command Name + Description.
+//  5. The selected index's line has a different (raw, unstripped) style
+//     than unselected lines — specifically, its raw content is longer
+//     because the selection-background ANSI wrapper is applied.
+//  6. After Deactivate, the view becomes empty again (round-trip).
+//
+// Cross-ref: slash_input.go:334-360 View().
+func TestParity_SlashInputViewRendering(t *testing.T) {
+	sci := components.NewSlashCommandInput(theme.Current())
+
+	// -- Behavior 1: inactive → empty --
+	if v := sci.View().Content; v != "" {
+		t.Errorf("inactive view should be empty, got %q", v)
+	}
+
+	// -- Behavior 2: active with zero suggestions → empty --
+	// Use a prefix that matches nothing. Filter uses prefix+fuzzy, so
+	// "/nonexistentXYZ" should match nothing. But the fuzzy matcher is
+	// a subsequence test; with an unusual string like "/xyz123" it's
+	// possible nothing matches.
+	// Substitute commands with an empty list first.
+	sci.SetCommands([]components.SlashCommand{})
+	sci.Activate("/")
+	if !sci.IsActive() {
+		t.Fatal("setup: Activate should succeed even with empty commands")
+	}
+	if v := sci.View().Content; v != "" {
+		t.Errorf("active with 0 suggestions should be empty view, got %q", v)
+	}
+
+	// -- Behaviors 3+4+5: active with suggestions --
+	sci = components.NewSlashCommandInput(theme.Current())
+	sci.SetCommands([]components.SlashCommand{
+		{Name: "/alpha", Description: "first cmd"},
+		{Name: "/beta", Description: "second cmd"},
+		{Name: "/gamma", Description: "third cmd"},
+	})
+	sci.Activate("/")
+	plain := strip(sci.View().Content)
+	lines := strings.Split(plain, "\n")
+	if len(lines) != 3 {
+		t.Errorf("3 suggestions should produce 3 lines, got %d: %q", len(lines), lines)
+	}
+	// Each command name AND description present.
+	for _, c := range []struct{ name, desc string }{
+		{"/alpha", "first cmd"}, {"/beta", "second cmd"}, {"/gamma", "third cmd"},
+	} {
+		if !strings.Contains(plain, c.name) {
+			t.Errorf("view should contain %q, got:\n%s", c.name, plain)
+		}
+		if !strings.Contains(plain, c.desc) {
+			t.Errorf("view should contain %q, got:\n%s", c.desc, plain)
+		}
+	}
+
+	// -- Behavior 5: selected line has selection background styling.
+	// After Activate, selected=0 which is /alpha. The raw (unstripped)
+	// output should contain MORE ANSI codes on the /alpha line than on
+	// /beta, because /alpha gets the extra selection-background wrapper.
+	rawLines := strings.Split(sci.View().Content, "\n")
+	if len(rawLines) != 3 {
+		t.Fatalf("raw view should have 3 lines, got %d", len(rawLines))
+	}
+	// The selected /alpha line should be longer in raw form than the
+	// unselected /beta line — since the selection style adds more escapes.
+	if len(rawLines[0]) <= len(rawLines[1]) {
+		t.Errorf("selected line should be longer (more ANSI wrappers) than unselected: "+
+			"selected=%d unselected=%d", len(rawLines[0]), len(rawLines[1]))
+	}
+
+	// -- Behavior 6: Deactivate round-trips to empty view --
+	sci.Deactivate()
+	if v := sci.View().Content; v != "" {
+		t.Errorf("after Deactivate, view should be empty, got %q", v)
+	}
+}
+
 // TestParity_UserMessageMultiBlockPrefixing validates that renderUserMessage
 // applies the ❯ prefix PER TEXT BLOCK (unlike renderAssistantMessage which
 // latches a single first-text prefix across all blocks). This difference
