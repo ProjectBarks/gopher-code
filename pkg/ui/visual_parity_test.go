@@ -3463,6 +3463,98 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_HeaderUpdateMsgPartialFields validates that HeaderUpdateMsg
+// only mutates fields that carry non-empty values. Empty fields preserve
+// existing state — this supports "update just one thing at a time" flows
+// without forcing callers to reconstruct the full message each time.
+//
+// Unique behaviors (existing TestHeaderUpdateMsg only tests full updates):
+//  1. HeaderUpdateMsg{Model: "X"} with CWD="" and SessionName="" leaves
+//     existing cwd and sessionName intact.
+//  2. HeaderUpdateMsg{CWD: "Y"} with Model="" and SessionName="" leaves
+//     existing modelName intact.
+//  3. HeaderUpdateMsg{SessionName: "Z"} with other fields empty leaves
+//     modelName and cwd intact.
+//  4. All-empty HeaderUpdateMsg is a no-op (no field changes).
+//  5. A second update can overwrite a previously-set field.
+//
+// Cross-ref: header.go:52-68 Update — three `if msg.X != ""` guards.
+func TestParity_HeaderUpdateMsgPartialFields(t *testing.T) {
+	mkHeader := func() *components.Header {
+		h := components.NewHeader(theme.Current())
+		h.SetModel("initial-model")
+		h.SetCWD("/initial/cwd")
+		h.SetSessionName("initial-session")
+		return h
+	}
+
+	// -- Behavior 1: only Model set → CWD and SessionName preserved --
+	t.Run("only-model-preserves-others", func(t *testing.T) {
+		h := mkHeader()
+		h.Update(components.HeaderUpdateMsg{Model: "new-model"})
+		if h.ModelName() != "new-model" {
+			t.Errorf("Model should be updated, got %q", h.ModelName())
+		}
+		if h.CWD() != "/initial/cwd" {
+			t.Errorf("CWD must NOT be cleared by empty field, got %q", h.CWD())
+		}
+		if h.SessionName() != "initial-session" {
+			t.Errorf("SessionName must NOT be cleared, got %q", h.SessionName())
+		}
+	})
+
+	// -- Behavior 2: only CWD set → Model and SessionName preserved --
+	t.Run("only-cwd-preserves-others", func(t *testing.T) {
+		h := mkHeader()
+		h.Update(components.HeaderUpdateMsg{CWD: "/new/cwd"})
+		if h.CWD() != "/new/cwd" {
+			t.Errorf("CWD should be updated, got %q", h.CWD())
+		}
+		if h.ModelName() != "initial-model" {
+			t.Errorf("Model must NOT be cleared, got %q", h.ModelName())
+		}
+		if h.SessionName() != "initial-session" {
+			t.Errorf("SessionName must NOT be cleared, got %q", h.SessionName())
+		}
+	})
+
+	// -- Behavior 3: only SessionName set → Model and CWD preserved --
+	t.Run("only-session-preserves-others", func(t *testing.T) {
+		h := mkHeader()
+		h.Update(components.HeaderUpdateMsg{SessionName: "new-session"})
+		if h.SessionName() != "new-session" {
+			t.Errorf("SessionName should be updated, got %q", h.SessionName())
+		}
+		if h.ModelName() != "initial-model" {
+			t.Errorf("Model must NOT be cleared, got %q", h.ModelName())
+		}
+		if h.CWD() != "/initial/cwd" {
+			t.Errorf("CWD must NOT be cleared, got %q", h.CWD())
+		}
+	})
+
+	// -- Behavior 4: all-empty message is a no-op --
+	t.Run("all-empty-is-noop", func(t *testing.T) {
+		h := mkHeader()
+		h.Update(components.HeaderUpdateMsg{})
+		if h.ModelName() != "initial-model" || h.CWD() != "/initial/cwd" ||
+			h.SessionName() != "initial-session" {
+			t.Errorf("empty HeaderUpdateMsg should be a no-op; got model=%q cwd=%q session=%q",
+				h.ModelName(), h.CWD(), h.SessionName())
+		}
+	})
+
+	// -- Behavior 5: subsequent update overwrites previous non-empty field --
+	t.Run("second-update-overwrites", func(t *testing.T) {
+		h := mkHeader()
+		h.Update(components.HeaderUpdateMsg{Model: "first-new"})
+		h.Update(components.HeaderUpdateMsg{Model: "second-new"})
+		if h.ModelName() != "second-new" {
+			t.Errorf("second update should overwrite, got %q", h.ModelName())
+		}
+	})
+}
+
 // TestParity_SpinnerTickLoopSelfTerminates validates the AppModel's
 // SpinnerTickMsg handling: the tick loop keeps running while the spinner
 // is active and self-terminates by returning nil when it stops. A bug
