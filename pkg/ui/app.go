@@ -595,6 +595,36 @@ func (a *AppModel) handleToolResult(msg ToolResultMsg) (*AppModel, tea.Cmd) {
 	toolName := a.activeToolCalls[msg.ToolUseID]
 	delete(a.activeToolCalls, msg.ToolUseID)
 
+	// If the result carries a unified diff (Edit/Write tools), finalize any
+	// in-flight streaming text and add the tool_result as its own message so
+	// renderToolResultBlock can render it as a colored diff.
+	if !msg.IsError && strings.Contains(msg.Content, "--- a/") &&
+		strings.Contains(msg.Content, "@@") {
+		if a.streamingText.Len() > 0 {
+			assistantMsg := message.Message{
+				Role: message.RoleAssistant,
+				Content: []message.ContentBlock{
+					{Type: message.ContentText, Text: a.streamingText.String()},
+				},
+			}
+			a.conversation.AddMessage(assistantMsg)
+			a.streamingText.Reset()
+			a.streaming.Reset()
+		}
+		resultMsg := message.Message{
+			Role: message.RoleUser,
+			Content: []message.ContentBlock{{
+				Type:      message.ContentToolResult,
+				ToolUseID: msg.ToolUseID,
+				Content:   msg.Content,
+				IsError:   false,
+			}},
+		}
+		a.conversation.AddMessage(resultMsg)
+		a.conversation.ClearStreamingText()
+		return a, nil
+	}
+
 	// Show brief result indicator in streaming area.
 	// Source: components/messages/UserToolResultMessage — shows ✓/✗ with truncated content
 	if msg.IsError {
