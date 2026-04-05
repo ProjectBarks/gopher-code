@@ -3461,6 +3461,147 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_SessionToRequestMessagesSerialization validates the session →
+// API conversion in SessionState.ToRequestMessages(). This function is the
+// contract that builds the JSON sent to the Anthropic API, so serialization
+// drift would silently corrupt every request.
+//
+// Unique behaviors (no existing test covers ToRequestMessages):
+//  1. Empty session → zero-length (but non-nil) RequestMessage slice.
+//  2. Message.Role is serialized as the exact string (RoleUser→"user",
+//     RoleAssistant→"assistant") — verbatim stringification.
+//  3. ContentText block → {Type:"text", Text:X} (ID/Name/Input stay empty).
+//  4. ContentToolUse block → {Type:"tool_use", ID, Name, Input} carries all
+//     3 tool fields through.
+//  5. ContentToolResult with IsError=false → RequestContent.IsError is NIL
+//     pointer (NOT a pointer to false). This matters because the API omits
+//     `is_error` entirely from JSON when the pointer is nil (omitempty).
+//  6. ContentToolResult with IsError=true → IsError is a non-nil *bool
+//     pointing to true (preserves the signal).
+//  7. ContentThinking is silently dropped (no RequestContent emitted), so
+//     adding 1 text + 1 thinking block yields 1 RequestContent, not 2.
+//  8. Multi-block ordering within a single message is preserved.
+//  9. Multi-message ordering is preserved in the output slice.
+//
+// Cross-ref: session.go:160-198 — per-type switch in ToRequestMessages.
+// Cross-ref: Claude Code utils/messages.ts → Anthropic SDK request format.
+func TestParity_SessionToRequestMessagesSerialization(t *testing.T) {
+	// -- Behavior 1: empty → non-nil empty slice --
+	emptySess := session.New(session.DefaultConfig(), "/tmp")
+	empty := emptySess.ToRequestMessages()
+	if empty == nil {
+		t.Error("empty session must return non-nil slice (zero-len is fine)")
+	}
+	if len(empty) != 0 {
+		t.Errorf("empty session should return 0 messages, got %d", len(empty))
+	}
+
+	// Build a multi-message session exercising every content-block branch.
+	sess := session.New(session.DefaultConfig(), "/tmp")
+	sess.PushMessage(message.Message{
+		Role: message.RoleUser,
+		Content: []message.ContentBlock{
+			{Type: message.ContentText, Text: "user-text-1"},
+			{Type: message.ContentThinking, Thinking: "secret thought"}, // dropped
+			{Type: message.ContentToolResult, ToolUseID: "t1", Content: "ok-out", IsError: false},
+			{Type: message.ContentToolResult, ToolUseID: "t2", Content: "err-out", IsError: true},
+		},
+	})
+	sess.PushMessage(message.Message{
+		Role: message.RoleAssistant,
+		Content: []message.ContentBlock{
+			{Type: message.ContentToolUse, ID: "tu1", Name: "Bash",
+				Input: []byte(`{"cmd":"ls"}`)},
+			{Type: message.ContentText, Text: "done"},
+		},
+	})
+
+	out := sess.ToRequestMessages()
+
+	// -- Behavior 9: 2 input messages → 2 output messages in SAME order --
+	if len(out) != 2 {
+		t.Fatalf("expected 2 RequestMessages, got %d: %+v", len(out), out)
+	}
+
+	// -- Behavior 2: role stringification --
+	if out[0].Role != "user" {
+		t.Errorf("msg[0].Role: want 'user', got %q", out[0].Role)
+	}
+	if out[1].Role != "assistant" {
+		t.Errorf("msg[1].Role: want 'assistant', got %q", out[1].Role)
+	}
+
+	// -- Behavior 7: thinking block dropped → msg[0] has 3 entries not 4 --
+	if len(out[0].Content) != 3 {
+		t.Fatalf("msg[0] should drop thinking → 3 entries (text+2 tool_result), got %d: %+v",
+			len(out[0].Content), out[0].Content)
+	}
+
+	// -- Behavior 3 + 8: text block at index 0, ordering preserved --
+	c0 := out[0].Content[0]
+	if c0.Type != "text" {
+		t.Errorf("msg[0].Content[0].Type: want 'text', got %q", c0.Type)
+	}
+	if c0.Text != "user-text-1" {
+		t.Errorf("msg[0].Content[0].Text: want 'user-text-1', got %q", c0.Text)
+	}
+	// Non-text fields must be empty on a text block.
+	if c0.ID != "" || c0.Name != "" || len(c0.Input) != 0 || c0.ToolUseID != "" || c0.IsError != nil {
+		t.Errorf("text block should only have Type+Text set, got %+v", c0)
+	}
+
+	// -- Behavior 5: IsError=false → IsError pointer is NIL --
+	c1 := out[0].Content[1]
+	if c1.Type != "tool_result" {
+		t.Errorf("msg[0].Content[1].Type: want 'tool_result', got %q", c1.Type)
+	}
+	if c1.ToolUseID != "t1" {
+		t.Errorf("tool_result ToolUseID: want 't1', got %q", c1.ToolUseID)
+	}
+	if c1.Content != "ok-out" {
+		t.Errorf("tool_result Content: want 'ok-out', got %q", c1.Content)
+	}
+	if c1.IsError != nil {
+		t.Errorf("IsError=false MUST serialize to nil *bool (for JSON omitempty), got %v",
+			*c1.IsError)
+	}
+
+	// -- Behavior 6: IsError=true → non-nil *bool pointing to true --
+	c2 := out[0].Content[2]
+	if c2.ToolUseID != "t2" {
+		t.Errorf("tool_result ToolUseID: want 't2', got %q", c2.ToolUseID)
+	}
+	if c2.IsError == nil {
+		t.Fatal("IsError=true MUST produce non-nil *bool pointer")
+	}
+	if *c2.IsError != true {
+		t.Errorf("IsError=true → *bool must point to true, got %v", *c2.IsError)
+	}
+
+	// -- Behavior 4: tool_use block at msg[1] index 0 carries ID/Name/Input --
+	if len(out[1].Content) != 2 {
+		t.Fatalf("msg[1] should have 2 entries (tool_use+text), got %d", len(out[1].Content))
+	}
+	tu := out[1].Content[0]
+	if tu.Type != "tool_use" {
+		t.Errorf("msg[1].Content[0].Type: want 'tool_use', got %q", tu.Type)
+	}
+	if tu.ID != "tu1" {
+		t.Errorf("tool_use ID: want 'tu1', got %q", tu.ID)
+	}
+	if tu.Name != "Bash" {
+		t.Errorf("tool_use Name: want 'Bash', got %q", tu.Name)
+	}
+	if string(tu.Input) != `{"cmd":"ls"}` {
+		t.Errorf("tool_use Input: want %q, got %q", `{"cmd":"ls"}`, string(tu.Input))
+	}
+
+	// -- Behavior 8: ordering within msg[1] — tool_use then text --
+	if out[1].Content[1].Type != "text" || out[1].Content[1].Text != "done" {
+		t.Errorf("msg[1].Content[1]: want text 'done', got %+v", out[1].Content[1])
+	}
+}
+
 // TestParity_ToolUseBlockInputThreshold validates the 200-char threshold
 // rule in MessageBubble.renderToolUseBlock that decides whether to display
 // the tool's input JSON below its header or not.
