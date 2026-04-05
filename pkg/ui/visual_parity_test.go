@@ -3464,6 +3464,127 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_TurnCompleteEmptyStreamingGuard validates that TurnCompleteMsg
+// does NOT create an empty assistant message when streamingText buffer
+// is empty. This prevents polluting conversation history with empty
+// bubbles from interrupted/cancelled turns.
+//
+// Unique behaviors (B3 tests tool-use state machine, B18 tests queryDone
+// which ALSO has finalize logic; TurnComplete's empty-guard specifically
+// is not isolated):
+//  1. TurnComplete with NON-empty streamingText → +1 assistant message.
+//  2. TurnComplete with EMPTY streamingText → NO new message (guard).
+//  3. Both paths still reset: mode→Idle, spinner stopped, activeToolCalls
+//     cleared, streamingText reset, conversation.streamingText cleared.
+//  4. Repeated TurnComplete calls (empty buffer) add ZERO messages each.
+//  5. After empty TurnComplete, a fresh TextDelta+TurnComplete flow still
+//     works (state correctly reset).
+//
+// Cross-ref: app.go:653-677 handleTurnComplete with `if streamingText.Len() > 0` guard.
+func TestParity_TurnCompleteEmptyStreamingGuard(t *testing.T) {
+	mkApp := func() *AppModel {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		app.showWelcome = false
+		return app
+	}
+
+	// -- Behavior 1: non-empty streaming text → +1 message --
+	t.Run("non-empty-streaming-creates-message", func(t *testing.T) {
+		app := mkApp()
+		app.mode = ModeStreaming
+		app.spinner.Start()
+		app.streamingText.WriteString("buffered text")
+
+		before := app.conversation.MessageCount()
+		app.Update(TurnCompleteMsg{})
+		after := app.conversation.MessageCount()
+		if after-before != 1 {
+			t.Errorf("non-empty streamingText should add 1 message, got delta=%d",
+				after-before)
+		}
+	})
+
+	// -- Behavior 2: empty streaming → NO new message --
+	t.Run("empty-streaming-adds-no-message", func(t *testing.T) {
+		app := mkApp()
+		app.mode = ModeStreaming
+		app.spinner.Start()
+		// Note: streamingText is empty by default.
+		if app.streamingText.Len() != 0 {
+			t.Fatalf("setup: streamingText should be empty, got len=%d", app.streamingText.Len())
+		}
+
+		before := app.conversation.MessageCount()
+		app.Update(TurnCompleteMsg{})
+		after := app.conversation.MessageCount()
+		if after != before {
+			t.Errorf("empty streamingText must NOT add a message, delta=%d",
+				after-before)
+		}
+	})
+
+	// -- Behavior 3: both paths reset state --
+	t.Run("both-paths-reset-state", func(t *testing.T) {
+		for _, preload := range []string{"", "some text"} {
+			app := mkApp()
+			app.mode = ModeStreaming
+			app.spinner.Start()
+			app.activeToolCalls["t1"] = "Read"
+			if preload != "" {
+				app.streamingText.WriteString(preload)
+			}
+			app.Update(TurnCompleteMsg{})
+
+			if app.mode != ModeIdle {
+				t.Errorf("preload=%q: mode should be Idle, got %v", preload, app.mode)
+			}
+			if app.spinner.IsActive() {
+				t.Errorf("preload=%q: spinner should be stopped", preload)
+			}
+			if app.streamingText.Len() != 0 {
+				t.Errorf("preload=%q: streamingText must be reset, got len=%d",
+					preload, app.streamingText.Len())
+			}
+			if len(app.activeToolCalls) != 0 {
+				t.Errorf("preload=%q: activeToolCalls must be cleared, got %d entries",
+					preload, len(app.activeToolCalls))
+			}
+		}
+	})
+
+	// -- Behavior 4: repeated empty TurnComplete adds zero messages --
+	t.Run("repeated-empty-turn-complete", func(t *testing.T) {
+		app := mkApp()
+		before := app.conversation.MessageCount()
+		for i := 0; i < 5; i++ {
+			app.Update(TurnCompleteMsg{})
+		}
+		after := app.conversation.MessageCount()
+		if after != before {
+			t.Errorf("5 empty TurnComplete calls should add 0 messages, delta=%d",
+				after-before)
+		}
+	})
+
+	// -- Behavior 5: post-empty-TurnComplete, a fresh cycle still works --
+	t.Run("state-recovers-after-empty-turn", func(t *testing.T) {
+		app := mkApp()
+		// Empty TurnComplete first (simulates cancelled turn).
+		app.Update(TurnCompleteMsg{})
+		// Now a real turn follows.
+		app.Update(TextDeltaMsg{Text: "real response"})
+		before := app.conversation.MessageCount()
+		app.Update(TurnCompleteMsg{})
+		after := app.conversation.MessageCount()
+		if after-before != 1 {
+			t.Errorf("fresh turn after empty-turn should create msg, delta=%d",
+				after-before)
+		}
+	})
+}
+
 // TestParity_SubmitQueryFuncDispatch validates handleSubmit's two paths
 // based on whether queryFunc has been configured. With queryFunc set,
 // submit must wire up a cancellable context and kick off the query
