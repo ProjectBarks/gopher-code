@@ -3463,6 +3463,123 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_WelcomeCWDAbbreviation validates the CWD display in the
+// welcome box — specifically that the /Users/ prefix is rewritten to ~/
+// and overlong paths get an ellipsis prefix.
+//
+// Unique behaviors (existing TestAbbreviateCWD only checks length ≤ maxLen;
+// this validates the CONTENT transformations):
+//  1. Short path (fits within 30) renders verbatim, no ~/ or … prefix.
+//  2. /Users/{user}/{rest} gets rewritten to ~/{rest} when the original
+//     exceeds 30 chars AND the tilde form fits. Verifies the home-prefix
+//     replacement only fires when path is too long.
+//  3. Path too long even after tilde replacement → starts with "…".
+//  4. A path of exactly 30 runes is NOT abbreviated (rune-count rule).
+//  5. A path of 31 runes IS abbreviated.
+//
+// Cross-ref: welcome.go:190-209 abbreviateCWD; welcome.go:80 view usage.
+func TestParity_WelcomeCWDAbbreviation(t *testing.T) {
+	// -- Behavior 1: short path (well under 30) unchanged --
+	t.Run("short-path-verbatim", func(t *testing.T) {
+		ws := components.NewWelcomeScreen(theme.Current(), "opus", "/tmp")
+		ws.SetSize(80, 24)
+		v := strip(ws.View().Content)
+		if !strings.Contains(v, "/tmp") {
+			t.Errorf("short path /tmp should appear verbatim in welcome:\n%s", v)
+		}
+		// No tilde-rewrite triggered.
+		if strings.Contains(v, "~/tmp") {
+			t.Errorf("short path should NOT trigger ~/ rewrite:\n%s", v)
+		}
+	})
+
+	// -- Behavior 2: /Users/{user}/{rest} rewritten to ~/{rest} when long.
+	// Note: the $HOME of "user" is /Users/user, so ~/{rest} correctly
+	// represents the same path to that user — the username segment is
+	// dropped intentionally (tilde-expansion semantics). --
+	t.Run("home-prefix-rewritten-when-long", func(t *testing.T) {
+		longPath := "/Users/alex/my-project-directory" // 32 chars → >30
+		if len(longPath) <= 30 {
+			t.Fatalf("setup: path should be >30 chars, got %d", len(longPath))
+		}
+		ws := components.NewWelcomeScreen(theme.Current(), "opus", longPath)
+		ws.SetSize(80, 24)
+		v := strip(ws.View().Content)
+		// After rewrite: "~/my-project-directory" (username dropped, since
+		// ~ expands to /Users/{user} on unix).
+		want := "~/my-project-directory"
+		if !strings.Contains(v, want) {
+			t.Errorf("long /Users/ path should be rewritten to %q, got:\n%s", want, v)
+		}
+		// Original absolute prefix must NOT appear.
+		if strings.Contains(v, "/Users/alex") {
+			t.Errorf("original /Users/ prefix should be gone:\n%s", v)
+		}
+	})
+
+	// -- Behavior 3: extremely long path → … prefix --
+	t.Run("extremely-long-path-has-ellipsis", func(t *testing.T) {
+		// A path so long even ~/ rewrite doesn't fit in 30.
+		path := "/Users/alex/" + strings.Repeat("x", 100)
+		ws := components.NewWelcomeScreen(theme.Current(), "opus", path)
+		ws.SetSize(80, 24)
+		v := strip(ws.View().Content)
+		// Find the line that would contain the CWD — look for "…".
+		if !strings.Contains(v, "…") {
+			t.Errorf("extremely long path should produce … prefix:\n%s", v)
+		}
+	})
+
+	// -- Behavior 4: exactly 30 runes NOT abbreviated --
+	t.Run("exactly-30-runes-verbatim", func(t *testing.T) {
+		// 30 runes exactly — must stay verbatim.
+		path := "/" + strings.Repeat("a", 29) // 30 chars total
+		if len([]rune(path)) != 30 {
+			t.Fatalf("setup: path should be 30 runes, got %d", len([]rune(path)))
+		}
+		ws := components.NewWelcomeScreen(theme.Current(), "opus", path)
+		ws.SetSize(80, 24)
+		v := strip(ws.View().Content)
+		if !strings.Contains(v, path) {
+			t.Errorf("30-rune path should appear verbatim:\n%s", v)
+		}
+		// Search just the line containing the path for an ellipsis — the
+		// box separator line uses "─" (not "…"), so looking for "…" on a
+		// line containing the path tells us whether abbreviation triggered.
+		for _, line := range strings.Split(v, "\n") {
+			if strings.Contains(line, path) && strings.Contains(line, "…") {
+				t.Errorf("30-rune path should not be abbreviated, got line: %q", line)
+			}
+		}
+	})
+
+	// -- Behavior 5: 31 runes IS abbreviated --
+	t.Run("thirty-one-runes-abbreviated", func(t *testing.T) {
+		path := "/" + strings.Repeat("a", 30) // 31 chars
+		if len([]rune(path)) != 31 {
+			t.Fatalf("setup: path should be 31 runes, got %d", len([]rune(path)))
+		}
+		ws := components.NewWelcomeScreen(theme.Current(), "opus", path)
+		ws.SetSize(80, 24)
+		v := strip(ws.View().Content)
+		// Must NOT appear verbatim anywhere.
+		if strings.Contains(v, path) {
+			t.Errorf("31-rune path MUST be abbreviated, but verbatim form present:\n%s", v)
+		}
+		// The "…" prefix should be present on the abbreviated line.
+		foundEllipsis := false
+		for _, line := range strings.Split(v, "\n") {
+			if strings.Contains(line, "…") && strings.Contains(line, "a") {
+				foundEllipsis = true
+				break
+			}
+		}
+		if !foundEllipsis {
+			t.Errorf("31-rune path should produce an abbreviated line with …:\n%s", v)
+		}
+	})
+}
+
 // TestParity_AppViewInitializingAndAltScreen validates AppModel.View()'s
 // three structural invariants: the "Initializing..." placeholder before
 // the terminal size arrives, the AltScreen flag being enabled, and the
