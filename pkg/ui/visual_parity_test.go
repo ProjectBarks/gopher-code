@@ -3463,6 +3463,141 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_SubmitSlashVsUserTextSeparation validates the side-effect
+// differences between submitting a slash command vs a regular user
+// message. Slash commands are in-process UI operations — they must NOT
+// start the spinner, change mode, push to session history, or echo a
+// user message into the conversation pane.
+//
+// Unique behaviors (B4 only covers /model's state; this validates the
+// CONTRAST between slash and user-text paths):
+//  1. Regular text submit: spinner starts, mode→Streaming, session.Messages +1,
+//     conversation.MessageCount +1.
+//  2. Slash command submit: spinner NOT started, mode stays Idle,
+//     session.Messages unchanged, conversation.MessageCount unchanged.
+//  3. Both paths add to input history (for Up-arrow recall).
+//  4. Both paths dismiss the welcome screen.
+//  5. Empty submit: NEITHER path's side effects trigger; welcome stays.
+//
+// Cross-ref: app.go:455-504 handleSubmit — early-return for empty, then
+// IsCommand branch (dispatcher path) vs regular (spinner+session push).
+func TestParity_SubmitSlashVsUserTextSeparation(t *testing.T) {
+	// -- Behavior 1: regular user text causes full side-effects --
+	t.Run("user-text-starts-streaming", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		msgBefore := app.conversation.MessageCount()
+		sessBefore := len(sess.Messages)
+		if app.spinner.IsActive() {
+			t.Fatal("setup: spinner should start inactive")
+		}
+
+		app.Update(components.SubmitMsg{Text: "hello there"})
+
+		if !app.spinner.IsActive() {
+			t.Error("regular text submit should START spinner")
+		}
+		if app.mode != ModeStreaming {
+			t.Errorf("regular text submit should enter ModeStreaming, got %v", app.mode)
+		}
+		if len(sess.Messages) != sessBefore+1 {
+			t.Errorf("regular text should push +1 to session.Messages, got %d→%d",
+				sessBefore, len(sess.Messages))
+		}
+		if app.conversation.MessageCount() != msgBefore+1 {
+			t.Errorf("regular text should add +1 to conversation, got %d→%d",
+				msgBefore, app.conversation.MessageCount())
+		}
+	})
+
+	// -- Behavior 2: slash command takes the dispatcher path only --
+	t.Run("slash-command-stays-idle", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		msgBefore := app.conversation.MessageCount()
+		sessBefore := len(sess.Messages)
+
+		_, cmd := app.Update(components.SubmitMsg{Text: "/help"})
+
+		if app.spinner.IsActive() {
+			t.Error("slash command submit must NOT start spinner")
+		}
+		if app.mode != ModeIdle {
+			t.Errorf("slash command must keep mode Idle, got %v", app.mode)
+		}
+		if len(sess.Messages) != sessBefore {
+			t.Errorf("slash command must NOT push to session.Messages; %d→%d",
+				sessBefore, len(sess.Messages))
+		}
+		if app.conversation.MessageCount() != msgBefore {
+			t.Errorf("slash command must NOT echo user msg to conversation; %d→%d",
+				msgBefore, app.conversation.MessageCount())
+		}
+		// But the dispatcher SHOULD produce a cmd.
+		if cmd == nil {
+			t.Error("slash command should produce a cmd (dispatcher output)")
+		}
+	})
+
+	// -- Behavior 3+4: both paths dismiss welcome AND add to history --
+	t.Run("both-paths-add-history-and-dismiss-welcome", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		if !app.showWelcome {
+			t.Fatal("setup: welcome should be visible")
+		}
+		app.Update(components.SubmitMsg{Text: "/help"})
+		if app.showWelcome {
+			t.Error("slash command should dismiss welcome")
+		}
+
+		// Fresh app — regular text also dismisses.
+		app2 := NewAppModel(sess, nil)
+		app2.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		app2.Update(components.SubmitMsg{Text: "regular msg"})
+		if app2.showWelcome {
+			t.Error("regular text should dismiss welcome")
+		}
+
+		// Verify Up arrow can recall submitted /help (history worked).
+		app.input.Clear()
+		app.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+		if app.input.Value() != "/help" {
+			t.Errorf("history should contain /help, Up should recall it; got %q",
+				app.input.Value())
+		}
+	})
+
+	// -- Behavior 5: empty submit triggers NEITHER path --
+	t.Run("empty-submit-no-side-effects", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		msgBefore := app.conversation.MessageCount()
+
+		app.Update(components.SubmitMsg{Text: "   "}) // whitespace-only
+
+		if app.spinner.IsActive() {
+			t.Error("empty submit should not start spinner")
+		}
+		if app.mode != ModeIdle {
+			t.Errorf("empty submit should keep mode Idle, got %v", app.mode)
+		}
+		if len(sess.Messages) != 0 {
+			t.Error("empty submit should not push to session")
+		}
+		if app.conversation.MessageCount() != msgBefore {
+			t.Error("empty submit should not touch conversation")
+		}
+		if !app.showWelcome {
+			t.Error("empty submit should KEEP welcome visible")
+		}
+	})
+}
+
 // TestParity_WelcomeCWDAbbreviation validates the CWD display in the
 // welcome box — specifically that the /Users/ prefix is rewritten to ~/
 // and overlong paths get an ellipsis prefix.

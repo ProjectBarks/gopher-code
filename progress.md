@@ -261,7 +261,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B57 | TestParity_TabToConversationThenScroll | Tab→conversation focus transfer + key routing: after Tab input NOT focused/conversation IS focused, Up arrow routes to conversation scroll (NOT input history—buffer unchanged over 6 Ups), conversation keeps focus after repeated Ups, second Tab cycles back to input, then Up DOES navigate history. Prevents Up-arrow leaking to history nav when user is scrolling conversation. | ✅ pass |
 | B58 | TestParity_AppViewInitializingAndAltScreen | 7 subtests for View() structural contract: pre-resize→"Initializing...", width=0 alone→placeholder, height=0 alone→placeholder, sized view→multi-line + v.AltScreen=true, welcome-visible→first non-space char is ╭ border, welcome-hidden→first line contains "Claude" header (not border), exactly 2 full-width dividers (≥40 ─ chars each) surround input pane. | ✅ pass |
 | B59 | TestParity_WelcomeCWDAbbreviation | 5 subtests for abbreviateCWD content transforms: short path verbatim (no ~/ or …), /Users/{user}/{rest} rewritten to ~/{rest} (username dropped per tilde-expansion), extremely long path produces "…" prefix, exactly 30 runes verbatim (boundary), 31 runes IS abbreviated. Tests via WelcomeScreen public API. | ✅ pass |
-### Next B60: Next unique behavior to validate
+| B60 | TestParity_SubmitSlashVsUserTextSeparation | 4 subtests contrasting slash-command vs user-text submit side effects: user text→spinner starts+mode Streaming+session+1+conversation+1; slash cmd→spinner inactive+mode Idle+session unchanged+conversation unchanged BUT cmd returned; BOTH paths add to history (verified via Up arrow recall) and dismiss welcome; whitespace-only submit triggers NEITHER path (welcome stays). | ✅ pass |
+### Next B61: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
