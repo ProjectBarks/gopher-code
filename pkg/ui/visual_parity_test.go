@@ -3460,6 +3460,131 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_InputKillToEndAndPaste validates two readline behaviors the
+// existing input tests don't cover:
+//
+//   1. Ctrl+K kills from cursor to END of line (complement of Ctrl+U).
+//      Cursor position is preserved. Covers start/middle/end cursor positions.
+//   2. Multi-character text insertion (paste path): when a KeyPressMsg carries
+//      a Text payload with >1 rune, ALL runes are inserted at the cursor and
+//      the cursor advances by the rune count.
+//
+// Unique behaviors (B6 tests Ctrl+A/E/U/W; B27 single-char insert+cursor):
+//  1. Ctrl+K at cursor=0 truncates buffer to empty string.
+//  2. Ctrl+K in middle cuts the suffix, keeps the prefix.
+//  3. Ctrl+K at cursor==len is a no-op (no index panic, no change).
+//  4. Ctrl+K does NOT move the cursor (distinct from Ctrl+U which resets to 0).
+//  5. Multi-rune paste inserts the entire run atomically at the cursor.
+//  6. Cursor advances by the RUNE count of the pasted text (not byte count),
+//      so multi-byte paste positions the cursor correctly after.
+//  7. Paste into the middle splits the buffer: before + pasted + after.
+//
+// Cross-ref: input.go:177-179 Ctrl+K branch; input.go:202-210 default paste path.
+// Cross-ref: Claude Code: readline/emacs keybindings standard behavior.
+func TestParity_InputKillToEndAndPaste(t *testing.T) {
+	// -- Behavior 3: Ctrl+K at end is a no-op --
+	t.Run("ctrl-k-at-end", func(t *testing.T) {
+		inp := components.NewInputPane()
+		inp.SetValue("hello") // cursor lands at 5 (len)
+		if inp.Value() != "hello" {
+			t.Fatalf("setup: want 'hello', got %q", inp.Value())
+		}
+		inp.Update(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+		if inp.Value() != "hello" {
+			t.Errorf("Ctrl+K at end must not change buffer, got %q", inp.Value())
+		}
+	})
+
+	// -- Behavior 1: Ctrl+K at cursor=0 clears buffer --
+	t.Run("ctrl-k-at-start", func(t *testing.T) {
+		inp := components.NewInputPane()
+		inp.SetValue("hello")
+		// Move cursor to 0 via Ctrl+A (validated in B6)
+		inp.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
+		inp.Update(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+		if inp.Value() != "" {
+			t.Errorf("Ctrl+K at cursor=0 must clear buffer, got %q", inp.Value())
+		}
+		if inp.HasText() {
+			t.Error("HasText() must be false after full kill")
+		}
+	})
+
+	// -- Behaviors 2 & 4: Ctrl+K at middle cuts suffix, cursor unchanged --
+	t.Run("ctrl-k-at-middle", func(t *testing.T) {
+		inp := components.NewInputPane()
+		inp.SetValue("hello") // cursor at 5
+		// Move cursor to 2 by pressing Left 3 times (validated in B27)
+		for i := 0; i < 3; i++ {
+			inp.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+		}
+		// Now cursor=2, buffer="hello"
+		inp.Update(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+		if inp.Value() != "he" {
+			t.Errorf("Ctrl+K at cursor=2 should leave 'he', got %q", inp.Value())
+		}
+		// Verify cursor stayed at 2 — after kill, cursor==len==2.
+		// Type a char: it should insert at position 2 (the end).
+		inp.Update(tea.KeyPressMsg{Code: 'X', Text: "X"})
+		if inp.Value() != "heX" {
+			t.Errorf("after Ctrl+K the cursor should be at 2 (end), typing X gives %q", inp.Value())
+		}
+	})
+
+	// -- Behaviors 5,6,7: multi-rune paste inserts atomically at cursor --
+	t.Run("paste-multi-rune-at-cursor", func(t *testing.T) {
+		inp := components.NewInputPane()
+		// Build "abdef" via single-char typing (verified in B27).
+		for _, c := range "abdef" {
+			inp.Update(tea.KeyPressMsg{Code: c, Text: string(c)})
+		}
+		if inp.Value() != "abdef" {
+			t.Fatalf("setup: want 'abdef', got %q", inp.Value())
+		}
+		// Move cursor to position 2 (between "ab" and "def").
+		for i := 0; i < 3; i++ {
+			inp.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+		}
+		// Paste "XY" — multi-char Text in a single event.
+		inp.Update(tea.KeyPressMsg{Code: 0, Text: "XY"})
+		if inp.Value() != "abXYdef" {
+			t.Errorf("paste should splice into middle: want 'abXYdef', got %q", inp.Value())
+		}
+		// Cursor should have advanced by 2 (len of "XY") → cursor=4.
+		// Type 'Z' to verify position: should land between "abXY" and "def".
+		inp.Update(tea.KeyPressMsg{Code: 'Z', Text: "Z"})
+		if inp.Value() != "abXYZdef" {
+			t.Errorf("after paste cursor should be at 4, typing Z gives %q", inp.Value())
+		}
+	})
+
+	// -- Behavior 6: Unicode paste advances cursor by RUNE count, not bytes --
+	t.Run("paste-unicode-rune-count", func(t *testing.T) {
+		inp := components.NewInputPane()
+		// Paste 2 multi-byte runes at cursor=0 (empty buffer).
+		// "日本" is 2 runes but 6 bytes in UTF-8. Cursor must advance to 2, not 6.
+		inp.Update(tea.KeyPressMsg{Code: 0, Text: "日本"})
+		if inp.Value() != "日本" {
+			t.Errorf("Unicode paste should yield '日本', got %q", inp.Value())
+		}
+		// Type 'a'. If cursor advanced by byte count (6), it would try to insert
+		// past len(runes)=2 and the default insertion would still append, but
+		// if it advanced by rune count (2==len(runes)), 'a' also appends.
+		// Instead, verify cursor advance semantics by moving Left 2 → cursor=0,
+		// then Right 1 → cursor=1, then insert: should split between the runes.
+		inp.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+		inp.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+		// cursor=0, buffer still "日本"
+		inp.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+		// cursor=1, between the two runes
+		inp.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+		if inp.Value() != "日a本" {
+			t.Errorf("rune-boundary cursor must split between runes: want '日a本', got %q",
+				inp.Value())
+		}
+	})
+}
+
 // TestParity_ThinkingBudgetEffortMapping validates the 4-threshold mapping
 // that handleSubmit uses to map session.Config.ThinkingBudget → spinner
 // effort level. The existing EffortLevelDisplay test only covers ONE budget
