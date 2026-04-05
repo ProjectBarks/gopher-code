@@ -3463,6 +3463,136 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_SlashInputFilterContract validates filterSuggestions — the
+// prefix + fuzzy-subsequence matching rule. This governs whether a user's
+// typed prefix matches a given command name.
+//
+// Unique behaviors (B38 tested /h→(/help,/thinking); this pins the full
+// filter contract):
+//  1. Empty prefix "" matches ALL commands (HasPrefix empty == true).
+//  2. Case-insensitive: "/MODEL" matches "/model" (both lowercased).
+//  3. HasPrefix-only path: "/mod" matches "/model" via simple prefix.
+//  4. Fuzzy subsequence path: "/ml" matches "/model" (subsequence of runes
+//     in order, skipping chars).
+//  5. A prefix WITHOUT leading "/" still matches via fuzzy: "help" matches
+//     "/help" because "/help" contains 'h','e','l','p' in order.
+//  6. Description is NEVER matched — prefix "cmd" does NOT match
+//     {Name:"/x", Description:"first cmd"} because filter ignores desc.
+//  7. No match → empty suggestions (zero-length slice, not nil-panic).
+//  8. Commands preserved in original declaration order (stable sort).
+//
+// Cross-ref: slash_input.go:362-371 filterSuggestions; utils.go FuzzyMatch.
+func TestParity_SlashInputFilterContract(t *testing.T) {
+	sci := components.NewSlashCommandInput(theme.Current())
+	sci.SetCommands([]components.SlashCommand{
+		{Name: "/model", Description: "switch AI model"},
+		{Name: "/help", Description: "show commands"},
+		{Name: "/clear", Description: "clear conversation"},
+		{Name: "/memory", Description: "edit memory"},
+	})
+
+	hasSugg := func(name string) bool {
+		for _, s := range sci.Suggestions() {
+			if s.Name == name {
+				return true
+			}
+		}
+		return false
+	}
+
+	// -- Behavior 1: empty prefix matches all --
+	t.Run("empty-prefix-matches-all", func(t *testing.T) {
+		sci.Activate("")
+		if len(sci.Suggestions()) != 4 {
+			t.Errorf("empty prefix should match all 4 commands, got %d",
+				len(sci.Suggestions()))
+		}
+		sci.Deactivate()
+	})
+
+	// -- Behavior 2: case-insensitive --
+	t.Run("case-insensitive", func(t *testing.T) {
+		sci.Activate("/MODEL")
+		if !hasSugg("/model") {
+			t.Errorf("/MODEL should match /model, got %+v", sci.Suggestions())
+		}
+		sci.Deactivate()
+	})
+
+	// -- Behavior 3: simple prefix path --
+	t.Run("simple-prefix", func(t *testing.T) {
+		sci.Activate("/mod")
+		if !hasSugg("/model") {
+			t.Errorf("/mod should match /model, got %+v", sci.Suggestions())
+		}
+		sci.Deactivate()
+	})
+
+	// -- Behavior 4: fuzzy subsequence path --
+	t.Run("fuzzy-subsequence", func(t *testing.T) {
+		sci.Activate("/ml")
+		if !hasSugg("/model") {
+			t.Errorf("/ml should fuzzy-match /model, got %+v", sci.Suggestions())
+		}
+		sci.Deactivate()
+	})
+
+	// -- Behavior 5: missing leading slash still fuzzy-matches --
+	t.Run("no-slash-prefix-matches-via-fuzzy", func(t *testing.T) {
+		sci.Activate("help")
+		if !hasSugg("/help") {
+			t.Errorf("'help' (no /) should fuzzy-match '/help', got %+v",
+				sci.Suggestions())
+		}
+		sci.Deactivate()
+	})
+
+	// -- Behavior 6: description is NEVER matched --
+	t.Run("description-not-matched", func(t *testing.T) {
+		// "conv" is in /clear's description ("clear conversation") but NOT
+		// in any command name. It's also NOT a subsequence of /clear
+		// (c-l-e-a-r doesn't contain o-n-v in order).
+		sci.Activate("conv")
+		if hasSugg("/clear") {
+			t.Errorf("description 'clear conversation' should NOT cause /clear to match 'conv', got %+v",
+				sci.Suggestions())
+		}
+		sci.Deactivate()
+	})
+
+	// -- Behavior 7: no-match → empty suggestions slice --
+	t.Run("no-match-empty-slice", func(t *testing.T) {
+		// Use a prefix that's NOT a subsequence of any command name.
+		// "/xyzq" — no command name contains x,y,z,q in order.
+		sci.Activate("/xyzq")
+		if len(sci.Suggestions()) != 0 {
+			t.Errorf("no-match prefix should give empty suggestions, got %+v",
+				sci.Suggestions())
+		}
+		// The Suggestions() return must not be nil (slice contract).
+		if sci.Suggestions() == nil {
+			t.Error("empty suggestions should be non-nil empty slice")
+		}
+		sci.Deactivate()
+	})
+
+	// -- Behavior 8: declaration order preserved in suggestions --
+	t.Run("declaration-order-preserved", func(t *testing.T) {
+		sci.Activate("") // all 4 commands
+		got := sci.Suggestions()
+		if len(got) != 4 {
+			t.Fatalf("expected 4 suggestions, got %d", len(got))
+		}
+		expected := []string{"/model", "/help", "/clear", "/memory"}
+		for i, want := range expected {
+			if got[i].Name != want {
+				t.Errorf("suggestions[%d]: want %q, got %q", i, want, got[i].Name)
+			}
+		}
+		sci.Deactivate()
+	})
+}
+
 // TestParity_SlashInputViewRendering validates the SlashCommandInput.View()
 // output structure: number of lines, per-suggestion format, and visual
 // selection highlighting.

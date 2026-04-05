@@ -264,7 +264,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B60 | TestParity_SubmitSlashVsUserTextSeparation | 4 subtests contrasting slash-command vs user-text submit side effects: user text→spinner starts+mode Streaming+session+1+conversation+1; slash cmd→spinner inactive+mode Idle+session unchanged+conversation unchanged BUT cmd returned; BOTH paths add to history (verified via Up arrow recall) and dismiss welcome; whitespace-only submit triggers NEITHER path (welcome stays). | ✅ pass |
 | B61 | TestParity_UserMessageMultiBlockPrefixing | 4 subtests distinguishing user vs assistant multi-block prefix semantics: two user text blocks→TWO ❯ prefixes (per-block, unlike assistant's single-latch), text+tool_result→❯ AND ⎿ with correct ordering, ContentToolUse block silently dropped from user msg (only text+tool_result handled), only-dropped-blocks message renders empty (no orphan ❯). | ✅ pass |
 | B62 | TestParity_SlashInputViewRendering | SlashCommandInput.View() output structure: inactive→empty, active+0 suggestions→empty, 3 suggestions→exactly 3 lines with name+description for each, selected line has longer raw string than unselected (extra selection-background ANSI wrapper), Deactivate round-trips back to empty view. | ✅ pass |
-### Next B63: Next unique behavior to validate
+| B63 | TestParity_SlashInputFilterContract | 8 subtests for filterSuggestions rule: empty prefix→all match, case-insensitive, simple prefix path, fuzzy subsequence path, no-slash prefix matches via fuzzy, description NEVER matched (only Name), no-match→empty non-nil slice, declaration order preserved. Pins the matcher contract so description-search can't silently creep in. | ✅ pass |
+### Next B64: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
