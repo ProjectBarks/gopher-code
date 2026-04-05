@@ -117,8 +117,9 @@ func (f *FileEditTool) Execute(_ context.Context, tc *ToolContext, input json.Ra
 			if err := os.WriteFile(path, []byte(in.NewString), 0644); err != nil {
 				return ErrorOutput(fmt.Sprintf("failed to write file: %s", err)), nil
 			}
-			diff := BuildUnifiedDiff("", in.NewString, path)
-			return SuccessOutput(fmt.Sprintf("Created %s\n%s", path, diff)), nil
+			out := SuccessOutput(fmt.Sprintf("Created %s", path))
+			out.Display = DiffDisplay{FilePath: path, Hunks: ComputeDiffHunks("", in.NewString)}
+			return out, nil
 		}
 		// Error code 3: file exists and has content
 		if strings.TrimSpace(content) != "" {
@@ -128,8 +129,9 @@ func (f *FileEditTool) Execute(_ context.Context, tc *ToolContext, input json.Ra
 		if err := os.WriteFile(path, []byte(in.NewString), 0644); err != nil {
 			return ErrorOutput(fmt.Sprintf("failed to write file: %s", err)), nil
 		}
-		diff := BuildUnifiedDiff(content, in.NewString, path)
-		return SuccessOutput(fmt.Sprintf("Edited %s\n%s", path, diff)), nil
+		out := SuccessOutput(fmt.Sprintf("Edited %s", path))
+		out.Display = DiffDisplay{FilePath: path, Hunks: ComputeDiffHunks(content, in.NewString)}
+		return out, nil
 	}
 
 	// Error code 5: .ipynb file
@@ -205,8 +207,9 @@ func (f *FileEditTool) Execute(_ context.Context, tc *ToolContext, input json.Ra
 		tc.ReadFileState.Record(path, newContent, false)
 	}
 
-	diff := BuildUnifiedDiff(content, newContent, path)
-	return SuccessOutput(fmt.Sprintf("Edited %s\n%s", path, diff)), nil
+	out := SuccessOutput(fmt.Sprintf("Edited %s", path))
+	out.Display = DiffDisplay{FilePath: path, Hunks: ComputeDiffHunks(content, newContent)}
+	return out, nil
 }
 
 // normalizeQuotes converts curly quotes to straight quotes.

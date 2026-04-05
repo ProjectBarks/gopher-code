@@ -249,7 +249,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B45 | TestParity_SessionToRequestMessagesSerialization | Session→API contract: empty session→non-nil empty slice, Role verbatim string, ContentText→{text}, ContentToolUse→{id,name,input}, ContentToolResult IsError=false→NIL *bool (omitempty JSON), IsError=true→non-nil *bool→true, ContentThinking silently dropped, multi-block order preserved, multi-message order preserved. | ✅ pass |
 | B46 | TestParity_AppSlashAutocompleteIntegration | App-level wiring for slash autocomplete: "/" activates, "/m" refilters, space deactivates, backspace re-activates, Up arrow is SWALLOWED by slashInput (doesn't reach input history nav), Enter emits SlashCommandSelectedMsg→feeding it back sets input to "name ", Escape deactivates autocomplete without pushing modal or changing mode. | ✅ pass |
 | B47 | TestParity_HandleToolResultDiffPath | 7 subtests for handleToolResult's diff-detection branch: empty streaming→+1 msg, non-empty streaming→+2 msgs (assistant+result), non-diff content takes normal ✓ path, IsError=true bypasses diff path, requires BOTH "--- a/" AND "@@" markers (either alone→normal path), added message carries diff content verbatim. | ✅ pass |
-### Next B48: Next unique behavior to validate
+| B48 | TestParity_LoadSlashCommandsDiscovery | 6 subtests for LoadSlashCommands(): empty cwd→builtins only, .claude/commands/*.md discovered with Source="project" and first-non-FM-non-heading line as Description, 80-char desc truncated to 67+…, SKILL.md with folded-scalar "description: >" joins continuation lines with spaces, name collision with builtin → discovered dropped (builtin wins), discovered tail sorted alphabetically with builtins preserving declaration order. Isolates via $HOME=tempdir. | ✅ pass |
+### Next B49: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)

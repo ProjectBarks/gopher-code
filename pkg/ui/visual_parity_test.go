@@ -3,6 +3,7 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -3459,6 +3460,216 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestParity_LoadSlashCommandsDiscovery validates LoadSlashCommands, which
+// scans user/project .claude/commands and .claude/skills directories and
+// merges them with the built-ins. This is the command-discovery contract
+// that mirrors Claude Code's file-backed custom command loading.
+//
+// Unique behaviors (no existing test for LoadSlashCommands or discovery):
+//  1. With no discovery dirs, result == DefaultSlashCommands() (built-ins only).
+//  2. A .claude/commands/FOO.md file in cwd yields a new command "/FOO"
+//     with Source="project".
+//  3. The first non-frontmatter, non-empty, non-heading line of the .md
+//     file becomes Description, truncated at 70 chars with "…".
+//  4. A .claude/skills/<name>/SKILL.md with YAML `description:` yields
+//     a "/<name>" command with Source="skill".
+//  5. A skill with folded-scalar `description: >` collects continuation
+//     lines until a non-indented line, joined with spaces.
+//  6. A discovered command whose Name collides with a built-in is DROPPED
+//     (seen-dedup favors the built-in).
+//  7. Built-ins keep their declaration order; discovered entries are sorted
+//     alphabetically at the tail.
+//
+// Cross-ref: slash_input.go:72-113 LoadSlashCommands; :168-243 readers.
+// Cross-ref: Claude Code src/commands/ — user/project custom commands.
+func TestParity_LoadSlashCommandsDiscovery(t *testing.T) {
+	// Isolate from the real $HOME so we don't pick up the user's actual
+	// ~/.claude/commands or ~/.claude/skills.
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+
+	// Helper to write a file, creating parent dirs.
+	writeFile := func(path, content string) {
+		t.Helper()
+		dir := path[:strings.LastIndex(path, "/")]
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// -- Behavior 1: empty project dir → just built-ins --
+	t.Run("builtins-only-when-empty", func(t *testing.T) {
+		emptyCwd := t.TempDir()
+		got := components.LoadSlashCommands(emptyCwd)
+		want := components.DefaultSlashCommands()
+		if len(got) != len(want) {
+			t.Errorf("empty discovery should match DefaultSlashCommands: got %d, want %d",
+				len(got), len(want))
+		}
+	})
+
+	// -- Behaviors 2+3: .claude/commands/FOO.md adds /FOO with description --
+	t.Run("project-command-md", func(t *testing.T) {
+		cwd := t.TempDir()
+		writeFile(cwd+"/.claude/commands/myproj.md",
+			"---\n"+
+				"tags: [a,b]\n"+
+				"---\n"+
+				"# Heading should be skipped\n"+
+				"\n"+
+				"My project-specific command summary.\n"+
+				"Second paragraph.")
+		got := components.LoadSlashCommands(cwd)
+		var found *components.SlashCommand
+		for i := range got {
+			if got[i].Name == "/myproj" {
+				found = &got[i]
+				break
+			}
+		}
+		if found == nil {
+			t.Fatalf("expected /myproj to be discovered, got %d commands", len(got))
+		}
+		if found.Source != "project" {
+			t.Errorf("project command Source must be 'project', got %q", found.Source)
+		}
+		if found.Description != "My project-specific command summary." {
+			t.Errorf("Description: want first non-FM non-heading line, got %q",
+				found.Description)
+		}
+	})
+
+	// -- Behavior 3 (cont): >70 char description truncated with "…" --
+	t.Run("description-truncation", func(t *testing.T) {
+		cwd := t.TempDir()
+		longDesc := strings.Repeat("x", 80)
+		writeFile(cwd+"/.claude/commands/longdesc.md", longDesc)
+		got := components.LoadSlashCommands(cwd)
+		var found *components.SlashCommand
+		for i := range got {
+			if got[i].Name == "/longdesc" {
+				found = &got[i]
+				break
+			}
+		}
+		if found == nil {
+			t.Fatal("expected /longdesc to be discovered")
+		}
+		if !strings.HasSuffix(found.Description, "…") {
+			t.Errorf("80-char desc should be truncated with ellipsis, got %q", found.Description)
+		}
+		if len([]rune(found.Description)) != 68 { // 67 chars + "…"
+			t.Errorf("truncated desc rune length want 68 (67+…), got %d: %q",
+				len([]rune(found.Description)), found.Description)
+		}
+	})
+
+	// -- Behaviors 4+5: SKILL.md with folded scalar description --
+	t.Run("skill-folded-scalar", func(t *testing.T) {
+		cwd := t.TempDir()
+		writeFile(cwd+"/.claude/skills/myskill/SKILL.md",
+			"---\n"+
+				"name: myskill\n"+
+				"description: >\n"+
+				"  This is a multi-line\n"+
+				"  folded description.\n"+
+				"author: me\n"+
+				"---\n"+
+				"# Body content here")
+		got := components.LoadSlashCommands(cwd)
+		var found *components.SlashCommand
+		for i := range got {
+			if got[i].Name == "/myskill" {
+				found = &got[i]
+				break
+			}
+		}
+		if found == nil {
+			t.Fatalf("expected /myskill to be discovered")
+		}
+		if found.Source != "skill" {
+			t.Errorf("skill Source must be 'skill', got %q", found.Source)
+		}
+		if found.Description != "This is a multi-line folded description." {
+			t.Errorf("folded scalar description: want joined with spaces, got %q",
+				found.Description)
+		}
+	})
+
+	// -- Behavior 6: discovered command colliding with built-in is DROPPED --
+	t.Run("builtin-wins-on-collision", func(t *testing.T) {
+		cwd := t.TempDir()
+		// Write a file named "help.md" which would collide with built-in /help.
+		writeFile(cwd+"/.claude/commands/help.md", "Hijacked description")
+		got := components.LoadSlashCommands(cwd)
+		// Find the /help entry; it must still have Source=builtin.
+		var helpCmd *components.SlashCommand
+		for i := range got {
+			if got[i].Name == "/help" {
+				helpCmd = &got[i]
+				break
+			}
+		}
+		if helpCmd == nil {
+			t.Fatal("/help built-in should always be present")
+		}
+		if helpCmd.Source != "builtin" {
+			t.Errorf("built-in /help must survive collision, got Source=%q", helpCmd.Source)
+		}
+		if helpCmd.Description == "Hijacked description" {
+			t.Error("built-in /help description must NOT be overwritten by discovered file")
+		}
+		// Count /help entries: must be exactly 1 (dedup worked).
+		count := 0
+		for _, c := range got {
+			if c.Name == "/help" {
+				count++
+			}
+		}
+		if count != 1 {
+			t.Errorf("/help should appear exactly once after dedup, got %d", count)
+		}
+	})
+
+	// -- Behavior 7: discovered tail sorted alphabetically, built-ins first --
+	t.Run("tail-sorted-alphabetically", func(t *testing.T) {
+		cwd := t.TempDir()
+		writeFile(cwd+"/.claude/commands/zebra.md", "z command")
+		writeFile(cwd+"/.claude/commands/apple.md", "a command")
+		writeFile(cwd+"/.claude/commands/mango.md", "m command")
+		got := components.LoadSlashCommands(cwd)
+		builtinCount := len(components.DefaultSlashCommands())
+		if len(got) < builtinCount+3 {
+			t.Fatalf("expected at least %d commands, got %d", builtinCount+3, len(got))
+		}
+		// Discovered entries are at indices [builtinCount..]
+		tail := got[builtinCount:]
+		var discoveredNames []string
+		for _, c := range tail {
+			if c.Name == "/zebra" || c.Name == "/apple" || c.Name == "/mango" {
+				discoveredNames = append(discoveredNames, c.Name)
+			}
+		}
+		if len(discoveredNames) != 3 {
+			t.Fatalf("expected 3 discovered commands in tail, got %d: %v",
+				len(discoveredNames), discoveredNames)
+		}
+		// Verify alphabetical ordering.
+		if !(discoveredNames[0] == "/apple" && discoveredNames[1] == "/mango" &&
+			discoveredNames[2] == "/zebra") {
+			t.Errorf("tail should be alphabetically sorted, got %v", discoveredNames)
+		}
+		// Built-ins (first N) must retain their declaration order — first one
+		// in DefaultSlashCommands is /help.
+		if got[0].Name != "/help" {
+			t.Errorf("first built-in must remain /help, got %q", got[0].Name)
+		}
+	})
 }
 
 // TestParity_HandleToolResultDiffPath validates the special case in
