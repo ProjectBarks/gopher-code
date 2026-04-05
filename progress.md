@@ -255,7 +255,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B51 | TestParity_QueryEventDisplayThreading | Display field threaded through full chain: QueryEvent→handleQueryEvent→ToolResultMsg→handleToolResult→conversation. 3 subtests: nil Display→normal path (no +1 msg), Display set→diff path (+1 msg) and view contains hunk content/headers/summary badge with specific OldStart=42/hunk body lines preserved, IsError=true short-circuits Display path (normal ✗ indicator). | ✅ pass |
 | B52 | TestParity_CompactSessionContract | 6 subtests for query.CompactSession destructive reduction: empty→noop, 4-msg→unchanged (<=4 threshold), 5-msg→[m0,m3,m4], 10-msg→[m0,m8,m9], boundary-5 triggers compact, boundary-4 stays, middle msgs verified absent after compaction, per-message text preserved by content. | ✅ pass |
 | B53 | TestParity_StreamingSpinnerLeakSeparation | Dual-buffer separation contract: canonical a.streamingText has ONLY delta text (NOT spinner verb), conversation.streamingText view has BOTH spinner verb + delta, TurnComplete finalizes msg with delta-only text (no "(thinking …)" suffix leaks into history), both buffers reset after turn. Prevents spinner verb from polluting saved conversation. | ✅ pass |
-### Next B54: Next unique behavior to validate
+| B54 | TestParity_AssistantMultiBlockFirstTextPrefix | renderAssistantMessage "first text block gets ⏺" latch: single text→1 ⏺, two texts→exactly 1 (first only, in correct order alpha→beta), empty text block doesn't consume latch (next non-empty still gets ⏺), no text blocks→0 ⏺, empty-rendering blocks dropped (no triple-newline between survivors). | ✅ pass |
+### Next B55: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
