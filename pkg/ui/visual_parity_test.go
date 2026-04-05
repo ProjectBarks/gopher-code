@@ -3461,6 +3461,128 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_AppSlashAutocompleteIntegration validates the integration between
+// input typing, refreshSlashAutocomplete, and the slashInput component inside
+// handleKey. This is the app-level flow that makes `/` open an autocomplete.
+//
+// Unique behaviors (B38 tests slashInput in isolation; this tests the APP wiring):
+//  1. Typing "/" routes to input pane AND activates slash autocomplete.
+//  2. Typing more chars after "/" keeps autocomplete active and refilters.
+//  3. Typing " " (space) after "/foo" deactivates autocomplete — the
+//     "no space allowed" rule in refreshSlashAutocomplete().
+//  4. Pressing Backspace back to "/" re-activates (toggle works).
+//  5. Up/Down arrows are SWALLOWED by slashInput when active — they must
+//     NOT reach the input pane's history-nav handler.
+//  6. Enter when autocomplete active → fires SlashCommandSelectedMsg cmd
+//     AND the resulting SlashCommandSelectedMsg (fed back) populates input
+//     with "name " (trailing space for args).
+//  7. Escape while autocomplete active → deactivates autocomplete but does
+//     NOT push a modal or cancel a query.
+//
+// Cross-ref: app.go:195-209 SlashCommandSelectedMsg handler; app.go:422-451
+// handleKey routing; refreshSlashAutocomplete().
+// Cross-ref: Claude Code REPL.tsx → slash command prefix → picker.
+func TestParity_AppSlashAutocompleteIntegration(t *testing.T) {
+	config := session.DefaultConfig()
+	sess := session.New(config, "/tmp")
+	app := NewAppModel(sess, nil)
+	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	if app.slashInput == nil {
+		t.Skip("slashInput not configured on this build")
+	}
+	// Dismiss welcome so input typing targets the input pane.
+	app.showWelcome = false
+
+	// -- Behavior 1: typing "/" activates autocomplete --
+	app.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	if !app.slashInput.IsActive() {
+		t.Fatal("typing '/' should activate slash autocomplete")
+	}
+	if app.input.Value() != "/" {
+		t.Errorf("input should contain '/', got %q", app.input.Value())
+	}
+
+	// -- Behavior 2: typing a second char keeps autocomplete active --
+	app.Update(tea.KeyPressMsg{Code: 'm', Text: "m"})
+	if !app.slashInput.IsActive() {
+		t.Error("typing '/m' should keep autocomplete active")
+	}
+	if app.input.Value() != "/m" {
+		t.Errorf("input should be '/m', got %q", app.input.Value())
+	}
+
+	// -- Behavior 3: adding a space deactivates autocomplete --
+	app.Update(tea.KeyPressMsg{Code: ' ', Text: " "})
+	if app.slashInput.IsActive() {
+		t.Error("'/m ' (with space) should deactivate autocomplete")
+	}
+	if app.input.Value() != "/m " {
+		t.Errorf("input should be '/m ', got %q", app.input.Value())
+	}
+
+	// -- Behavior 4: backspace back to "/m" re-activates --
+	app.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	if app.input.Value() != "/m" {
+		t.Errorf("after backspace input should be '/m', got %q", app.input.Value())
+	}
+	if !app.slashInput.IsActive() {
+		t.Error("backspacing away the space should re-activate autocomplete")
+	}
+
+	// -- Behavior 5: Up arrow routed to slashInput, NOT to history nav --
+	// Setup: history contains a value. If Up reached input pane, it would
+	// navigate history and change the buffer.
+	app.input.AddToHistory("previous")
+	inputBefore := app.input.Value()
+	app.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if app.input.Value() != inputBefore {
+		t.Errorf("Up arrow MUST be swallowed by slashInput, not reach history; "+
+			"input changed from %q to %q", inputBefore, app.input.Value())
+	}
+	// Slash autocomplete should still be active (Up doesn't deactivate).
+	if !app.slashInput.IsActive() {
+		t.Error("Up arrow should not deactivate slash autocomplete")
+	}
+
+	// -- Behavior 6: Enter while active emits SlashCommandSelectedMsg,
+	// and feeding that message back populates input with "name " --
+	_, cmd := app.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter with active autocomplete should produce a cmd")
+	}
+	msg := cmd()
+	selMsg, ok := msg.(components.SlashCommandSelectedMsg)
+	if !ok {
+		t.Fatalf("Enter should produce SlashCommandSelectedMsg, got %T", msg)
+	}
+	// Feed it back into the app.
+	app.Update(selMsg)
+	wantValue := selMsg.Command.Name + " "
+	if app.input.Value() != wantValue {
+		t.Errorf("after SlashCommandSelectedMsg, input should be %q, got %q",
+			wantValue, app.input.Value())
+	}
+
+	// -- Behavior 7: Escape while active deactivates (not via modal/cancel) --
+	// Retype "/" to open again.
+	app.input.Clear()
+	app.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	if !app.slashInput.IsActive() {
+		t.Fatal("typing '/' should re-activate after clear")
+	}
+	app.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if app.slashInput.IsActive() {
+		t.Error("Escape with active autocomplete should deactivate it")
+	}
+	if app.focus.ModalActive() {
+		t.Error("Escape→deactivate must NOT push a modal")
+	}
+	if app.mode != ModeIdle {
+		t.Errorf("Escape→deactivate must not change mode, got %v", app.mode)
+	}
+}
+
 // TestParity_SessionToRequestMessagesSerialization validates the session →
 // API conversion in SessionState.ToRequestMessages(). This function is the
 // contract that builds the JSON sent to the Anthropic API, so serialization

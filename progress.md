@@ -247,7 +247,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B43 | TestParity_ConversationRerenderOnResize | Long message wraps to N lines at width=80, then SetSize(30,100) forces bubble cache rebuild so same message occupies MORE lines; re-grow to 80 restores identical line count (cache round-trips). Content tokens survive resize. Two identical resizes produce deterministic line count (rerenderAll() is pure). | ✅ pass |
 | B44 | TestParity_ToolUseBlockInputThreshold | renderToolUseBlock's strict-<200 threshold: empty input=header only (no newline), short input shown verbatim, exactly 199 bytes SHOWN, exactly 200 bytes HIDDEN (boundary), >200 bytes HIDDEN, tool name always in header, special chars render verbatim. | ✅ pass |
 | B45 | TestParity_SessionToRequestMessagesSerialization | Session→API contract: empty session→non-nil empty slice, Role verbatim string, ContentText→{text}, ContentToolUse→{id,name,input}, ContentToolResult IsError=false→NIL *bool (omitempty JSON), IsError=true→non-nil *bool→true, ContentThinking silently dropped, multi-block order preserved, multi-message order preserved. | ✅ pass |
-### Next B46: Next unique behavior to validate
+| B46 | TestParity_AppSlashAutocompleteIntegration | App-level wiring for slash autocomplete: "/" activates, "/m" refilters, space deactivates, backspace re-activates, Up arrow is SWALLOWED by slashInput (doesn't reach input history nav), Enter emits SlashCommandSelectedMsg→feeding it back sets input to "name ", Escape deactivates autocomplete without pushing modal or changing mode. | ✅ pass |
+### Next B47: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
