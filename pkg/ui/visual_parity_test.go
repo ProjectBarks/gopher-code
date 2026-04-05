@@ -3463,6 +3463,150 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_ComputeDiffHunksContract validates ComputeDiffHunks, the pure
+// function that tools (Edit/Write) use to build structured DiffDisplay
+// payloads. A bug here silently corrupts every diff the UI renders.
+//
+// Unique behaviors (no existing test for ComputeDiffHunks or BuildUnifiedDiff):
+//  1. Identical contents → nil (no hunks, no allocation).
+//  2. Single-line change in the middle of a file → exactly one hunk, with
+//     up to 3 lines of leading context and 3 lines of trailing context.
+//  3. Hunk line numbers are 1-based (first line of file is OldStart=1).
+//  4. OldLines/NewLines count total hunk span (context + changes).
+//  5. Lines prefix discipline: context=" X", removed="-X", added="+X".
+//  6. Ordering within a hunk: leading context, then ALL removals, then ALL
+//     additions, then trailing context.
+//  7. Change at start of file: leading context clamps at 0 lines (no
+//     negative indexing, no panic).
+//  8. Change at end of file: trailing context clamps at file end.
+//  9. Pure insertion (empty old → new content): single hunk with only
+//     "+" lines and no "-" lines.
+// 10. BuildUnifiedDiff wraps with "--- a/PATH\n+++ b/PATH\n@@ -… @@" header.
+//
+// Cross-ref: tools/diff.go:41-104 ComputeDiffHunks; :109-126 BuildUnifiedDiff.
+// Cross-ref: Claude Code src/components/StructuredDiffList.tsx — payload shape.
+func TestParity_ComputeDiffHunksContract(t *testing.T) {
+	// -- Behavior 1: identical → nil --
+	t.Run("identical-returns-nil", func(t *testing.T) {
+		same := "line1\nline2\nline3"
+		got := tools.ComputeDiffHunks(same, same)
+		if got != nil {
+			t.Errorf("identical contents should return nil, got %+v", got)
+		}
+		if u := tools.BuildUnifiedDiff(same, same, "f"); u != "" {
+			t.Errorf("identical BuildUnifiedDiff should be empty, got %q", u)
+		}
+	})
+
+	// -- Behaviors 2+3+4+5+6: middle change has 3+3 context; ordering --
+	t.Run("middle-change-with-context", func(t *testing.T) {
+		old := strings.Join([]string{"a", "b", "c", "d", "OLD", "e", "f", "g", "h"}, "\n")
+		newS := strings.Join([]string{"a", "b", "c", "d", "NEW", "e", "f", "g", "h"}, "\n")
+		hunks := tools.ComputeDiffHunks(old, newS)
+		if len(hunks) != 1 {
+			t.Fatalf("expected 1 hunk, got %d", len(hunks))
+		}
+		h := hunks[0]
+		wantLines := []string{" b", " c", " d", "-OLD", "+NEW", " e", " f", " g"}
+		if len(h.Lines) != len(wantLines) {
+			t.Fatalf("expected %d lines, got %d: %v", len(wantLines), len(h.Lines), h.Lines)
+		}
+		for i, w := range wantLines {
+			if h.Lines[i] != w {
+				t.Errorf("Lines[%d]: want %q, got %q", i, w, h.Lines[i])
+			}
+		}
+		if h.OldStart != 2 {
+			t.Errorf("OldStart: want 2 (1-based, after 3 lines of ctx), got %d", h.OldStart)
+		}
+		if h.NewStart != 2 {
+			t.Errorf("NewStart: want 2, got %d", h.NewStart)
+		}
+		if h.OldLines != 7 {
+			t.Errorf("OldLines: want 7 (3 ctx + 1 removed + 3 ctx), got %d", h.OldLines)
+		}
+		if h.NewLines != 7 {
+			t.Errorf("NewLines: want 7, got %d", h.NewLines)
+		}
+	})
+
+	// -- Behavior 7: change at start → leading context clamps to 0 --
+	t.Run("change-at-start-clamps", func(t *testing.T) {
+		old := strings.Join([]string{"OLD", "a", "b", "c", "d"}, "\n")
+		newS := strings.Join([]string{"NEW", "a", "b", "c", "d"}, "\n")
+		hunks := tools.ComputeDiffHunks(old, newS)
+		if len(hunks) != 1 {
+			t.Fatalf("expected 1 hunk, got %d", len(hunks))
+		}
+		h := hunks[0]
+		if h.OldStart != 1 {
+			t.Errorf("OldStart at beginning: want 1, got %d", h.OldStart)
+		}
+		if h.Lines[0] != "-OLD" {
+			t.Errorf("first line should be -OLD (no leading ctx), got %q", h.Lines[0])
+		}
+	})
+
+	// -- Behavior 8: change at end → trailing context clamps --
+	t.Run("change-at-end-clamps", func(t *testing.T) {
+		old := strings.Join([]string{"a", "b", "c", "d", "OLD"}, "\n")
+		newS := strings.Join([]string{"a", "b", "c", "d", "NEW"}, "\n")
+		hunks := tools.ComputeDiffHunks(old, newS)
+		if len(hunks) != 1 {
+			t.Fatalf("expected 1 hunk, got %d", len(hunks))
+		}
+		h := hunks[0]
+		last := h.Lines[len(h.Lines)-1]
+		if last != "+NEW" {
+			t.Errorf("last line should be +NEW (no trailing ctx), got %q", last)
+		}
+	})
+
+	// -- Behavior 9: pure insertion (append line to existing file) has NO
+	// "-" lines, only leading context + "+" additions --
+	t.Run("pure-insertion-appends-to-existing", func(t *testing.T) {
+		hunks := tools.ComputeDiffHunks("existing", "existing\nnew-line")
+		if len(hunks) != 1 {
+			t.Fatalf("expected 1 hunk, got %d", len(hunks))
+		}
+		removedCount := 0
+		addedCount := 0
+		for _, l := range hunks[0].Lines {
+			switch l[0] {
+			case '-':
+				removedCount++
+			case '+':
+				addedCount++
+			}
+		}
+		if removedCount != 0 {
+			t.Errorf("pure insertion should have 0 '-' lines, got %d: %v",
+				removedCount, hunks[0].Lines)
+		}
+		if addedCount != 1 {
+			t.Errorf("pure insertion should have 1 '+' line, got %d: %v",
+				addedCount, hunks[0].Lines)
+		}
+	})
+
+	// -- Behavior 10: BuildUnifiedDiff format --
+	t.Run("build-unified-diff-header", func(t *testing.T) {
+		u := tools.BuildUnifiedDiff("a\nb\nOLD\nc\nd", "a\nb\nNEW\nc\nd", "foo.go")
+		if !strings.Contains(u, "--- a/foo.go") {
+			t.Errorf("missing '--- a/foo.go' in:\n%s", u)
+		}
+		if !strings.Contains(u, "+++ b/foo.go") {
+			t.Errorf("missing '+++ b/foo.go' in:\n%s", u)
+		}
+		if !strings.Contains(u, "@@ -") {
+			t.Errorf("missing hunk header in:\n%s", u)
+		}
+		if !strings.Contains(u, "-OLD") || !strings.Contains(u, "+NEW") {
+			t.Errorf("missing -OLD/+NEW in:\n%s", u)
+		}
+	})
+}
+
 // TestParity_LoadSlashCommandsDiscovery validates LoadSlashCommands, which
 // scans user/project .claude/commands and .claude/skills directories and
 // merges them with the built-ins. This is the command-discovery contract
