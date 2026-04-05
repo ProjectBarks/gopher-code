@@ -3460,6 +3460,109 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_ThinkingBudgetEffortMapping validates the 4-threshold mapping
+// that handleSubmit uses to map session.Config.ThinkingBudget → spinner
+// effort level. The existing EffortLevelDisplay test only covers ONE budget
+// value (20000 → high); this test pins all four thresholds including
+// boundaries, and the disabled-case.
+//
+// Unique behaviors (boundary math not previously tested):
+//  1. budget >= 30000 → "max"  → ◉ glyph in spinner
+//  2. 15000 ≤ budget < 30000 → "high" → ●
+//  3. 5000 ≤ budget < 15000 → "medium" → ◐
+//  4. budget < 5000 → "low" → ○
+//  5. ThinkingEnabled=false → NO effort glyph (suffix "(thinking)" only)
+//  6. Exact threshold values land on the upper bucket (>=30000, >=15000, >=5000)
+//  7. Values just below threshold drop into the lower bucket
+//
+// Cross-ref: app.go:436-448 handleSubmit thinking budget branches
+// Cross-ref: spinner_verbs.go:94-97 EffortLow/Medium/High/Max glyph constants
+// Cross-ref: Claude Code src/screens/REPL.tsx → effortFromBudget.
+func TestParity_ThinkingBudgetEffortMapping(t *testing.T) {
+	type boundary struct {
+		budget    int
+		wantGlyph string
+		label     string
+	}
+	cases := []boundary{
+		// max threshold (>=30000)
+		{budget: 30000, wantGlyph: "◉", label: "exact-max"},
+		{budget: 100000, wantGlyph: "◉", label: "well-above-max"},
+		// high threshold (>=15000, <30000)
+		{budget: 29999, wantGlyph: "●", label: "just-below-max"},
+		{budget: 15000, wantGlyph: "●", label: "exact-high"},
+		// medium threshold (>=5000, <15000)
+		{budget: 14999, wantGlyph: "◐", label: "just-below-high"},
+		{budget: 5000, wantGlyph: "◐", label: "exact-medium"},
+		// low (default, <5000)
+		{budget: 4999, wantGlyph: "○", label: "just-below-medium"},
+		{budget: 0, wantGlyph: "○", label: "zero-budget"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			config := session.DefaultConfig()
+			config.ThinkingEnabled = true
+			config.ThinkingBudget = tc.budget
+			sess := session.New(config, "/tmp")
+			app := NewAppModel(sess, nil)
+			app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+			// User submits → handleSubmit applies budget→effort mapping
+			app.Update(components.SubmitMsg{Text: "think about it"})
+
+			// Verify spinner is active AND shows the expected effort glyph.
+			if !app.spinner.IsActive() {
+				t.Fatalf("spinner must be active after SubmitMsg")
+			}
+			view := strip(app.spinner.View())
+			// Expected format: "... (thinking {glyph})"
+			wantSuffix := "(thinking " + tc.wantGlyph + ")"
+			if !strings.Contains(view, wantSuffix) {
+				t.Errorf("budget=%d: spinner view must contain suffix %q, got:\n%s",
+					tc.budget, wantSuffix, view)
+			}
+			// And the glyphs for OTHER levels must NOT appear (prevents false
+			// positives from a broken mapping landing on a neighbor).
+			for _, other := range []string{"○", "◐", "●", "◉"} {
+				if other == tc.wantGlyph {
+					continue
+				}
+				if strings.Contains(view, "(thinking "+other+")") {
+					t.Errorf("budget=%d: spinner view wrongly contains other glyph %q:\n%s",
+						tc.budget, other, view)
+				}
+			}
+		})
+	}
+
+	// -- Behavior 5: ThinkingEnabled=false → NO glyph emitted --
+	t.Run("disabled-thinking-no-glyph", func(t *testing.T) {
+		config := session.DefaultConfig()
+		config.ThinkingEnabled = false
+		config.ThinkingBudget = 50000 // would map to max, but disabled
+		sess := session.New(config, "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+		app.Update(components.SubmitMsg{Text: "no thinking"})
+
+		if !app.spinner.IsActive() {
+			t.Fatal("spinner must be active")
+		}
+		view := strip(app.spinner.View())
+		// Suffix must be exactly "(thinking)" — NO glyph embedded.
+		if !strings.Contains(view, "(thinking)") {
+			t.Errorf("disabled thinking should show bare '(thinking)', got:\n%s", view)
+		}
+		for _, glyph := range []string{"○", "◐", "●", "◉"} {
+			if strings.Contains(view, "(thinking "+glyph+")") {
+				t.Errorf("disabled thinking must NOT embed effort glyph %q:\n%s", glyph, view)
+			}
+		}
+	})
+}
+
 // TestParity_DiffParserLineNumbering validates the unified-diff parser's
 // line-number accounting and content stripping. The existing diff_test.go
 // only checks "at least one line of each type exists" — this validates the

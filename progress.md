@@ -241,7 +241,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B37 | TestParity_ConversationViewportWindowing | viewport returns exactly height lines as tail-slice; scrollOffset shifts window backward by exact line count; scroll-up clamps at viewStart=0 without panic; scroll-down restores identical tail view | ✅ pass |
 | B38 | TestParity_SlashCommandAutocompleteFlow | Activate/Deactivate toggles active+suggestions; inactive Update is no-op; "/mo" prefix filter, "/h" dual-hit (HasPrefix+fuzzy subseq matches /help AND /thinking); Up/Down clamping (no wrap, no OOB); Enter/Tab both select+deactivate+emit SlashCommandSelectedMsg; Escape deactivates without msg | ✅ pass |
 | B39 | TestParity_DiffParserLineNumbering | **FOUND BUG**: hunk header `newLine` parsed as 0 because `fmt.Sscanf "@@ %*s +%d"` returned "bad verb '%*'" error silently. Test asserts counter seeding (5→old,10→new), proper increments (+lines→new only, -lines→old only, context→both), prefix stripping, empty-line drop, ordering preserved, file headers untouched. **Fixed** with `parseHunkStart()` helper in diff.go. | ✅ pass |
-### Next B40: Next unique behavior to validate
+| B40 | TestParity_ThinkingBudgetEffortMapping | 8 subtests covering boundaries: >=30000→◉, >=15000→●, >=5000→◐, <5000→○ plus exact-threshold values AND 29999/14999/4999/0 edge cases. Each case asserts other 3 glyphs absent (mapping mis-land tripwire). Separate case for ThinkingEnabled=false showing bare "(thinking)" no glyph. | ✅ pass |
+### Next B41: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
