@@ -1,0 +1,16 @@
+{
+  "name": "prompt-slash-help",
+  "category": "area-02-prompt",
+  "tags": ["prompt", "slash", "help", "command"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "/help"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "2s"},
+    {"action": "snapshot", "value": "prompt-slash-help"}
+  ]
+}

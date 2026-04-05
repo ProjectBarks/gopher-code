@@ -1,0 +1,14 @@
+{
+  "name": "cmd-context",
+  "category": "area-07-commands",
+  "tags": ["command", "context"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "/context"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "cmd-context"}
+  ]
+}

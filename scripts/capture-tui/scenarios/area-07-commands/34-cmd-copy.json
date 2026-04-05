@@ -1,0 +1,18 @@
+{
+  "name": "cmd-copy",
+  "category": "area-07-commands",
+  "tags": ["command", "copy", "clipboard"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "say hi"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "hi", "note": "wait for response"},
+    {"action": "wait", "value": "1s"},
+    {"action": "type", "value": "/copy"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "cmd-copy"}
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "error-double-slash",
+  "category": "area-10-errors",
+  "tags": ["error", "double-slash", "input"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "//"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "error-double-slash"}
+  ]
+}

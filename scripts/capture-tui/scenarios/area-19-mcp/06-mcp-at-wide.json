@@ -1,0 +1,16 @@
+{
+  "name": "mcp-at-wide",
+  "category": "area-19-mcp",
+  "tags": ["mcp", "wide", "responsive"],
+  "cols": 120,
+  "rows": 30,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "/mcp"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "mcp-at-wide"}
+  ]
+}

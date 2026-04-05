@@ -1,0 +1,11 @@
+{
+  "name": "welcome-cwd-display",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "cwd", "working-directory", "content"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render"},
+    {"action": "snapshot", "value": "01-welcome-cwd", "note": "Capture welcome screen to verify current working directory is displayed"}
+  ]
+}

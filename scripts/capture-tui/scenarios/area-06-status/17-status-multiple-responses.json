@@ -1,0 +1,19 @@
+{
+  "name": "status-multiple-responses",
+  "category": "area-06-status",
+  "tags": ["status", "multiple", "responses"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "say hello"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "hello", "note": "wait for first response"},
+    {"action": "wait", "value": "1s"},
+    {"action": "type", "value": "say goodbye"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "goodbye", "note": "wait for second response"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "status-multiple-responses"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "key-up-arrow-idle",
+  "category": "area-08-keyboard",
+  "tags": ["keyboard", "up-arrow", "history", "idle"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "key", "value": "Up"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "key-up-arrow-idle"}
+  ]
+}

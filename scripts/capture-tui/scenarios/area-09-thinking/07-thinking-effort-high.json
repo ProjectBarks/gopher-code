@@ -1,0 +1,54 @@
+{
+  "name": "thinking-effort-high",
+  "category": "area-09-thinking",
+  "tags": [
+    "thinking",
+    "effort",
+    "high"
+  ],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {
+      "action": "wait_for",
+      "value": "Welcome|Claude",
+      "note": "wait for welcome screen"
+    },
+    {
+      "action": "type",
+      "value": "/effort high"
+    },
+    {
+      "action": "key",
+      "value": "Enter"
+    },
+    {
+      "action": "wait",
+      "value": "500ms"
+    },
+    {
+      "action": "type",
+      "value": "say hi"
+    },
+    {
+      "action": "key",
+      "value": "Enter"
+    },
+    {
+      "action": "wait_for",
+      "value": "⏺",
+      "timeout": "60s",
+      "note": "wait for assistant response prefix"
+    },
+    {
+      "action": "wait_for",
+      "value": "shortcuts|/buddy",
+      "timeout": "60s",
+      "note": "wait for turn complete"
+    },
+    {
+      "action": "snapshot",
+      "value": "thinking-effort-high"
+    }
+  ]
+}

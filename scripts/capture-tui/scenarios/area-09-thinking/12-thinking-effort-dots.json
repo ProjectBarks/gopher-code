@@ -1,0 +1,14 @@
+{
+  "name": "thinking-effort-dots",
+  "category": "area-09-thinking",
+  "tags": ["thinking", "effort", "dots", "indicator"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "/effort high"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "thinking-effort-dots"}
+  ]
+}

@@ -270,14 +270,16 @@ func TestAppModelSubmitWhitespaceIgnored(t *testing.T) {
 
 func TestAppModelCtrlCQuits(t *testing.T) {
 	app := newTestApp()
+	// First Ctrl+C shows hint
+	app.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	// Second Ctrl+C quits
 	_, cmd := app.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if cmd == nil {
-		t.Fatal("Ctrl+C should produce a command")
+		t.Fatal("Double Ctrl+C should produce a command")
 	}
-	// Should be a quit command
 	msg := cmd()
 	if _, ok := msg.(tea.QuitMsg); !ok {
-		t.Errorf("Expected QuitMsg, got %T", msg)
+		t.Errorf("Expected QuitMsg on second Ctrl+C, got %T", msg)
 	}
 }
 
@@ -307,9 +309,9 @@ func TestAppModelViewHasInputPane(t *testing.T) {
 	app := newTestApp()
 	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	view := app.View()
-	// Input pane renders the prompt character "›" (U+203A)
-	if !strings.Contains(view.Content, "›") {
-		t.Error("View should contain input pane prompt ›")
+	// Input pane renders the prompt character "❯" (U+276F)
+	if !strings.Contains(view.Content, "❯") {
+		t.Error("View should contain input pane prompt ❯")
 	}
 }
 
@@ -317,9 +319,9 @@ func TestAppModelViewHasDivider(t *testing.T) {
 	app := newTestApp()
 	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	view := app.View()
-	// Should have heavy horizontal divider ━
-	if !strings.Contains(view.Content, "━") {
-		t.Error("View should contain divider line ━")
+	// Should have light horizontal divider ─
+	if !strings.Contains(view.Content, "─") {
+		t.Error("View should contain divider line ─")
 	}
 }
 

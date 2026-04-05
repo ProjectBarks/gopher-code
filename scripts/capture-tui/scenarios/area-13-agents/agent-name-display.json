@@ -1,0 +1,16 @@
+{
+  "name": "agent-name-display",
+  "category": "area-13-agents",
+  "tags": ["agent", "name", "display"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "key", "value": "Escape", "note": "Dismiss welcome screen"},
+    {"action": "wait", "value": "1s"},
+    {"action": "type", "value": "use an agent to check the README"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "3s", "note": "Wait for agent name to appear"},
+    {"action": "snapshot", "value": "agent-name-display"}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "welcome-model-info",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "model", "info", "content"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render"},
+    {"action": "snapshot", "value": "01-welcome-model-info", "note": "Capture welcome screen to verify model information is displayed"}
+  ]
+}

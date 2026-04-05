@@ -1,0 +1,13 @@
+{
+  "name": "key-question-mark",
+  "category": "area-08-keyboard",
+  "tags": ["keyboard", "shortcuts", "help", "question-mark"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "?"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "key-question-mark"}
+  ]
+}

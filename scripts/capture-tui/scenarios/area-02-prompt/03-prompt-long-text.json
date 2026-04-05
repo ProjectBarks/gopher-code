@@ -1,0 +1,15 @@
+{
+  "name": "prompt-long-text",
+  "category": "area-02-prompt",
+  "tags": ["prompt", "text", "wrapping", "long"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "This is a very long string that should cause the input to wrap across multiple lines in the terminal. We want to verify that text wrapping works correctly when typing."},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "prompt-long-text"}
+  ]
+}

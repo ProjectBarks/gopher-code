@@ -111,8 +111,8 @@ func TestThinkingSpinnerTipView(t *testing.T) {
 	if !strings.Contains(plain, "Tip:") {
 		t.Errorf("Expected 'Tip:' in tip view, got %q", plain)
 	}
-	if !strings.Contains(plain, "└") {
-		t.Error("Expected └ connector in tip view")
+	if !strings.Contains(plain, "⎿") {
+		t.Error("Expected ⎿ connector in tip view")
 	}
 }
 

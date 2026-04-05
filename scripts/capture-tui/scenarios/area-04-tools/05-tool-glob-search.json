@@ -1,0 +1,16 @@
+{
+  "name": "tool-glob-search",
+  "category": "area-04-tools",
+  "tags": ["tool", "glob", "search", "files"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Find all .go files in the cmd/ directory"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "Glob|glob|\\.go", "timeout": "30s", "note": "Wait for Glob tool"},
+    {"action": "snapshot", "value": "tool-glob-search"}
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "thinking-block-display",
+  "category": "area-09-thinking",
+  "tags": ["thinking", "block", "display", "extended"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "/thinking on"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "type", "value": "what are the pros and cons of microservices vs monoliths"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "3s"},
+    {"action": "snapshot", "value": "thinking-block-display"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "prompt-char-idle",
+  "category": "area-02-prompt",
+  "tags": ["prompt", "idle", "character"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt character to appear"},
+    {"action": "snapshot", "value": "prompt-char-idle"}
+  ]
+}

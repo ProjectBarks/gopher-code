@@ -1,0 +1,13 @@
+{
+  "name": "error-special-chars-input",
+  "category": "area-10-errors",
+  "tags": ["error", "special-chars", "input"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "!@#$%^&*()"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "error-special-chars-input"}
+  ]
+}

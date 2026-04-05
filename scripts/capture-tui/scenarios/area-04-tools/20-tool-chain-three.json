@@ -1,0 +1,16 @@
+{
+  "name": "tool-chain-three",
+  "category": "area-04-tools",
+  "tags": ["tool", "chain", "multiple", "three"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Read README.md, go.mod, and go.sum files one by one"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "❯", "timeout": "30s", "note": "Wait for all three tools to complete"},
+    {"action": "snapshot", "value": "tool-chain-three"}
+  ]
+}

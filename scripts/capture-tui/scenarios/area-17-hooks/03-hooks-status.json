@@ -1,0 +1,13 @@
+{
+  "name": "hooks-status",
+  "category": "area-17-hooks",
+  "tags": ["hooks", "status", "indicator"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "snapshot", "value": "hooks-status"}
+  ]
+}

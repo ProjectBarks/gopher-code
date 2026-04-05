@@ -1,0 +1,16 @@
+{
+  "name": "streaming-response-prefix",
+  "category": "area-03-streaming",
+  "tags": ["streaming", "prefix", "response", "indicator"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "say hello"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "[Hh]ello", "timeout": "30s", "note": "Wait for response"},
+    {"action": "snapshot", "value": "streaming-response-prefix"}
+  ]
+}

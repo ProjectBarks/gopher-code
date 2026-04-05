@@ -1,0 +1,17 @@
+{
+  "name": "search-type-query",
+  "category": "area-16-search",
+  "tags": ["search", "typing", "query"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "key", "value": "Ctrl+F", "note": "Open search dialog"},
+    {"action": "wait", "value": "1s"},
+    {"action": "type", "value": "hello"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "search-type-query"}
+  ]
+}

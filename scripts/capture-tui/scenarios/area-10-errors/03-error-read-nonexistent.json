@@ -1,0 +1,14 @@
+{
+  "name": "error-read-nonexistent",
+  "category": "area-10-errors",
+  "tags": ["error", "file", "nonexistent", "read"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "read /tmp/nonexistent-file-12345.txt"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "5s"},
+    {"action": "snapshot", "value": "error-read-nonexistent"}
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "prompt-ctrl-c-clears-input",
+  "category": "area-02-prompt",
+  "tags": ["prompt", "ctrl-c", "clear", "cancel"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "hello"},
+    {"action": "wait", "value": "300ms"},
+    {"action": "key", "value": "Ctrl+C", "note": "Cancel/clear current input"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "prompt-ctrl-c-clears-input"}
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "cmd-release-notes",
+  "category": "area-07-commands",
+  "tags": ["command", "release-notes", "changelog"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "/release-notes"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "cmd-release-notes"}
+  ]
+}

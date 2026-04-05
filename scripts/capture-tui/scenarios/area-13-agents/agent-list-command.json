@@ -1,0 +1,16 @@
+{
+  "name": "agent-list-command",
+  "category": "area-13-agents",
+  "tags": ["agent", "list", "command"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "key", "value": "Escape", "note": "Dismiss welcome screen"},
+    {"action": "wait", "value": "1s"},
+    {"action": "type", "value": "/agents"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "2s"},
+    {"action": "snapshot", "value": "agent-list-command"}
+  ]
+}

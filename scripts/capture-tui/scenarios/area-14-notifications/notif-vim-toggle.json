@@ -1,0 +1,16 @@
+{
+  "name": "notif-vim-toggle",
+  "category": "area-14-notifications",
+  "tags": ["notification", "vim", "toggle"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "key", "value": "Escape", "note": "Dismiss welcome screen"},
+    {"action": "wait", "value": "1s"},
+    {"action": "type", "value": "/vim"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "notif-vim-toggle"}
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "streaming-spinner-verb",
+  "category": "area-03-streaming",
+  "tags": ["streaming", "spinner", "verb", "status"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Write a paragraph about the history of computing"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "500ms", "note": "Wait for spinner to display verb"},
+    {"action": "snapshot", "value": "streaming-spinner-verb"}
+  ]
+}

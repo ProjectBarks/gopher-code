@@ -1,0 +1,14 @@
+{
+  "name": "cmd-mcp",
+  "category": "area-07-commands",
+  "tags": ["command", "mcp", "servers"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "/mcp"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "cmd-mcp"}
+  ]
+}

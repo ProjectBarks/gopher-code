@@ -1,0 +1,14 @@
+{
+  "name": "welcome-dismiss-enter",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "dismiss", "enter", "interaction"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render"},
+    {"action": "snapshot", "value": "01-welcome-before-enter", "note": "Capture welcome screen before pressing Enter"},
+    {"action": "key", "value": "Enter", "note": "Press Enter on empty input to dismiss welcome"},
+    {"action": "wait_for", "value": ">|\\$|❯", "note": "Wait for prompt to appear after welcome dismissal"},
+    {"action": "snapshot", "value": "02-welcome-after-enter", "note": "Capture screen after welcome dismissed by Enter"}
+  ]
+}

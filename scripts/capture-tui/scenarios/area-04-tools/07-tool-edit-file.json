@@ -1,0 +1,16 @@
+{
+  "name": "tool-edit-file",
+  "category": "area-04-tools",
+  "tags": ["tool", "edit", "file"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Add a comment '// test comment' at the top of cmd/gopher-code/main.go"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "Edit|edit|Allow|allow", "timeout": "30s", "note": "Wait for Edit tool or permission"},
+    {"action": "snapshot", "value": "tool-edit-file"}
+  ]
+}

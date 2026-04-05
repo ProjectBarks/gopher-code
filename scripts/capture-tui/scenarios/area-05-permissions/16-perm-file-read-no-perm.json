@@ -1,0 +1,16 @@
+{
+  "name": "perm-file-read-no-perm",
+  "category": "area-05-permissions",
+  "tags": ["permission", "file", "read", "auto-allow"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Read the README.md file"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "Read|README", "timeout": "30s", "note": "Read should auto-allow without permission dialog"},
+    {"action": "snapshot", "value": "perm-file-read-no-perm"}
+  ]
+}

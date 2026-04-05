@@ -1,0 +1,14 @@
+{
+  "name": "cmd-diff",
+  "category": "area-07-commands",
+  "tags": ["command", "diff", "git"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "/diff"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "cmd-diff"}
+  ]
+}

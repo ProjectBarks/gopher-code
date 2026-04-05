@@ -1,0 +1,19 @@
+{
+  "name": "mcp-after-query",
+  "category": "area-19-mcp",
+  "tags": ["mcp", "query", "after"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "say hi"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "❯", "timeout": "30s", "note": "Wait for response to complete"},
+    {"action": "type", "value": "/mcp"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "mcp-after-query"}
+  ]
+}

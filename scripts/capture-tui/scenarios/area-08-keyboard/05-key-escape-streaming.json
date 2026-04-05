@@ -1,0 +1,16 @@
+{
+  "name": "key-escape-streaming",
+  "category": "area-08-keyboard",
+  "tags": ["keyboard", "escape", "streaming", "interrupt"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "write a poem about the ocean in 10 stanzas"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "2s"},
+    {"action": "key", "value": "Escape"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "key-escape-streaming"}
+  ]
+}

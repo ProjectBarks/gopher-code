@@ -1,0 +1,17 @@
+{
+  "name": "prompt-ctrl-w-delete-word",
+  "category": "area-02-prompt",
+  "tags": ["prompt", "ctrl-w", "delete-word", "editing"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "hello world"},
+    {"action": "wait", "value": "300ms"},
+    {"action": "key", "value": "Ctrl+W", "note": "Delete last word"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "prompt-ctrl-w-delete-word"}
+  ]
+}

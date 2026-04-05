@@ -1,0 +1,16 @@
+{
+  "name": "notif-mcp-list",
+  "category": "area-14-notifications",
+  "tags": ["notification", "mcp", "list"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "key", "value": "Escape", "note": "Dismiss welcome screen"},
+    {"action": "wait", "value": "1s"},
+    {"action": "type", "value": "/mcp"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "2s"},
+    {"action": "snapshot", "value": "notif-mcp-list"}
+  ]
+}

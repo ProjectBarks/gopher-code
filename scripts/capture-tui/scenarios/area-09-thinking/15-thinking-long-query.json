@@ -1,0 +1,17 @@
+{
+  "name": "thinking-long-query",
+  "category": "area-09-thinking",
+  "tags": ["thinking", "long", "complex", "extended"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "/thinking on"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "type", "value": "compare and contrast REST, GraphQL, and gRPC for building APIs, including performance, developer experience, and tooling"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "10s"},
+    {"action": "snapshot", "value": "thinking-long-query"}
+  ]
+}

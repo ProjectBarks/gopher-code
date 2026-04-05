@@ -39,6 +39,7 @@ type ToolResultMsg struct {
 	ToolUseID string
 	Content   string
 	IsError   bool
+	Display   any // optional structured payload (e.g. tools.DiffDisplay)
 }
 
 // TurnCompleteMsg signals the model has finished its turn.
@@ -94,6 +95,7 @@ type AppModel struct {
 	header       *components.Header
 	conversation *components.ConversationPane
 	input        *components.InputPane
+	slashInput   *components.SlashCommandInput
 	statusLine   *components.StatusLine
 	bubble       *components.MessageBubble
 	streaming    *components.StreamingText
@@ -114,6 +116,11 @@ type AppModel struct {
 	// Welcome screen
 	showWelcome bool
 	welcome     *components.WelcomeScreen
+
+	// Ctrl+C double-press tracking
+	// Claude requires two Ctrl+C presses on empty idle input to quit.
+	// First press shows "Press Ctrl-C again to exit" hint.
+	ctrlCPending bool
 }
 
 // NewAppModel creates a new AppModel with the given session and bridge.
@@ -129,6 +136,14 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 	inputPane := components.NewInputPane()
 	inputPane.Focus()
 
+	// Slash autocomplete: load built-ins + user/project commands + skills.
+	slashInput := components.NewSlashCommandInput(t)
+	sessCWD := ""
+	if sess != nil {
+		sessCWD = sess.CWD
+	}
+	slashInput.SetCommands(components.LoadSlashCommands(sessCWD))
+
 	app := &AppModel{
 		session:         sess,
 		bridge:          bridge,
@@ -136,6 +151,7 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 		header:          header,
 		conversation:    components.NewConversationPane(),
 		input:           inputPane,
+		slashInput:      slashInput,
 		statusLine:      components.NewStatusLine(sess),
 		bubble:          components.NewMessageBubble(t, 80),
 		streaming:       components.NewStreamingText(t),
@@ -183,6 +199,15 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case components.SubmitMsg:
 		return a.handleSubmit(msg)
+
+	case components.SlashCommandSelectedMsg:
+		// Fill the input with the chosen command; the user presses Enter
+		// to submit. Matches Claude Code: autocomplete completes the name
+		// but does not auto-submit.
+		if a.input != nil {
+			a.input.SetValue(msg.Command.Name + " ")
+		}
+		return a, nil
 
 	case components.SpinnerTickMsg:
 		a.spinner.Update(msg)
@@ -290,6 +315,14 @@ func (a *AppModel) View() tea.View {
 	// Input pane (always visible)
 	sections = append(sections, a.input.View().Content)
 
+	// Slash-command autocomplete, rendered directly below the input when active.
+	if a.slashInput != nil && a.slashInput.IsActive() {
+		sections = append(sections, a.slashInput.View().Content)
+	}
+
+	// Second divider below input (Claude has dividers above AND below prompt)
+	sections = append(sections, dividerStyle.Render(strings.Repeat(components.DividerChar, a.width)))
+
 	// Status line (always visible)
 	sections = append(sections, a.statusLine.View().Content)
 
@@ -323,25 +356,48 @@ func (a *AppModel) handleResize(msg tea.WindowSizeMsg) (*AppModel, tea.Cmd) {
 	a.statusLine.SetSize(a.width, statusHeight)
 	a.bubble.SetWidth(a.width)
 	a.streaming.SetSize(a.width, 0)
+	a.welcome.SetSize(a.width, a.height)
 
 	return a, nil
 }
 
 func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
+	// Reset Ctrl+C pending on any non-Ctrl+C key
+	if !(msg.Code == 'c' && msg.Mod == tea.ModCtrl) && a.ctrlCPending {
+		a.ctrlCPending = false
+		a.statusLine.Update(components.ModeChangeMsg{Mode: components.ModeIdle})
+	}
+
 	// Dismiss welcome screen on any printable key
 	if a.showWelcome && msg.Text != "" {
 		a.showWelcome = false
 	}
 
 	switch {
-	// Quit: Ctrl+C
+	// Ctrl+C behavior (matching Claude Code):
+	// 1. During streaming → cancel the query
+	// 2. With text in input → clear input (stash behavior)
+	// 3. Empty input, first press → show "Press Ctrl-C again to exit" hint
+	// 4. Empty input, second press → quit
+	// Source: data/claude/area-06-status/status-ctrlc-first snapshot
 	case msg.Code == 'c' && msg.Mod == tea.ModCtrl:
 		if a.mode != ModeIdle && a.cancelQuery != nil {
-			// Cancel the running query, don't quit
 			a.cancelQuery()
+			a.ctrlCPending = false
 			return a, nil
 		}
-		return a, tea.Quit
+		if a.input.HasText() {
+			a.input.Clear()
+			a.ctrlCPending = false
+			return a, nil
+		}
+		// Empty input: double-press to quit
+		if a.ctrlCPending {
+			return a, tea.Quit
+		}
+		a.ctrlCPending = true
+		a.statusLine.Update(components.CtrlCHintMsg{})
+		return a, nil
 
 	// Focus cycling
 	case msg.Code == tea.KeyTab && msg.Mod == 0:
@@ -364,19 +420,48 @@ func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
 		}
 	}
 
-	// Route to focused component
+	// Slash autocomplete: when active, arrow keys / Enter / Tab / Escape
+	// are routed to the autocomplete. Other keys fall through so the user
+	// can keep typing to filter suggestions.
+	if a.slashInput != nil && a.slashInput.IsActive() {
+		switch msg.Code {
+		case tea.KeyUp, tea.KeyDown, tea.KeyTab, tea.KeyEscape, tea.KeyEnter:
+			_, cmd := a.slashInput.Update(msg)
+			return a, cmd
+		}
+	}
+
+	// Route to focused component (input pane) then refresh autocomplete
+	// state from the resulting input-buffer contents.
 	cmd := a.focus.Route(msg)
+	a.refreshSlashAutocomplete()
 	return a, cmd
 }
 
-func (a *AppModel) handleSubmit(msg components.SubmitMsg) (*AppModel, tea.Cmd) {
-	// Dismiss welcome screen on any submit
-	a.showWelcome = false
+// refreshSlashAutocomplete activates/deactivates and refilters the slash
+// autocomplete based on the current input buffer.
+func (a *AppModel) refreshSlashAutocomplete() {
+	if a.slashInput == nil || a.input == nil {
+		return
+	}
+	text := a.input.Value()
+	if strings.HasPrefix(text, "/") && !strings.Contains(text, " ") {
+		a.slashInput.Activate(text)
+	} else if a.slashInput.IsActive() {
+		a.slashInput.Deactivate()
+	}
+}
 
+func (a *AppModel) handleSubmit(msg components.SubmitMsg) (*AppModel, tea.Cmd) {
 	text := strings.TrimSpace(msg.Text)
 	if text == "" {
+		// Claude returns early on empty submit — welcome stays visible
+		// Source: REPL.tsx line 1368: if (inputValue.trim().length === 0) return;
 		return a, nil
 	}
+
+	// Dismiss welcome screen only when there's actual content to submit
+	a.showWelcome = false
 
 	// Add to input history
 	a.input.AddToHistory(text)
@@ -453,6 +538,7 @@ func (a *AppModel) handleQueryEvent(msg QueryEventMsg) (*AppModel, tea.Cmd) {
 			ToolUseID: evt.ToolUseID,
 			Content:   evt.Content,
 			IsError:   evt.IsError,
+			Display:   evt.Display,
 		})
 	case query.QEventTurnComplete:
 		return a.handleTurnComplete(TurnCompleteMsg{StopReason: evt.StopReason})
@@ -494,7 +580,7 @@ func (a *AppModel) handleToolUseStart(msg ToolUseStartMsg) (*AppModel, tea.Cmd) 
 
 	// Show tool name in streaming area (matching TS inline tool display).
 	// Source: components/messages/AssistantToolUseMessage.tsx
-	toolLine := fmt.Sprintf("\n⚙ %s", msg.ToolName)
+	toolLine := fmt.Sprintf("\n⏺ %s", msg.ToolName)
 	a.streamingText.WriteString(toolLine)
 	streamContent := a.streamingText.String()
 	if a.spinner.IsActive() {
@@ -510,6 +596,37 @@ func (a *AppModel) handleToolUseStart(msg ToolUseStartMsg) (*AppModel, tea.Cmd) 
 func (a *AppModel) handleToolResult(msg ToolResultMsg) (*AppModel, tea.Cmd) {
 	toolName := a.activeToolCalls[msg.ToolUseID]
 	delete(a.activeToolCalls, msg.ToolUseID)
+
+	// If the tool attached a structured Display payload (e.g. a diff from
+	// Edit/Write), finalize any in-flight streaming text and add the
+	// tool_result as its own conversation message so the MessageBubble
+	// renderer can draw the rich block.
+	if !msg.IsError && msg.Display != nil {
+		if a.streamingText.Len() > 0 {
+			assistantMsg := message.Message{
+				Role: message.RoleAssistant,
+				Content: []message.ContentBlock{
+					{Type: message.ContentText, Text: a.streamingText.String()},
+				},
+			}
+			a.conversation.AddMessage(assistantMsg)
+			a.streamingText.Reset()
+			a.streaming.Reset()
+		}
+		resultMsg := message.Message{
+			Role: message.RoleUser,
+			Content: []message.ContentBlock{{
+				Type:      message.ContentToolResult,
+				ToolUseID: msg.ToolUseID,
+				Content:   msg.Content,
+				IsError:   false,
+				Display:   msg.Display,
+			}},
+		}
+		a.conversation.AddMessage(resultMsg)
+		a.conversation.ClearStreamingText()
+		return a, nil
+	}
 
 	// Show brief result indicator in streaming area.
 	// Source: components/messages/UserToolResultMessage — shows ✓/✗ with truncated content

@@ -1,0 +1,15 @@
+{
+  "name": "thinking-default",
+  "category": "area-09-thinking",
+  "tags": ["thinking", "default", "baseline"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "say hi"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "hi", "note": "wait for response"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "thinking-default"}
+  ]
+}

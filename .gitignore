@@ -17,3 +17,4 @@ testdata/tui-snapshots/
 /PLAN.md
 pkg/ui/BENCHMARKS.md
 pkg/ui/examples/
+data/

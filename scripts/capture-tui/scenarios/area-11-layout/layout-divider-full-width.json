@@ -1,0 +1,11 @@
+{
+  "name": "layout-divider-full-width",
+  "category": "area-11-layout",
+  "tags": ["layout", "divider", "width"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "snapshot", "value": "layout-divider-full-width-80"}
+  ]
+}

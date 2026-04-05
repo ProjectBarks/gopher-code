@@ -1,0 +1,11 @@
+{
+  "name": "welcome-box-border-chars",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "borders", "box-drawing", "characters"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render"},
+    {"action": "snapshot", "value": "01-welcome-borders", "note": "Capture welcome screen to inspect box-drawing border characters"}
+  ]
+}

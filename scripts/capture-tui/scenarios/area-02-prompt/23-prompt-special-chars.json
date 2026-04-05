@@ -1,0 +1,15 @@
+{
+  "name": "prompt-special-chars",
+  "category": "area-02-prompt",
+  "tags": ["prompt", "unicode", "special", "characters"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "café ñ 日本語"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "prompt-special-chars"}
+  ]
+}

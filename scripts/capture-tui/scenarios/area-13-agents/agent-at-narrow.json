@@ -1,0 +1,16 @@
+{
+  "name": "agent-at-narrow",
+  "category": "area-13-agents",
+  "tags": ["agent", "narrow", "responsive"],
+  "cols": 60,
+  "rows": 20,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "key", "value": "Escape", "note": "Dismiss welcome screen"},
+    {"action": "wait", "value": "1s"},
+    {"action": "type", "value": "use an agent to check the README"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "3s"},
+    {"action": "snapshot", "value": "agent-at-narrow"}
+  ]
+}

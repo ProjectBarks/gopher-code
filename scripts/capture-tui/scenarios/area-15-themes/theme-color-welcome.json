@@ -1,0 +1,1 @@
+{"name":"theme-color-welcome","category":"area-15-themes","tags":["theme","colors","welcome"],"cols":80,"rows":24,"steps":[{"action":"wait_for","value":"Welcome|Claude"},{"action":"snapshot","value":"01-theme-color-welcome","note":"Cell data for welcome colors"}]}

@@ -1,0 +1,42 @@
+{
+  "name": "theme-response-colors",
+  "category": "area-15-themes",
+  "tags": [
+    "theme",
+    "colors",
+    "response"
+  ],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {
+      "action": "wait_for",
+      "value": "Welcome|Claude"
+    },
+    {
+      "action": "type",
+      "value": "say hi"
+    },
+    {
+      "action": "key",
+      "value": "Enter"
+    },
+    {
+      "action": "wait_for",
+      "value": "⏺",
+      "timeout": "60s",
+      "note": "wait for assistant response prefix"
+    },
+    {
+      "action": "wait_for",
+      "value": "shortcuts|/buddy",
+      "timeout": "60s",
+      "note": "wait for turn complete"
+    },
+    {
+      "action": "snapshot",
+      "value": "01-theme-response-colors",
+      "note": "Response text colors"
+    }
+  ]
+}

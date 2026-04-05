@@ -1,0 +1,1 @@
+{"name":"theme-status-colors","category":"area-15-themes","tags":["theme","colors","status"],"cols":80,"rows":24,"steps":[{"action":"wait_for","value":"Welcome|Claude"},{"action":"snapshot","value":"01-theme-status-colors","note":"Status line colors"}]}

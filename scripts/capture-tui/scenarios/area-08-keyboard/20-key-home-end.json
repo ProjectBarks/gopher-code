@@ -1,0 +1,17 @@
+{
+  "name": "key-home-end",
+  "category": "area-08-keyboard",
+  "tags": ["keyboard", "home", "end", "cursor"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "hello world test"},
+    {"action": "key", "value": "Home"},
+    {"action": "wait", "value": "300ms"},
+    {"action": "snapshot", "value": "key-home"},
+    {"action": "key", "value": "End"},
+    {"action": "wait", "value": "300ms"},
+    {"action": "snapshot", "value": "key-end"}
+  ]
+}

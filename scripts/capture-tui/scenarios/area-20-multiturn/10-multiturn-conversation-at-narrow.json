@@ -1,0 +1,19 @@
+{
+  "name": "multiturn-conversation-at-narrow",
+  "category": "area-20-multiturn",
+  "tags": ["multiturn"],
+  "cols": 60,
+  "rows": 20,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude"},
+    {"action": "type", "value": "say alpha"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "alpha|Alpha", "timeout": "60s", "note": "wait for first response content"},
+    {"action": "wait_for", "value": "shortcuts|/buddy", "timeout": "60s"},
+    {"action": "type", "value": "say beta"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "beta|Beta", "timeout": "60s", "note": "wait for second response content"},
+    {"action": "wait_for", "value": "shortcuts|/buddy", "timeout": "60s"},
+    {"action": "snapshot", "value": "multiturn-conversation-at-narrow"}
+  ]
+}

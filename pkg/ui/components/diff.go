@@ -202,9 +202,12 @@ func parseDiffLines(diffText string) []DiffLine {
 		switch {
 		case strings.HasPrefix(raw, "@@"):
 			lines = append(lines, DiffLine{Type: DiffHeader, Content: raw})
-			// Parse hunk header for line numbers
-			fmt.Sscanf(raw, "@@ -%d", &oldLine)
-			fmt.Sscanf(raw, "@@ %*s +%d", &newLine)
+			// Parse hunk header for line numbers.
+			// Format: "@@ -OLD[,n] +NEW[,m] @@". Go's fmt.Sscanf does not
+			// support %*s for discarding a word, so we parse each half by
+			// locating the "-" and "+" markers explicitly.
+			oldLine = parseHunkStart(raw, "-")
+			newLine = parseHunkStart(raw, "+")
 		case strings.HasPrefix(raw, "---"), strings.HasPrefix(raw, "+++"):
 			lines = append(lines, DiffLine{Type: DiffHeader, Content: raw})
 		case strings.HasPrefix(raw, "+"):
@@ -224,6 +227,31 @@ func parseDiffLines(diffText string) []DiffLine {
 		}
 	}
 	return lines
+}
+
+// parseHunkStart extracts the starting line number from a unified-diff hunk
+// header. For marker="-" in "@@ -5,3 +10,4 @@" it returns 5; for marker="+"
+// it returns 10. Returns 0 on any parse failure.
+func parseHunkStart(hunk, marker string) int {
+	idx := strings.Index(hunk, marker)
+	if idx < 0 {
+		return 0
+	}
+	// Read digits following the marker.
+	s := hunk[idx+1:]
+	n := 0
+	consumed := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			break
+		}
+		n = n*10 + int(r-'0')
+		consumed++
+	}
+	if consumed == 0 {
+		return 0
+	}
+	return n
 }
 
 var _ tea.Model = (*DiffViewer)(nil)

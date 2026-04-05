@@ -1,0 +1,16 @@
+{
+  "name": "mcp-at-narrow",
+  "category": "area-19-mcp",
+  "tags": ["mcp", "narrow", "responsive"],
+  "cols": 60,
+  "rows": 20,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "/mcp"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "mcp-at-narrow"}
+  ]
+}

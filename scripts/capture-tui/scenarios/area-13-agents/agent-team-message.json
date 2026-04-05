@@ -1,0 +1,16 @@
+{
+  "name": "agent-team-message",
+  "category": "area-13-agents",
+  "tags": ["agent", "team", "message"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "key", "value": "Escape", "note": "Dismiss welcome screen"},
+    {"action": "wait", "value": "1s"},
+    {"action": "type", "value": "create a team and have them discuss the project structure"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "5s", "note": "Wait for teammate interaction"},
+    {"action": "snapshot", "value": "agent-team-message"}
+  ]
+}

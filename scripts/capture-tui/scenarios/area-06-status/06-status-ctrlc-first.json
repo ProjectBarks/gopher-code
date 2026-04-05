@@ -1,0 +1,13 @@
+{
+  "name": "status-ctrlc-first",
+  "category": "area-06-status",
+  "tags": ["status", "ctrlc", "cancel"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "key", "value": "Ctrl+C"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "status-ctrlc-first"}
+  ]
+}

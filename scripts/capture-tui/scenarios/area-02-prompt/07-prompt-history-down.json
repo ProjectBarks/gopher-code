@@ -1,0 +1,23 @@
+{
+  "name": "prompt-history-down",
+  "category": "area-02-prompt",
+  "tags": ["prompt", "history", "down", "navigation"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "first message"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "❯", "timeout": "30s", "note": "Wait for first response"},
+    {"action": "type", "value": "second message"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "❯", "timeout": "30s", "note": "Wait for second response"},
+    {"action": "key", "value": "Up", "note": "Navigate up in history"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "key", "value": "Down", "note": "Navigate back down"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "prompt-history-down"}
+  ]
+}

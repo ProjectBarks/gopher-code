@@ -1,0 +1,14 @@
+{
+  "name": "welcome-dismiss-keypress",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "dismiss", "keypress", "interaction"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render"},
+    {"action": "snapshot", "value": "01-welcome-before-keypress", "note": "Capture welcome screen before dismissal"},
+    {"action": "type", "value": "a", "note": "Type a character to dismiss the welcome screen"},
+    {"action": "wait_for", "value": ">|\\$|❯", "note": "Wait for prompt to appear after welcome dismissal"},
+    {"action": "snapshot", "value": "02-welcome-after-keypress", "note": "Capture screen after welcome dismissed by keypress"}
+  ]
+}

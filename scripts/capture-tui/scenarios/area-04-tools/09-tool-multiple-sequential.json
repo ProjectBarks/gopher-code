@@ -1,0 +1,16 @@
+{
+  "name": "tool-multiple-sequential",
+  "category": "area-04-tools",
+  "tags": ["tool", "multiple", "sequential"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Read README.md then read go.mod"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "❯", "timeout": "30s", "note": "Wait for both tools to complete"},
+    {"action": "snapshot", "value": "tool-multiple-sequential"}
+  ]
+}

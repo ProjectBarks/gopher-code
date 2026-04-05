@@ -1,0 +1,50 @@
+{
+  "name": "layout-after-conversation",
+  "category": "area-11-layout",
+  "tags": [
+    "layout",
+    "conversation"
+  ],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {
+      "action": "wait_for",
+      "value": "Welcome|Claude",
+      "note": "Wait for startup"
+    },
+    {
+      "action": "key",
+      "value": "Escape",
+      "note": "Dismiss welcome screen"
+    },
+    {
+      "action": "wait",
+      "value": "1s"
+    },
+    {
+      "action": "type",
+      "value": "say hello"
+    },
+    {
+      "action": "key",
+      "value": "Enter"
+    },
+    {
+      "action": "wait_for",
+      "value": "⏺",
+      "timeout": "60s",
+      "note": "wait for assistant response prefix"
+    },
+    {
+      "action": "wait_for",
+      "value": "shortcuts|/buddy",
+      "timeout": "60s",
+      "note": "wait for turn complete"
+    },
+    {
+      "action": "snapshot",
+      "value": "layout-after-conversation"
+    }
+  ]
+}

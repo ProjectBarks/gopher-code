@@ -1,0 +1,11 @@
+{
+  "name": "welcome-box-width",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "box-width", "layout", "sizing"],
+  "cols": 100,
+  "rows": 30,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render at 100x30"},
+    {"action": "snapshot", "value": "01-welcome-box-width", "note": "Capture welcome screen at 100x30 to verify box does not exceed 58 chars wide"}
+  ]
+}

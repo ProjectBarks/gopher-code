@@ -1,0 +1,14 @@
+{
+  "name": "cmd-config",
+  "category": "area-07-commands",
+  "tags": ["commands", "config"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude"},
+    {"action": "type", "value": "/config"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "3s"},
+    {"action": "snapshot", "value": "cmd-config"}
+  ]
+}

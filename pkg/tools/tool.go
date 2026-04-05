@@ -10,6 +10,11 @@ type ToolOutput struct {
 	Content  string          `json:"content"`
 	IsError  bool            `json:"is_error"`
 	Metadata json.RawMessage `json:"metadata,omitempty"`
+	// Display is an optional structured payload tools may attach for rich
+	// UI rendering. It is not serialized to the API; the Content string
+	// remains authoritative for the LLM-visible result. Concrete types
+	// (e.g. DiffDisplay) live alongside the tools that produce them.
+	Display any `json:"-"`
 }
 
 // SuccessOutput creates a successful tool output.

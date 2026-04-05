@@ -1,0 +1,16 @@
+{
+  "name": "agent-progress",
+  "category": "area-13-agents",
+  "tags": ["agent", "progress", "status"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "key", "value": "Escape", "note": "Dismiss welcome screen"},
+    {"action": "wait", "value": "1s"},
+    {"action": "type", "value": "use an agent to review all Go files in this project"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "2s", "note": "Capture progress indicator"},
+    {"action": "snapshot", "value": "agent-progress"}
+  ]
+}

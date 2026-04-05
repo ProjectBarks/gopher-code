@@ -1,0 +1,15 @@
+{
+  "name": "prompt-empty-submit",
+  "category": "area-02-prompt",
+  "tags": ["prompt", "empty", "submit", "noop"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "key", "value": "Enter", "note": "Submit empty input"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "prompt-empty-submit"}
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "cmd-effort-max",
+  "category": "area-07-commands",
+  "tags": ["command", "effort", "max"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "/effort max"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "cmd-effort-max"}
+  ]
+}

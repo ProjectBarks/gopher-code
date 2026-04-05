@@ -1,0 +1,16 @@
+{
+  "name": "status-idle-after-cancel",
+  "category": "area-06-status",
+  "tags": ["status", "cancel", "idle", "escape"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "tell me a very long story"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "key", "value": "Escape"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "status-idle-after-cancel"}
+  ]
+}

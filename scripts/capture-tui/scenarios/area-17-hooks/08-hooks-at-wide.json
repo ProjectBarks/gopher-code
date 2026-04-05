@@ -1,0 +1,16 @@
+{
+  "name": "hooks-at-wide",
+  "category": "area-17-hooks",
+  "tags": ["hooks", "wide", "responsive"],
+  "cols": 120,
+  "rows": 30,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "/hooks"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "hooks-at-wide"}
+  ]
+}

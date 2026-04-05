@@ -1,0 +1,13 @@
+{
+  "name": "key-tab-focus",
+  "category": "area-08-keyboard",
+  "tags": ["keyboard", "tab", "focus", "navigation"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "key", "value": "Tab"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "key-tab-focus"}
+  ]
+}

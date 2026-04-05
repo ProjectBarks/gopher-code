@@ -1,0 +1,17 @@
+{
+  "name": "thinking-with-code",
+  "category": "area-09-thinking",
+  "tags": ["thinking", "code", "generation"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "/thinking on"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "type", "value": "write a hello world function in python"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "5s"},
+    {"action": "snapshot", "value": "thinking-with-code"}
+  ]
+}

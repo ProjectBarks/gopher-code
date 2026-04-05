@@ -1,0 +1,18 @@
+{
+  "name": "tool-status-running",
+  "category": "area-04-tools",
+  "tags": ["tool", "status", "running"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Run the command: sleep 2 && echo done"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "Allow|allow|Bash|bash", "timeout": "30s", "note": "Wait for permission"},
+    {"action": "type", "value": "y", "note": "Accept permission"},
+    {"action": "wait", "value": "500ms", "note": "Capture running state"},
+    {"action": "snapshot", "value": "tool-status-running"}
+  ]
+}

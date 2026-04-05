@@ -1,0 +1,14 @@
+{
+  "name": "error-tool-fail",
+  "category": "area-10-errors",
+  "tags": ["error", "tool", "fail", "read"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "type", "value": "read /root/secret"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "5s"},
+    {"action": "snapshot", "value": "error-tool-fail"}
+  ]
+}

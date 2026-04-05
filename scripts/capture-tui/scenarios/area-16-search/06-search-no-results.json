@@ -1,0 +1,20 @@
+{
+  "name": "search-no-results",
+  "category": "area-16-search",
+  "tags": ["search", "no-results", "empty"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "say hello world"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "❯", "timeout": "30s", "note": "Wait for response to complete"},
+    {"action": "key", "value": "Ctrl+F", "note": "Open search dialog"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "type", "value": "xyznotfound"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "search-no-results"}
+  ]
+}

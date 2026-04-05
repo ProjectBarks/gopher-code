@@ -1,0 +1,11 @@
+{
+  "name": "welcome-divider-below",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "divider", "separator", "layout"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render"},
+    {"action": "snapshot", "value": "01-welcome-divider", "note": "Capture full welcome screen to inspect divider lines below the welcome box"}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "welcome-two-column-layout",
+  "category": "area-01-welcome",
+  "tags": ["welcome", "startup", "layout", "two-column", "wide"],
+  "cols": 100,
+  "rows": 30,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen to render at 100x30"},
+    {"action": "snapshot", "value": "01-welcome-two-column", "note": "Capture welcome screen at 100x30 to see full two-column layout"}
+  ]
+}

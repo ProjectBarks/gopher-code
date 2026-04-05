@@ -1,0 +1,15 @@
+{
+  "name": "streaming-bold-text",
+  "category": "area-03-streaming",
+  "tags": ["streaming", "bold", "formatting"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude"},
+    {"action": "type", "value": "Say the word hello but make it bold using markdown"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "⏺", "timeout": "60s"},
+    {"action": "wait_for", "value": "shortcuts|/buddy", "timeout": "60s"},
+    {"action": "snapshot", "value": "streaming-bold-text"}
+  ]
+}

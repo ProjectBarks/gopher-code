@@ -1,0 +1,46 @@
+{
+  "name": "tool-bash-permission",
+  "category": "area-04-tools",
+  "tags": [
+    "tools",
+    "bash",
+    "permission"
+  ],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {
+      "action": "wait_for",
+      "value": "Welcome|Claude",
+      "note": "Wait for welcome screen"
+    },
+    {
+      "action": "key",
+      "value": "Enter",
+      "note": "Dismiss welcome"
+    },
+    {
+      "action": "wait_for",
+      "value": "❯",
+      "note": "Wait for prompt"
+    },
+    {
+      "action": "type",
+      "value": "Run the command: ls -la"
+    },
+    {
+      "action": "key",
+      "value": "Enter"
+    },
+    {
+      "action": "wait_for",
+      "value": "⏺|Allow|Deny|allow|deny|Yes|yes",
+      "timeout": "60s",
+      "note": "Wait for permission dialog"
+    },
+    {
+      "action": "snapshot",
+      "value": "tool-bash-permission"
+    }
+  ]
+}

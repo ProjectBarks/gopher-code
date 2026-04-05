@@ -84,9 +84,14 @@ func TestWelcomeScreenHasBorder(t *testing.T) {
 func TestWelcomeScreenSetSize(t *testing.T) {
 	ws := NewWelcomeScreen(theme.Current(), "model", "/tmp")
 	ws.SetSize(100, 30)
-	// Width should be capped to WelcomeScreenWidth
-	if ws.width > WelcomeScreenWidth {
-		t.Error("Width should be capped to WelcomeScreenWidth")
+	// Width adapts to terminal — content width = terminal - 2 (borders)
+	if ws.width != 98 {
+		t.Errorf("Expected width 98 (100-2 borders), got %d", ws.width)
+	}
+	// Narrow terminal
+	ws.SetSize(30, 15)
+	if ws.width != 28 {
+		t.Errorf("Expected width 28 (30-2 borders), got %d", ws.width)
 	}
 }
 
@@ -112,8 +117,8 @@ func TestAbbreviateCWD(t *testing.T) {
 func TestWelcomeScreenHasMascot(t *testing.T) {
 	ws := NewWelcomeScreen(theme.Current(), "model", "/tmp")
 	view := ws.View()
-	// Mascot uses block characters
-	if !strings.Contains(view.Content, "░") {
-		t.Error("Expected block characters for mascot")
+	// Clawd mascot uses quadrant block characters (▗ ▖ ▘ ▝)
+	if !strings.Contains(view.Content, "▗") && !strings.Contains(view.Content, "▘") {
+		t.Error("Expected Clawd mascot with quadrant block characters (▗ ▖ ▘ ▝)")
 	}
 }

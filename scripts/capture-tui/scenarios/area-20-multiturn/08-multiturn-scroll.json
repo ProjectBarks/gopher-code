@@ -1,0 +1,19 @@
+{
+  "name": "multiturn-scroll",
+  "category": "area-20-multiturn",
+  "tags": ["multiturn"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude"},
+    {"action": "type", "value": "say one"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "one|One", "timeout": "60s", "note": "wait for first response content"},
+    {"action": "wait_for", "value": "shortcuts|/buddy", "timeout": "60s"},
+    {"action": "type", "value": "say two"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "two|Two", "timeout": "60s", "note": "wait for second response content"},
+    {"action": "wait_for", "value": "shortcuts|/buddy", "timeout": "60s"},
+    {"action": "snapshot", "value": "multiturn-scroll"}
+  ]
+}

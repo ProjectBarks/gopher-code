@@ -1,0 +1,11 @@
+{
+  "name": "status-idle-shortcuts",
+  "category": "area-06-status",
+  "tags": ["status", "footer", "shortcuts", "idle"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "wait for welcome screen"},
+    {"action": "snapshot", "value": "status-idle-shortcuts"}
+  ]
+}

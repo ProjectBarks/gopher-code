@@ -1,0 +1,18 @@
+{
+  "name": "diff-colors",
+  "category": "area-12-diff",
+  "tags": ["diff"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude"},
+    {"action": "type", "value": "add a comment to the top of go.mod"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "edit|Edit|Yes|Allow|⏺", "timeout": "60s", "note": "wait for response or permission"},
+    {"action": "snapshot", "value": "diff-colors-before-accept", "note": "capture permission dialog or response"},
+    {"action": "wait", "value": "2s"},
+    {"action": "key", "value": "Enter", "note": "accept permission if dialog shown"},
+    {"action": "wait", "value": "3s"},
+    {"action": "snapshot", "value": "diff-colors"}
+  ]
+}

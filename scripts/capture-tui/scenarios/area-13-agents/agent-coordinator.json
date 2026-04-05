@@ -1,0 +1,16 @@
+{
+  "name": "agent-coordinator",
+  "category": "area-13-agents",
+  "tags": ["agent", "coordinator", "orchestration"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "key", "value": "Escape", "note": "Dismiss welcome screen"},
+    {"action": "wait", "value": "1s"},
+    {"action": "type", "value": "coordinate agents to review code quality and test coverage"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait", "value": "5s", "note": "Wait for coordinator pattern to emerge"},
+    {"action": "snapshot", "value": "agent-coordinator"}
+  ]
+}

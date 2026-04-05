@@ -1,0 +1,19 @@
+{
+  "name": "prompt-ctrl-e-end",
+  "category": "area-02-prompt",
+  "tags": ["prompt", "ctrl-e", "end", "cursor"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "hello"},
+    {"action": "wait", "value": "300ms"},
+    {"action": "key", "value": "Ctrl+A", "note": "Move cursor to beginning first"},
+    {"action": "wait", "value": "300ms"},
+    {"action": "key", "value": "Ctrl+E", "note": "Move cursor back to end"},
+    {"action": "wait", "value": "500ms"},
+    {"action": "snapshot", "value": "prompt-ctrl-e-end"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "layout-header-cwd",
+  "category": "area-11-layout",
+  "tags": ["layout", "header", "cwd"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for startup"},
+    {"action": "key", "value": "Escape", "note": "Dismiss welcome screen"},
+    {"action": "wait", "value": "1s"},
+    {"action": "snapshot", "value": "layout-header-cwd"}
+  ]
+}

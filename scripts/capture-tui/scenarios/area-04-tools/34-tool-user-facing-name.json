@@ -1,0 +1,16 @@
+{
+  "name": "tool-user-facing-name",
+  "category": "area-04-tools",
+  "tags": ["tool", "name", "user-facing", "display"],
+  "cols": 80,
+  "rows": 24,
+  "steps": [
+    {"action": "wait_for", "value": "Welcome|Claude", "note": "Wait for welcome screen"},
+    {"action": "key", "value": "Enter", "note": "Dismiss welcome"},
+    {"action": "wait_for", "value": "❯", "note": "Wait for prompt"},
+    {"action": "type", "value": "Read README.md"},
+    {"action": "key", "value": "Enter"},
+    {"action": "wait_for", "value": "Read", "timeout": "30s", "note": "Wait for user-facing tool name (Read not FileReadTool)"},
+    {"action": "snapshot", "value": "tool-user-facing-name"}
+  ]
+}
