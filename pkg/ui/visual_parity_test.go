@@ -13,6 +13,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/session"
+	"github.com/projectbarks/gopher-code/pkg/tools"
 	"github.com/projectbarks/gopher-code/pkg/ui/commands"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
 	"github.com/projectbarks/gopher-code/pkg/ui/core"
@@ -3677,26 +3678,29 @@ func TestParity_LoadSlashCommandsDiscovery(t *testing.T) {
 // dedicated conversation message instead of the brief "✓ ToolName" streaming
 // indicator. Both "--- a/" AND "@@" markers must be present to trigger.
 //
-// Unique behaviors (no existing test covers this branch):
-//  1. Diff content (both markers + non-error) creates a NEW conversation
-//     message of role=User with a single ContentToolResult block whose
-//     Content matches the diff exactly.
-//  2. Non-diff content takes the normal path — streamingText gets the
+// Unique behaviors:
+//  1. A non-nil Display payload (+ non-error) creates a NEW conversation
+//     message of role=User with a single ContentToolResult block.
+//  2. Empty Display takes the normal path — streamingText gets the
 //     "✓ ToolName" indicator, NO new conversation message is created.
-//  3. When streamingText is NON-EMPTY at the time a diff arrives, it is
-//     finalized as a prior assistant message — so result = +2 messages
-//     (assistant text, then user tool_result).
+//  3. When streamingText is NON-EMPTY at the time a structured result
+//     arrives, it is finalized as a prior assistant message — so
+//     result = +2 messages (assistant text, then user tool_result).
 //  4. When streamingText is EMPTY, only +1 message (tool_result).
-//  5. After the diff path, streamingText is reset (len==0).
-//  6. IsError=true diff content takes the ERROR path, NOT the diff path —
-//     keeps "✗ ToolName error" indicator in streamingText.
-//  7. Content with "--- a/" but NO "@@" takes normal path (both required).
-//  8. Content with "@@" but NO "--- a/" takes normal path.
+//  5. After the structured path, streamingText is reset (len==0).
+//  6. IsError=true takes the ERROR path regardless of Display payload.
 //
-// Cross-ref: app.go:595-625 — handleToolResult diff branch.
-// Cross-ref: Claude Code Edit/Write tool results carry unified diffs.
+// Cross-ref: app.go handleToolResult — Display-payload dispatch.
+// Cross-ref: Claude Code Edit/Write tools attach structuredPatch to results.
 func TestParity_HandleToolResultDiffPath(t *testing.T) {
-	diffContent := "--- a/main.go\n+++ b/main.go\n@@ -1 +1,2 @@\n+new line\n existing"
+	diffContent := "Edited /main.go"
+	diffDisplay := tools.DiffDisplay{
+		FilePath: "/main.go",
+		Hunks: []tools.DiffHunk{{
+			OldStart: 1, OldLines: 1, NewStart: 1, NewLines: 2,
+			Lines: []string{"+new line", " existing"},
+		}},
+	}
 
 	newApp := func() *AppModel {
 		sess := session.New(session.DefaultConfig(), "/tmp")
@@ -3708,62 +3712,60 @@ func TestParity_HandleToolResultDiffPath(t *testing.T) {
 		return app
 	}
 
-	// -- Behavior 1+4+5: diff content, empty streamingText → +1 message --
+	// -- Behavior 1+4+5: structured result, empty streamingText → +1 message --
 	t.Run("diff-empty-streaming", func(t *testing.T) {
 		app := newApp()
 		before := app.conversation.MessageCount()
-		app.Update(ToolResultMsg{ToolUseID: "t1", Content: diffContent, IsError: false})
+		app.Update(ToolResultMsg{ToolUseID: "t1", Content: diffContent, IsError: false, Display: diffDisplay})
 		after := app.conversation.MessageCount()
 		if after-before != 1 {
-			t.Errorf("diff path with empty streaming should add 1 message, got delta=%d",
+			t.Errorf("Display path with empty streaming should add 1 message, got delta=%d",
 				after-before)
 		}
-		// streamingText must be reset.
 		if app.streamingText.Len() != 0 {
-			t.Errorf("streamingText must be empty after diff path, len=%d", app.streamingText.Len())
+			t.Errorf("streamingText must be empty after Display path, len=%d", app.streamingText.Len())
 		}
 	})
 
-	// -- Behavior 3: diff content, non-empty streamingText → +2 messages --
+	// -- Behavior 3: structured result, non-empty streamingText → +2 messages --
 	t.Run("diff-with-streaming", func(t *testing.T) {
 		app := newApp()
 		app.streamingText.WriteString("partial response")
 		before := app.conversation.MessageCount()
-		app.Update(ToolResultMsg{ToolUseID: "t1", Content: diffContent, IsError: false})
+		app.Update(ToolResultMsg{ToolUseID: "t1", Content: diffContent, IsError: false, Display: diffDisplay})
 		after := app.conversation.MessageCount()
 		if after-before != 2 {
-			t.Errorf("diff path with streaming should add 2 messages (assistant+tool_result), got delta=%d",
+			t.Errorf("Display path with streaming should add 2 messages (assistant+tool_result), got delta=%d",
 				after-before)
 		}
 		if app.streamingText.Len() != 0 {
-			t.Error("streamingText must be reset after diff path")
+			t.Error("streamingText must be reset after Display path")
 		}
 	})
 
-	// -- Behavior 2: non-diff plain content takes normal path → NO new message --
+	// -- Behavior 2: no Display takes normal path → NO new message --
 	t.Run("non-diff-normal-path", func(t *testing.T) {
 		app := newApp()
 		before := app.conversation.MessageCount()
 		app.Update(ToolResultMsg{ToolUseID: "t1", Content: "just some plain output", IsError: false})
 		after := app.conversation.MessageCount()
 		if after != before {
-			t.Errorf("non-diff content must NOT add a message, delta=%d", after-before)
+			t.Errorf("result without Display must NOT add a message, delta=%d", after-before)
 		}
-		// streamingText should have the ✓ indicator.
 		s := app.streamingText.String()
 		if !strings.Contains(s, "✓") || !strings.Contains(s, "Edit") {
-			t.Errorf("non-diff path should append '✓ Edit' to streamingText, got %q", s)
+			t.Errorf("normal path should append '✓ Edit' to streamingText, got %q", s)
 		}
 	})
 
-	// -- Behavior 6: diff-looking content with IsError=true → error path --
+	// -- Behavior 6: Display + IsError=true → error path --
 	t.Run("diff-content-but-error-flag", func(t *testing.T) {
 		app := newApp()
 		before := app.conversation.MessageCount()
-		app.Update(ToolResultMsg{ToolUseID: "t1", Content: diffContent, IsError: true})
+		app.Update(ToolResultMsg{ToolUseID: "t1", Content: diffContent, IsError: true, Display: diffDisplay})
 		after := app.conversation.MessageCount()
 		if after != before {
-			t.Errorf("IsError=true must take error path, NOT diff path; delta=%d", after-before)
+			t.Errorf("IsError=true must take error path; delta=%d", after-before)
 		}
 		s := app.streamingText.String()
 		if !strings.Contains(s, "✗") {
@@ -3771,40 +3773,13 @@ func TestParity_HandleToolResultDiffPath(t *testing.T) {
 		}
 	})
 
-	// -- Behavior 7: "--- a/" without "@@" → normal path --
-	t.Run("missing-hunk-marker", func(t *testing.T) {
-		app := newApp()
-		before := app.conversation.MessageCount()
-		content := "--- a/file.go\n+++ b/file.go\n(no hunk header here)"
-		app.Update(ToolResultMsg{ToolUseID: "t1", Content: content, IsError: false})
-		after := app.conversation.MessageCount()
-		if after != before {
-			t.Errorf("content missing @@ must take normal path; delta=%d", after-before)
-		}
-	})
-
-	// -- Behavior 8: "@@" without "--- a/" → normal path --
-	t.Run("missing-file-marker", func(t *testing.T) {
-		app := newApp()
-		before := app.conversation.MessageCount()
-		content := "@@ -1 +1 @@\n-old\n+new"
-		app.Update(ToolResultMsg{ToolUseID: "t1", Content: content, IsError: false})
-		after := app.conversation.MessageCount()
-		if after != before {
-			t.Errorf("content missing --- a/ must take normal path; delta=%d", after-before)
-		}
-	})
-
-	// -- Behavior 1 (content integrity): the added message carries the exact
-	// diff content and role=User --
+	// -- Behavior 1 (render fidelity): the structured patch renders its content --
 	t.Run("message-fidelity", func(t *testing.T) {
 		app := newApp()
-		app.Update(ToolResultMsg{ToolUseID: "t1", Content: diffContent, IsError: false})
-		// View the rendered conversation and verify the diff content is there.
+		app.Update(ToolResultMsg{ToolUseID: "t1", Content: diffContent, IsError: false, Display: diffDisplay})
 		v := strip(app.View().Content)
-		// The diff's distinctive content markers should appear in view.
 		if !strings.Contains(v, "new line") {
-			t.Errorf("diff tool_result message should render added line content, got:\n%s", v)
+			t.Errorf("structured diff message should render added line content, got:\n%s", v)
 		}
 	})
 }

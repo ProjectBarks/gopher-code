@@ -26,6 +26,7 @@ type QueryEvent struct {
 	OutputTokens  int                 // Usage
 	CacheCreation *int                // Usage
 	CacheRead     *int                // Usage
+	Display       any                 // ToolResult: optional structured UI payload (e.g. DiffDisplay)
 }
 
 // EventCallback is the function signature for streaming query events.

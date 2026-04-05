@@ -7,6 +7,7 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/projectbarks/gopher-code/pkg/message"
+	"github.com/projectbarks/gopher-code/pkg/tools"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
 
@@ -232,13 +233,12 @@ func (mb *MessageBubble) renderToolResultBlock(block message.ContentBlock) strin
 		return connectorStyle.Render(ResponseConnector) + errorStyle.Render(errMsg)
 	}
 
-	// If the result embeds a unified diff (from Edit/Write), render it with
-	// red/green colored lines instead of as plain truncated text.
-	if diffIdx := strings.Index(content, "--- a/"); diffIdx >= 0 &&
-		strings.Contains(content[diffIdx:], "@@") {
-		header := strings.TrimRight(content[:diffIdx], "\n")
-		diffText := content[diffIdx:]
-		return mb.renderDiffResult(header, diffText, cs)
+	// If the tool attached a structured display payload, dispatch on its type.
+	if block.Display != nil {
+		switch d := block.Display.(type) {
+		case tools.DiffDisplay:
+			return mb.renderDiffDisplay(content, d, cs)
+		}
 	}
 
 	// Successful result: show with "  └ " connector
@@ -273,9 +273,9 @@ func (mb *MessageBubble) renderToolResultBlock(block message.ContentBlock) strin
 }
 
 // renderDiffResult renders a colored unified-diff block from an edit/write
-// tool result. `header` is the "Edited /path" prefix line; `diffText` is
-// the unified-diff body starting with "--- a/".
-func (mb *MessageBubble) renderDiffResult(header, diffText string, cs theme.ColorScheme) string {
+// tool result. `header` is the summary line (e.g. "Edited /path"); `disp`
+// is the structured patch attached by the tool.
+func (mb *MessageBubble) renderDiffDisplay(header string, disp tools.DiffDisplay, cs theme.ColorScheme) string {
 	connectorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(cs.TextSecondary))
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(cs.TextSecondary))
 	addedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(cs.DiffAdded))
@@ -283,15 +283,19 @@ func (mb *MessageBubble) renderDiffResult(header, diffText string, cs theme.Colo
 	hunkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(cs.Info))
 	contextStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(cs.TextSecondary))
 
-	diffLines := parseDiffLines(diffText)
-
+	// Count additions/removals across all hunks for the summary badge.
 	var added, removed int
-	for _, dl := range diffLines {
-		switch dl.Type {
-		case DiffAdded:
-			added++
-		case DiffRemoved:
-			removed++
+	for _, h := range disp.Hunks {
+		for _, line := range h.Lines {
+			if len(line) == 0 {
+				continue
+			}
+			switch line[0] {
+			case '+':
+				added++
+			case '-':
+				removed++
+			}
 		}
 	}
 
@@ -306,25 +310,31 @@ func (mb *MessageBubble) renderDiffResult(header, diffText string, cs theme.Colo
 		out = append(out, line)
 	}
 
-	for _, dl := range diffLines {
-		if dl.Type == DiffHeader {
-			if strings.HasPrefix(dl.Content, "---") || strings.HasPrefix(dl.Content, "+++") {
-				continue // path is already in the header line
+	for _, h := range disp.Hunks {
+		out = append(out, connectorStyle.Render(ResponseContinuation)+
+			hunkStyle.Render(fmt.Sprintf("@@ -%d,%d +%d,%d @@",
+				h.OldStart, h.OldLines, h.NewStart, h.NewLines)))
+		oldLn, newLn := h.OldStart, h.NewStart
+		for _, line := range h.Lines {
+			if len(line) == 0 {
+				continue
 			}
-			out = append(out,
-				connectorStyle.Render(ResponseContinuation)+hunkStyle.Render(dl.Content))
-			continue
+			marker, body := line[0], line[1:]
+			var rendered string
+			switch marker {
+			case '+':
+				rendered = addedStyle.Render(fmt.Sprintf("%4d + %s", newLn, body))
+				newLn++
+			case '-':
+				rendered = removedStyle.Render(fmt.Sprintf("%4d - %s", oldLn, body))
+				oldLn++
+			default:
+				rendered = contextStyle.Render(fmt.Sprintf("%4d   %s", newLn, body))
+				oldLn++
+				newLn++
+			}
+			out = append(out, connectorStyle.Render(ResponseContinuation)+rendered)
 		}
-		var rendered string
-		switch dl.Type {
-		case DiffAdded:
-			rendered = addedStyle.Render(fmt.Sprintf("%4d + %s", dl.NewNum, dl.Content))
-		case DiffRemoved:
-			rendered = removedStyle.Render(fmt.Sprintf("%4d - %s", dl.OldNum, dl.Content))
-		default:
-			rendered = contextStyle.Render(fmt.Sprintf("%4d   %s", dl.NewNum, dl.Content))
-		}
-		out = append(out, connectorStyle.Render(ResponseContinuation)+rendered)
 	}
 	return strings.Join(out, "\n")
 }

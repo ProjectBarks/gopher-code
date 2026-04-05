@@ -423,12 +423,15 @@ func Query(
 		var resultBlocks []message.ContentBlock
 		for _, r := range results {
 			content := microCompact(r.Output.Content)
-			resultBlocks = append(resultBlocks, message.ToolResultBlock(r.ToolUseID, content, r.Output.IsError))
+			block := message.ToolResultBlock(r.ToolUseID, content, r.Output.IsError)
+			block.Display = r.Output.Display
+			resultBlocks = append(resultBlocks, block)
 			emit(onEvent, QueryEvent{
 				Type:      QEventToolResult,
 				ToolUseID: r.ToolUseID,
 				Content:   content,
 				IsError:   r.Output.IsError,
+				Display:   r.Output.Display,
 			})
 		}
 		sess.PushMessage(message.Message{Role: message.RoleUser, Content: resultBlocks})

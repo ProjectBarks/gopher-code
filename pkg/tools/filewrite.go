@@ -89,9 +89,9 @@ func (f *FileWriteTool) Execute(_ context.Context, tc *ToolContext, input json.R
 		tc.ReadFileState.Record(path, in.Content, false)
 	}
 
-	diff := BuildUnifiedDiff(oldContent, in.Content, path)
-	if diff == "" {
-		return SuccessOutput(fmt.Sprintf("Wrote %s", path)), nil
+	out := SuccessOutput(fmt.Sprintf("Wrote %s", path))
+	if hunks := ComputeDiffHunks(oldContent, in.Content); len(hunks) > 0 {
+		out.Display = DiffDisplay{FilePath: path, Hunks: hunks}
 	}
-	return SuccessOutput(fmt.Sprintf("Wrote %s\n%s", path, diff)), nil
+	return out, nil
 }

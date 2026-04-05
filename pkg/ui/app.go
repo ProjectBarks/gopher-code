@@ -39,6 +39,7 @@ type ToolResultMsg struct {
 	ToolUseID string
 	Content   string
 	IsError   bool
+	Display   any // optional structured payload (e.g. tools.DiffDisplay)
 }
 
 // TurnCompleteMsg signals the model has finished its turn.
@@ -537,6 +538,7 @@ func (a *AppModel) handleQueryEvent(msg QueryEventMsg) (*AppModel, tea.Cmd) {
 			ToolUseID: evt.ToolUseID,
 			Content:   evt.Content,
 			IsError:   evt.IsError,
+			Display:   evt.Display,
 		})
 	case query.QEventTurnComplete:
 		return a.handleTurnComplete(TurnCompleteMsg{StopReason: evt.StopReason})
@@ -595,11 +597,11 @@ func (a *AppModel) handleToolResult(msg ToolResultMsg) (*AppModel, tea.Cmd) {
 	toolName := a.activeToolCalls[msg.ToolUseID]
 	delete(a.activeToolCalls, msg.ToolUseID)
 
-	// If the result carries a unified diff (Edit/Write tools), finalize any
-	// in-flight streaming text and add the tool_result as its own message so
-	// renderToolResultBlock can render it as a colored diff.
-	if !msg.IsError && strings.Contains(msg.Content, "--- a/") &&
-		strings.Contains(msg.Content, "@@") {
+	// If the tool attached a structured Display payload (e.g. a diff from
+	// Edit/Write), finalize any in-flight streaming text and add the
+	// tool_result as its own conversation message so the MessageBubble
+	// renderer can draw the rich block.
+	if !msg.IsError && msg.Display != nil {
 		if a.streamingText.Len() > 0 {
 			assistantMsg := message.Message{
 				Role: message.RoleAssistant,
@@ -618,6 +620,7 @@ func (a *AppModel) handleToolResult(msg ToolResultMsg) (*AppModel, tea.Cmd) {
 				ToolUseID: msg.ToolUseID,
 				Content:   msg.Content,
 				IsError:   false,
+				Display:   msg.Display,
 			}},
 		}
 		a.conversation.AddMessage(resultMsg)
