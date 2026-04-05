@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -3457,6 +3458,100 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 				t.Errorf("Result: expected %v, got %v", tc.expected, respMsg.Result)
 			}
 		})
+	}
+}
+
+// TestParity_ToolUseBlockInputThreshold validates the 200-char threshold
+// rule in MessageBubble.renderToolUseBlock that decides whether to display
+// the tool's input JSON below its header or not.
+//
+// Unique behaviors (B9 tests tool_result truncation; B32 tests thinking
+// truncation; neither covers tool_use input threshold):
+//  1. Empty Input → header-only output (no second line).
+//  2. Non-empty Input shorter than 200 bytes → header + "\n  " + input.
+//  3. Input == 199 bytes (just-below threshold) → input SHOWN.
+//  4. Input == 200 bytes (at-threshold) → input HIDDEN (strict < 200).
+//  5. Input > 200 bytes → input HIDDEN.
+//  6. The tool block.Name is always rendered in the header regardless of
+//     input size.
+//  7. Input bytes are rendered verbatim (no escaping/truncation) when shown.
+//
+// Cross-ref: message_bubble.go:204-209 — `if len(block.Input) > 0 && <200`
+// Cross-ref: Claude Code src/components/messages/AssistantToolUseMessage —
+// similar abbreviation rule for large tool inputs.
+func TestParity_ToolUseBlockInputThreshold(t *testing.T) {
+	mb := components.NewMessageBubble(theme.Current(), 80)
+
+	renderInput := func(input string) string {
+		return strip(mb.RenderContent(message.ContentBlock{
+			Type:  message.ContentToolUse,
+			Name:  "Bash",
+			Input: json.RawMessage(input),
+		}))
+	}
+
+	// -- Behavior 1: empty input → header only (no newline/body) --
+	empty := renderInput("")
+	if strings.Contains(empty, "\n") {
+		t.Errorf("empty input should render a single header line, got:\n%s", empty)
+	}
+	if !strings.Contains(empty, "Bash") {
+		t.Errorf("empty-input header must contain tool name 'Bash', got: %q", empty)
+	}
+
+	// -- Behavior 2: short input (<200) → header + body --
+	shortInput := `{"cmd":"ls -la"}`
+	short := renderInput(shortInput)
+	if !strings.Contains(short, shortInput) {
+		t.Errorf("short input should be rendered verbatim, want %q in:\n%s", shortInput, short)
+	}
+	if !strings.Contains(short, "\n") {
+		t.Errorf("short input should produce TWO lines (header+body), got:\n%s", short)
+	}
+	if !strings.Contains(short, "Bash") {
+		t.Error("short-input header must still contain tool name")
+	}
+
+	// -- Behavior 3: input == 199 bytes → SHOWN --
+	input199 := `{"data":"` + strings.Repeat("a", 199-11) + `"}`
+	if len(input199) != 199 {
+		t.Fatalf("setup: want 199 bytes, got %d", len(input199))
+	}
+	out199 := renderInput(input199)
+	if !strings.Contains(out199, "aaaaaaaa") {
+		t.Errorf("199-byte input should be shown (just below threshold), got:\n%s", out199)
+	}
+
+	// -- Behavior 4: input == 200 bytes → HIDDEN (strict <) --
+	input200 := `{"data":"` + strings.Repeat("a", 200-11) + `"}`
+	if len(input200) != 200 {
+		t.Fatalf("setup: want 200 bytes, got %d", len(input200))
+	}
+	out200 := renderInput(input200)
+	if strings.Contains(out200, "aaaaaaaa") {
+		t.Errorf("200-byte input should be HIDDEN at threshold, got:\n%s", out200)
+	}
+	// But tool name must still render
+	if !strings.Contains(out200, "Bash") {
+		t.Error("200-byte input should still render the tool name header")
+	}
+	// Output should be a single header line (no newline)
+	if strings.Contains(out200, "\n") {
+		t.Errorf("hidden-input output should be single-line, got:\n%s", out200)
+	}
+
+	// -- Behavior 5: input > 200 → HIDDEN --
+	inputHuge := `{"x":"` + strings.Repeat("x", 500) + `"}`
+	outHuge := renderInput(inputHuge)
+	if strings.Contains(outHuge, "xxxxxx") {
+		t.Errorf("huge input should be HIDDEN, got:\n%s", outHuge)
+	}
+
+	// -- Behavior 7: content rendered verbatim when shown --
+	verbatim := `{"k":"v&<>\"quoted\""}`
+	outVerbatim := renderInput(verbatim)
+	if !strings.Contains(outVerbatim, `v&<>\"quoted\"`) {
+		t.Errorf("special chars must render verbatim, got:\n%s", outVerbatim)
 	}
 }
 
