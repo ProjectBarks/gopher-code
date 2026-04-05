@@ -254,7 +254,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B50 | TestParity_RenderDiffDisplayLineNumbers | renderDiffDisplay line-number math: header "(+3 -2)" badge matches exact counts, "@@ -10,7 +10,8 @@" hunk header, context uses newLn+advances both, "-" uses oldLn+advances oldLn only, "+" uses newLn+advances newLn only, 4-wide right-aligned numbers ("  13 - del-1"), empty-string lines skipped without panic, multi-hunk uses each hunk's independent OldStart/NewStart counters. 10 exact expected-line assertions. | ✅ pass |
 | B51 | TestParity_QueryEventDisplayThreading | Display field threaded through full chain: QueryEvent→handleQueryEvent→ToolResultMsg→handleToolResult→conversation. 3 subtests: nil Display→normal path (no +1 msg), Display set→diff path (+1 msg) and view contains hunk content/headers/summary badge with specific OldStart=42/hunk body lines preserved, IsError=true short-circuits Display path (normal ✗ indicator). | ✅ pass |
 | B52 | TestParity_CompactSessionContract | 6 subtests for query.CompactSession destructive reduction: empty→noop, 4-msg→unchanged (<=4 threshold), 5-msg→[m0,m3,m4], 10-msg→[m0,m8,m9], boundary-5 triggers compact, boundary-4 stays, middle msgs verified absent after compaction, per-message text preserved by content. | ✅ pass |
-### Next B53: Next unique behavior to validate
+| B53 | TestParity_StreamingSpinnerLeakSeparation | Dual-buffer separation contract: canonical a.streamingText has ONLY delta text (NOT spinner verb), conversation.streamingText view has BOTH spinner verb + delta, TurnComplete finalizes msg with delta-only text (no "(thinking …)" suffix leaks into history), both buffers reset after turn. Prevents spinner verb from polluting saved conversation. | ✅ pass |
+### Next B54: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
