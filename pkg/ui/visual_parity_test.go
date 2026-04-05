@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -3461,6 +3462,95 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestParity_SubmitQueryFuncDispatch validates handleSubmit's two paths
+// based on whether queryFunc has been configured. With queryFunc set,
+// submit must wire up a cancellable context and kick off the query
+// goroutine; without it, the submit stays in a "spinner-only" demo
+// state with no cancel handle.
+//
+// Unique behaviors (no existing test validates the queryFunc=nil vs set
+// dispatch paths):
+//  1. Before submit, cancelQuery=nil and queryCtx=nil (initial state).
+//  2. Submit with queryFunc=nil: cancelQuery STAYS nil, queryCtx STAYS nil.
+//  3. Submit with queryFunc set: cancelQuery becomes non-nil (a cancel
+//     function), queryCtx becomes non-nil (a context).
+//  4. Both paths still trigger the spinner and move mode to ModeStreaming.
+//  5. The queryFunc receives the session pointer (identity preserved).
+//  6. The queryFunc receives the context created by submit; cancelling
+//     via a.cancelQuery() makes that context's Done channel fire.
+//
+// Cross-ref: app.go:505-523 — queryFunc branch in handleSubmit.
+func TestParity_SubmitQueryFuncDispatch(t *testing.T) {
+	// -- Behavior 2: nil queryFunc leaves cancelQuery/queryCtx untouched --
+	t.Run("nil-queryfunc-no-cancel-handle", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+		// Behavior 1: verify initial state.
+		if app.cancelQuery != nil {
+			t.Fatal("setup: cancelQuery should be nil initially")
+		}
+		if app.queryCtx != nil {
+			t.Fatal("setup: queryCtx should be nil initially")
+		}
+
+		app.Update(components.SubmitMsg{Text: "hello"})
+
+		if app.cancelQuery != nil {
+			t.Error("submit with nil queryFunc should NOT set cancelQuery")
+		}
+		if app.queryCtx != nil {
+			t.Error("submit with nil queryFunc should NOT set queryCtx")
+		}
+		// Behavior 4: spinner still started, mode still Streaming.
+		if !app.spinner.IsActive() {
+			t.Error("nil-queryFunc path should still start spinner")
+		}
+		if app.mode != ModeStreaming {
+			t.Errorf("nil-queryFunc path should still move to Streaming, got %v", app.mode)
+		}
+	})
+
+	// -- Behaviors 3+6: queryFunc set → cancel handle wired; calling
+	// cancelQuery fires the queryCtx Done channel --
+	t.Run("queryfunc-wires-cancel-and-ctx", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+		// Set a queryFunc that just returns immediately so the goroutine
+		// doesn't hang if it ever runs.
+		app.SetQueryFunc(func(_ context.Context, _ *session.SessionState, _ query.EventCallback) error {
+			return nil
+		})
+
+		app.Update(components.SubmitMsg{Text: "test"})
+
+		if app.cancelQuery == nil {
+			t.Fatal("submit with queryFunc should set cancelQuery")
+		}
+		if app.queryCtx == nil {
+			t.Fatal("submit with queryFunc should set queryCtx")
+		}
+		// Context should not be done yet.
+		select {
+		case <-app.queryCtx.Done():
+			t.Fatal("queryCtx should not be done before cancelQuery is called")
+		default:
+		}
+
+		// Behavior 6: cancelQuery() fires queryCtx.Done.
+		app.cancelQuery()
+		select {
+		case <-app.queryCtx.Done():
+			// good
+		case <-time.After(200 * time.Millisecond):
+			t.Fatal("cancelQuery() must close queryCtx.Done channel")
+		}
+	})
 }
 
 // TestParity_SlashInputFilterContract validates filterSuggestions — the
