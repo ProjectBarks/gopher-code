@@ -3460,6 +3460,89 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_AppEscapeBranchPriority validates the priority ordering of the
+// three Escape handler branches in app.handleKey:
+//   (branch A) modal active → PopModal
+//   (branch B) mode != Idle && cancelQuery != nil → cancelQuery()
+//   (branch C) fall through → route to focused component
+//
+// The priority matters: when BOTH a modal is active AND a query is running,
+// Escape must only pop the modal and MUST NOT cancel the query. Otherwise a
+// user dismissing a dialog would accidentally kill their turn.
+//
+// Unique behaviors (B5 tests cancel-query flow; B24 tests FocusManager in
+// isolation; neither tests the app-level branch priority):
+//  1. Modal active + streaming → Escape pops modal AND cancelQuery is NOT
+//     called (query keeps running).
+//  2. After PopModal empties the stack, a second Escape falls through to
+//     the cancelQuery branch and DOES cancel the query.
+//  3. No modal + idle → Escape routes to focused component (no cancel).
+//  4. PopModal restores modal count to 0 (single-modal case).
+//
+// Cross-ref: app.go:387-395 — the two-tier Escape handler.
+func TestParity_AppEscapeBranchPriority(t *testing.T) {
+	config := session.DefaultConfig()
+	sess := session.New(config, "/tmp")
+	app := NewAppModel(sess, nil)
+	app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// Wire up a fake cancel-query function that flips a flag when invoked.
+	cancelCalled := 0
+	app.mode = ModeStreaming
+	app.cancelQuery = func() { cancelCalled++ }
+
+	// Push a modal.
+	modal := &trackingFocusable{name: "modal"}
+	app.focus.PushModal(modal)
+	if !app.focus.ModalActive() {
+		t.Fatal("setup: ModalActive should be true after PushModal")
+	}
+
+	// -- Behavior 1: Escape with modal+streaming pops modal, does NOT cancel --
+	app.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if app.focus.ModalActive() {
+		t.Errorf("first Escape should PopModal, ModalActive still true")
+	}
+	if cancelCalled != 0 {
+		t.Errorf("first Escape (modal branch) MUST NOT call cancelQuery, called=%d", cancelCalled)
+	}
+	// mode must remain ModeStreaming — modal pop doesn't touch streaming state.
+	if app.mode != ModeStreaming {
+		t.Errorf("modal-pop Escape must not change mode, got %v", app.mode)
+	}
+	// cancelQuery closure must still be present (not cleared by modal-pop).
+	if app.cancelQuery == nil {
+		t.Error("modal-pop Escape must not clear cancelQuery")
+	}
+
+	// -- Behavior 2: second Escape (no modal, still streaming) cancels --
+	app.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cancelCalled != 1 {
+		t.Errorf("second Escape must fall through to cancelQuery, called=%d", cancelCalled)
+	}
+
+	// -- Behavior 3: Escape with no modal + idle mode → routes through focus --
+	// Rebuild state: clear modal stack, reset mode to Idle, nil cancelQuery.
+	app2 := NewAppModel(sess, nil)
+	app2.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	if app2.mode != ModeIdle {
+		t.Fatalf("setup: app2 should start in ModeIdle, got %v", app2.mode)
+	}
+	if app2.focus.ModalActive() {
+		t.Fatal("setup: app2 should have no modal")
+	}
+	// With no modal, no streaming, no cancelQuery — Escape must not panic and
+	// must not change mode. It falls through to focus.Route() which delegates
+	// to the focused child (input pane in this case).
+	_, _ = app2.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if app2.mode != ModeIdle {
+		t.Errorf("idle Escape must leave mode idle, got %v", app2.mode)
+	}
+	if app2.focus.ModalActive() {
+		t.Error("idle Escape must not create a modal")
+	}
+}
+
 // TestParity_InputKillToEndAndPaste validates two readline behaviors the
 // existing input tests don't cover:
 //

@@ -243,7 +243,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B39 | TestParity_DiffParserLineNumbering | **FOUND BUG**: hunk header `newLine` parsed as 0 because `fmt.Sscanf "@@ %*s +%d"` returned "bad verb '%*'" error silently. Test asserts counter seeding (5→old,10→new), proper increments (+lines→new only, -lines→old only, context→both), prefix stripping, empty-line drop, ordering preserved, file headers untouched. **Fixed** with `parseHunkStart()` helper in diff.go. | ✅ pass |
 | B40 | TestParity_ThinkingBudgetEffortMapping | 8 subtests covering boundaries: >=30000→◉, >=15000→●, >=5000→◐, <5000→○ plus exact-threshold values AND 29999/14999/4999/0 edge cases. Each case asserts other 3 glyphs absent (mapping mis-land tripwire). Separate case for ThinkingEnabled=false showing bare "(thinking)" no glyph. | ✅ pass |
 | B41 | TestParity_InputKillToEndAndPaste | 5 subtests: Ctrl+K at end=no-op, Ctrl+K at 0 clears, Ctrl+K middle cuts suffix+preserves cursor, multi-char paste splices at cursor and advances by rune-count, Unicode paste advances by RUNE count not byte count (verified via rune-boundary insertion between 日/本). | ✅ pass |
-### Next B42: Next unique behavior to validate
+| B42 | TestParity_AppEscapeBranchPriority | App-level Escape handler branch priority: modal+streaming→PopModal-only (cancelQuery NOT invoked, mode unchanged); second Escape after modal cleared falls through to cancelQuery; idle+no-modal Escape routes through focus without touching mode or pushing modal. Prevents user from accidentally killing query when dismissing dialog. | ✅ pass |
+### Next B43: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
