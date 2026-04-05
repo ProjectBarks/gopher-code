@@ -3460,6 +3460,142 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_DiffParserLineNumbering validates the unified-diff parser's
+// line-number accounting and content stripping. The existing diff_test.go
+// only checks "at least one line of each type exists" — this validates the
+// actual math that would break a real diff display.
+//
+// Unique behaviors (no existing test verifies line numbers or content):
+//  1. Empty input lines are dropped entirely (not in the output slice).
+//  2. "@@ -OLD,n +NEW,m @@" seeds the counters: oldLine=OLD, newLine=NEW.
+//  3. After hunk header, an added line ("+foo") gets NewNum=NEW+1 and
+//     OldNum=0 (counter untouched), while prefix "+" is stripped.
+//  4. After hunk header, a removed line ("-bar") gets OldNum=OLD+1 and
+//     NewNum=0 (counter untouched), prefix "-" stripped.
+//  5. Context lines (" baz") increment BOTH counters and have their leading
+//     single space stripped from Content.
+//  6. Mixed sequences preserve ordering: output[i].Type reflects input[i]
+//     after empty-line filtering.
+//  7. "---" and "+++" file-header prefixes produce DiffHeader lines and do
+//     NOT participate in line-number counting.
+//
+// Cross-ref: diff.go:193-227 parseDiffLines — would break if any handler
+// arm forgot to increment/strip, or incremented the wrong counter.
+// Cross-ref: Claude Code src/components/diff/Diff.tsx — same unified format.
+func TestParity_DiffParserLineNumbering(t *testing.T) {
+	// A canonical unified diff snippet exercising all 5 line kinds:
+	// file header, hunk header, context, add, remove, context.
+	diffText := strings.Join([]string{
+		"--- a/main.go",
+		"+++ b/main.go",
+		"@@ -5,3 +10,4 @@",
+		" context-line-A", // context → old=6,new=11
+		"-removed-line",   // remove  → old=7
+		"+added-line-1",   // add     → new=12
+		"+added-line-2",   // add     → new=13
+		"",                // empty → dropped
+		" context-line-B", // context → old=8,new=14
+	}, "\n")
+
+	dv := components.NewDiffViewer(theme.Current())
+	dv.SetDiff(diffText)
+	lines := dv.Lines()
+
+	// -- Behavior 1: empty line dropped → 8 entries (not 9) --
+	// file-header ×2 + hunk ×1 + context ×1 + remove ×1 + add ×2 + context ×1 = 8
+	if len(lines) != 8 {
+		t.Fatalf("expected 8 parsed lines (empty dropped), got %d: %+v", len(lines), lines)
+	}
+
+	// -- Behavior 7: file headers are DiffHeader with 0 line numbers --
+	if lines[0].Type != components.DiffHeader || lines[0].Content != "--- a/main.go" {
+		t.Errorf("lines[0] should be file-header '---', got type=%v content=%q",
+			lines[0].Type, lines[0].Content)
+	}
+	if lines[1].Type != components.DiffHeader || lines[1].Content != "+++ b/main.go" {
+		t.Errorf("lines[1] should be file-header '+++', got type=%v content=%q",
+			lines[1].Type, lines[1].Content)
+	}
+
+	// -- Behavior 2: hunk header seeds counters to 5 & 10 (not incremented) --
+	if lines[2].Type != components.DiffHeader {
+		t.Errorf("lines[2] should be hunk DiffHeader, got %v", lines[2].Type)
+	}
+	if !strings.HasPrefix(lines[2].Content, "@@") {
+		t.Errorf("hunk header Content should start with @@, got %q", lines[2].Content)
+	}
+
+	// -- Behavior 5: context line after hunk → OldNum=6, NewNum=11, stripped --
+	ctxA := lines[3]
+	if ctxA.Type != components.DiffContext {
+		t.Errorf("lines[3] should be DiffContext, got %v", ctxA.Type)
+	}
+	if ctxA.OldNum != 6 || ctxA.NewNum != 11 {
+		t.Errorf("first context line numbers: want OldNum=6,NewNum=11, got OldNum=%d,NewNum=%d",
+			ctxA.OldNum, ctxA.NewNum)
+	}
+	if ctxA.Content != "context-line-A" {
+		t.Errorf("context Content should have leading space stripped, got %q", ctxA.Content)
+	}
+
+	// -- Behavior 4: removed line → OldNum=7, NewNum=0, prefix stripped --
+	rem := lines[4]
+	if rem.Type != components.DiffRemoved {
+		t.Errorf("lines[4] should be DiffRemoved, got %v", rem.Type)
+	}
+	if rem.OldNum != 7 {
+		t.Errorf("removed OldNum: want 7, got %d", rem.OldNum)
+	}
+	if rem.NewNum != 0 {
+		t.Errorf("removed NewNum must be 0 (unchanged counter), got %d", rem.NewNum)
+	}
+	if rem.Content != "removed-line" {
+		t.Errorf("removed Content should drop the '-' prefix, got %q", rem.Content)
+	}
+
+	// -- Behavior 3: added lines → NewNum=12 then 13, OldNum=0 --
+	add1 := lines[5]
+	if add1.Type != components.DiffAdded {
+		t.Errorf("lines[5] should be DiffAdded, got %v", add1.Type)
+	}
+	if add1.NewNum != 12 || add1.OldNum != 0 {
+		t.Errorf("added-1 numbers: want NewNum=12,OldNum=0, got NewNum=%d,OldNum=%d",
+			add1.NewNum, add1.OldNum)
+	}
+	if add1.Content != "added-line-1" {
+		t.Errorf("added-1 Content should drop '+' prefix, got %q", add1.Content)
+	}
+	add2 := lines[6]
+	if add2.NewNum != 13 {
+		t.Errorf("added-2 NewNum: want 13, got %d", add2.NewNum)
+	}
+	if add2.Content != "added-line-2" {
+		t.Errorf("added-2 Content: want %q, got %q", "added-line-2", add2.Content)
+	}
+
+	// -- Behavior 5 (cont): second context line → OldNum=8,NewNum=14 --
+	// +2 from 2 added lines applied to newLine, +1 from removed applied to oldLine,
+	// +1 context before, so: oldLine = 5+1+1+1 = 8; newLine = 10+1+2+1 = 14.
+	ctxB := lines[7]
+	if ctxB.OldNum != 8 || ctxB.NewNum != 14 {
+		t.Errorf("second context line numbers: want OldNum=8,NewNum=14, got OldNum=%d,NewNum=%d",
+			ctxB.OldNum, ctxB.NewNum)
+	}
+
+	// -- Behavior 6: ordering preserved (the per-index asserts above already
+	// prove this, but verify the types-in-order sequence as a tripwire) --
+	wantTypes := []components.DiffLineType{
+		components.DiffHeader, components.DiffHeader, components.DiffHeader,
+		components.DiffContext, components.DiffRemoved,
+		components.DiffAdded, components.DiffAdded, components.DiffContext,
+	}
+	for i, want := range wantTypes {
+		if lines[i].Type != want {
+			t.Errorf("lines[%d].Type: want %v, got %v", i, want, lines[i].Type)
+		}
+	}
+}
+
 // TestParity_SlashCommandAutocompleteFlow validates the SlashCommandInput full
 // user interaction: activate on "/", filter-as-you-type, navigate suggestions
 // with Up/Down (with clamping), select with Enter/Tab, dismiss with Escape,

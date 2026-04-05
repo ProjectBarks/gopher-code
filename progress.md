@@ -240,7 +240,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B36 | TestParity_DispatcherDefaultCommands | 7 default slash commands produce correct msg types (/model→ModelSwitchMsg, /session→SessionSwitchMsg, /clear→ClearConversationMsg, /help→ShowHelpMsg, /quit→QuitMsg, /compact→CompactMsg, /thinking→ThinkingToggleMsg), HasHandler and Commands() listing | ✅ pass |
 | B37 | TestParity_ConversationViewportWindowing | viewport returns exactly height lines as tail-slice; scrollOffset shifts window backward by exact line count; scroll-up clamps at viewStart=0 without panic; scroll-down restores identical tail view | ✅ pass |
 | B38 | TestParity_SlashCommandAutocompleteFlow | Activate/Deactivate toggles active+suggestions; inactive Update is no-op; "/mo" prefix filter, "/h" dual-hit (HasPrefix+fuzzy subseq matches /help AND /thinking); Up/Down clamping (no wrap, no OOB); Enter/Tab both select+deactivate+emit SlashCommandSelectedMsg; Escape deactivates without msg | ✅ pass |
-### Next B39: Next unique behavior to validate
+| B39 | TestParity_DiffParserLineNumbering | **FOUND BUG**: hunk header `newLine` parsed as 0 because `fmt.Sscanf "@@ %*s +%d"` returned "bad verb '%*'" error silently. Test asserts counter seeding (5→old,10→new), proper increments (+lines→new only, -lines→old only, context→both), prefix stripping, empty-line drop, ordering preserved, file headers untouched. **Fixed** with `parseHunkStart()` helper in diff.go. | ✅ pass |
+### Next B40: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
