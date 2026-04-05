@@ -259,7 +259,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B55 | TestParity_SpinnerTickLoopSelfTerminates | App-level SpinnerTickMsg routing: inactive→nil cmd (loop terminates), active→non-nil cmd (loop continues) + frame advances, 5 consecutive active ticks keep returning non-nil, after Stop tick returns nil AND frame stops advancing, after Restart tick returns non-nil again. Prevents tick-loop leak after spinner stops. | ✅ pass |
 | B56 | TestParity_HeaderUpdateMsgPartialFields | 5 subtests for HeaderUpdateMsg partial-update semantics: empty Model/CWD/SessionName preserves existing values (three separate path coverage), all-empty msg is no-op, second non-empty update overwrites previous. Supports "update just one thing" flows without callers reconstructing full state. | ✅ pass |
 | B57 | TestParity_TabToConversationThenScroll | Tab→conversation focus transfer + key routing: after Tab input NOT focused/conversation IS focused, Up arrow routes to conversation scroll (NOT input history—buffer unchanged over 6 Ups), conversation keeps focus after repeated Ups, second Tab cycles back to input, then Up DOES navigate history. Prevents Up-arrow leaking to history nav when user is scrolling conversation. | ✅ pass |
-### Next B58: Next unique behavior to validate
+| B58 | TestParity_AppViewInitializingAndAltScreen | 7 subtests for View() structural contract: pre-resize→"Initializing...", width=0 alone→placeholder, height=0 alone→placeholder, sized view→multi-line + v.AltScreen=true, welcome-visible→first non-space char is ╭ border, welcome-hidden→first line contains "Claude" header (not border), exactly 2 full-width dividers (≥40 ─ chars each) surround input pane. | ✅ pass |
+### Next B59: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)

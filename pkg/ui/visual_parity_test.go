@@ -3463,6 +3463,141 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_AppViewInitializingAndAltScreen validates AppModel.View()'s
+// three structural invariants: the "Initializing..." placeholder before
+// the terminal size arrives, the AltScreen flag being enabled, and the
+// welcome/normal-mode section split.
+//
+// Unique behaviors (no existing test covers the pre-resize placeholder
+// or the AltScreen contract):
+//  1. View() with width=0 → "Initializing..." only; no header/sections.
+//  2. View() with height=0 → "Initializing..." only.
+//  3. View() with width>0 & height>0 returns a multi-line content string
+//     AND sets v.AltScreen=true (TUI alt-screen mode enabled).
+//  4. With showWelcome=true, the first rendered section is the welcome
+//     box (starts with ╭), NOT the header.
+//  5. With showWelcome=false, the first section is the header (contains
+//     "Claude"), NOT a welcome border.
+//  6. The divider char (─) appears TWICE in the view (above AND below
+//     the input pane, per Claude Code's layout).
+//
+// Cross-ref: app.go:292-335 View() structure.
+// Cross-ref: Claude Code ink/ink.tsx → AltScreen buffer.
+func TestParity_AppViewInitializingAndAltScreen(t *testing.T) {
+	// -- Behaviors 1+2: pre-resize placeholder --
+	t.Run("initializing-placeholder", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		app := NewAppModel(sess, nil)
+		// Do NOT send WindowSizeMsg; width=height=0.
+		v := app.View()
+		if v.Content != "Initializing..." {
+			t.Errorf("pre-resize view should be 'Initializing...', got %q", v.Content)
+		}
+		// AltScreen should be the zero value (false) in the placeholder path.
+	})
+
+	// Width=0 alone is enough to trigger placeholder.
+	t.Run("width-zero-still-initializing", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		app := NewAppModel(sess, nil)
+		// Simulate setting only height via a weird WindowSizeMsg.
+		app.Update(tea.WindowSizeMsg{Width: 0, Height: 24})
+		if app.View().Content != "Initializing..." {
+			t.Errorf("width=0 should yield Initializing..., got %q", app.View().Content)
+		}
+	})
+
+	// Height=0 alone is enough.
+	t.Run("height-zero-still-initializing", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 0})
+		if app.View().Content != "Initializing..." {
+			t.Errorf("height=0 should yield Initializing..., got %q", app.View().Content)
+		}
+	})
+
+	// -- Behavior 3: sized → multi-line content + AltScreen=true --
+	t.Run("sized-enables-altscreen", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		v := app.View()
+		if v.Content == "Initializing..." {
+			t.Error("sized view must not show Initializing placeholder")
+		}
+		if !strings.Contains(v.Content, "\n") {
+			t.Error("sized view should be multi-line")
+		}
+		if !v.AltScreen {
+			t.Error("sized view MUST enable AltScreen mode")
+		}
+	})
+
+	// -- Behavior 4: welcome visible → first section is welcome box --
+	t.Run("welcome-first-section", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		// Ensure welcome visible.
+		if !app.showWelcome {
+			t.Fatal("setup: welcome should be visible initially")
+		}
+		v := strip(app.View().Content)
+		firstLine := strings.TrimSpace(strings.Split(v, "\n")[0])
+		if !strings.HasPrefix(firstLine, "╭") {
+			t.Errorf("with welcome, first non-space char should be ╭ border, got: %q", firstLine)
+		}
+		// Header should NOT be on first line.
+		if strings.Contains(firstLine, "Claude") && !strings.Contains(firstLine, "Claude Code") {
+			// The welcome's top border DOES contain " Claude Code " — that's fine.
+			// But the condensed header "✻ Claude" shouldn't appear on its own first.
+			if !strings.HasPrefix(firstLine, "╭") {
+				t.Errorf("welcome mode should not show condensed header: %q", firstLine)
+			}
+		}
+	})
+
+	// -- Behavior 5: welcome hidden → first section is header --
+	t.Run("no-welcome-shows-header", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		app.showWelcome = false
+		v := strip(app.View().Content)
+		firstLine := strings.Split(v, "\n")[0]
+		if strings.HasPrefix(strings.TrimSpace(firstLine), "╭") {
+			t.Errorf("no-welcome mode must not start with welcome border: %q", firstLine)
+		}
+		// Header should mention Claude (from "✻ Claude" condensed logo).
+		if !strings.Contains(firstLine, "Claude") {
+			t.Errorf("no-welcome first line should show 'Claude' header, got: %q", firstLine)
+		}
+	})
+
+	// -- Behavior 6: two dividers (above and below input pane) --
+	t.Run("two-dividers-around-input", func(t *testing.T) {
+		sess := session.New(session.DefaultConfig(), "/tmp")
+		app := NewAppModel(sess, nil)
+		app.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+		app.showWelcome = false
+		v := strip(app.View().Content)
+		// A divider line is 80 ─ characters. Count how many lines are
+		// made up entirely of ─ chars (allowing for terminal truncation).
+		dividerCount := 0
+		for _, line := range strings.Split(v, "\n") {
+			trimmed := strings.TrimRight(line, " ")
+			if len(trimmed) >= 40 && strings.Count(trimmed, "─") >= 40 {
+				dividerCount++
+			}
+		}
+		if dividerCount != 2 {
+			t.Errorf("expected exactly 2 full-width dividers (above+below input), got %d",
+				dividerCount)
+		}
+	})
+}
+
 // TestParity_TabToConversationThenScroll validates that after Tab shifts
 // focus from InputPane to ConversationPane, keyboard events (Up/Down,
 // PgUp/PgDown) route to the conversation's scroll handlers rather than
