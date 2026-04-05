@@ -3463,6 +3463,119 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_UserMessageMultiBlockPrefixing validates that renderUserMessage
+// applies the ❯ prefix PER TEXT BLOCK (unlike renderAssistantMessage which
+// latches a single first-text prefix across all blocks). This difference
+// matters because user messages may contain interleaved text + tool_result
+// blocks, each visually distinct.
+//
+// Unique behaviors (B16 covers wrapping+drop-unknown; this covers multi-block
+// interaction):
+//  1. Two ContentText blocks in one user message → each block's first line
+//     starts with ❯ (TWO total ❯ prefixes, vs 1 for assistant).
+//  2. User message with ContentText + ContentToolResult: text gets ❯, and
+//     tool_result gets the ⎿ connector (two distinct prefixes).
+//  3. ContentToolUse block in a user message is SILENTLY DROPPED (the
+//     user renderer only handles Text + ToolResult).
+//  4. A user message containing ONLY a dropped block type renders empty
+//     string (not an orphan ❯ with no text).
+//
+// Cross-ref: message_bubble.go:90-135 renderUserMessage switch block.
+func TestParity_UserMessageMultiBlockPrefixing(t *testing.T) {
+	mb := components.NewMessageBubble(theme.Current(), 80)
+
+	countMarker := func(s, m string) int { return strings.Count(s, m) }
+
+	// -- Behavior 1: two text blocks → two ❯ prefixes --
+	t.Run("two-text-blocks-two-prefixes", func(t *testing.T) {
+		msg := &message.Message{
+			Role: message.RoleUser,
+			Content: []message.ContentBlock{
+				{Type: message.ContentText, Text: "alpha"},
+				{Type: message.ContentText, Text: "beta"},
+			},
+		}
+		out := strip(mb.Render(msg))
+		if n := countMarker(out, "❯"); n != 2 {
+			t.Errorf("two user text blocks should produce 2 ❯ prefixes, got %d in:\n%s",
+				n, out)
+		}
+		if !strings.Contains(out, "alpha") || !strings.Contains(out, "beta") {
+			t.Errorf("both text blocks should render, got:\n%s", out)
+		}
+	})
+
+	// -- Behavior 2: text + tool_result → ❯ AND ⎿ --
+	t.Run("text-plus-tool-result-both-prefixes", func(t *testing.T) {
+		msg := &message.Message{
+			Role: message.RoleUser,
+			Content: []message.ContentBlock{
+				{Type: message.ContentText, Text: "user-says"},
+				{Type: message.ContentToolResult, ToolUseID: "t1",
+					Content: "tool-output"},
+			},
+		}
+		out := strip(mb.Render(msg))
+		if !strings.Contains(out, "❯") {
+			t.Errorf("text block should have ❯ prefix, got:\n%s", out)
+		}
+		if !strings.Contains(out, "⎿") {
+			t.Errorf("tool_result block should have ⎿ connector, got:\n%s", out)
+		}
+		if !strings.Contains(out, "user-says") || !strings.Contains(out, "tool-output") {
+			t.Errorf("both content pieces should appear, got:\n%s", out)
+		}
+		// Order: the user text should precede the tool_result (as in Content slice).
+		userIdx := strings.Index(out, "user-says")
+		toolIdx := strings.Index(out, "tool-output")
+		if userIdx == -1 || toolIdx == -1 || userIdx >= toolIdx {
+			t.Errorf("user text must precede tool_result (idx %d vs %d):\n%s",
+				userIdx, toolIdx, out)
+		}
+	})
+
+	// -- Behavior 3: ContentToolUse on user message is dropped --
+	t.Run("tool-use-block-dropped-from-user-msg", func(t *testing.T) {
+		msg := &message.Message{
+			Role: message.RoleUser,
+			Content: []message.ContentBlock{
+				{Type: message.ContentText, Text: "visible-text"},
+				{Type: message.ContentToolUse, Name: "SecretTool",
+					ID: "tu1", Input: []byte(`{"x":1}`)},
+			},
+		}
+		out := strip(mb.Render(msg))
+		if !strings.Contains(out, "visible-text") {
+			t.Errorf("text block should still render, got:\n%s", out)
+		}
+		if strings.Contains(out, "SecretTool") {
+			t.Errorf("tool_use block MUST be dropped from user message, got:\n%s", out)
+		}
+		// No second ❯ from a non-existent block.
+		if n := countMarker(out, "❯"); n != 1 {
+			t.Errorf("only 1 ❯ (from text block) expected, got %d in:\n%s", n, out)
+		}
+	})
+
+	// -- Behavior 4: only-dropped-block message renders empty --
+	t.Run("only-dropped-blocks-empty-output", func(t *testing.T) {
+		msg := &message.Message{
+			Role: message.RoleUser,
+			Content: []message.ContentBlock{
+				{Type: message.ContentThinking, Thinking: "secret"},
+				{Type: message.ContentToolUse, Name: "SecretTool"},
+			},
+		}
+		out := strip(mb.Render(msg))
+		if strings.Contains(out, "secret") || strings.Contains(out, "SecretTool") {
+			t.Errorf("dropped blocks should not appear, got:\n%s", out)
+		}
+		if strings.Contains(out, "❯") {
+			t.Errorf("no text block → no orphan ❯ prefix, got:\n%s", out)
+		}
+	})
+}
+
 // TestParity_SubmitSlashVsUserTextSeparation validates the side-effect
 // differences between submitting a slash command vs a regular user
 // message. Slash commands are in-process UI operations — they must NOT

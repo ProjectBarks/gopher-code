@@ -262,7 +262,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B58 | TestParity_AppViewInitializingAndAltScreen | 7 subtests for View() structural contract: pre-resize→"Initializing...", width=0 alone→placeholder, height=0 alone→placeholder, sized view→multi-line + v.AltScreen=true, welcome-visible→first non-space char is ╭ border, welcome-hidden→first line contains "Claude" header (not border), exactly 2 full-width dividers (≥40 ─ chars each) surround input pane. | ✅ pass |
 | B59 | TestParity_WelcomeCWDAbbreviation | 5 subtests for abbreviateCWD content transforms: short path verbatim (no ~/ or …), /Users/{user}/{rest} rewritten to ~/{rest} (username dropped per tilde-expansion), extremely long path produces "…" prefix, exactly 30 runes verbatim (boundary), 31 runes IS abbreviated. Tests via WelcomeScreen public API. | ✅ pass |
 | B60 | TestParity_SubmitSlashVsUserTextSeparation | 4 subtests contrasting slash-command vs user-text submit side effects: user text→spinner starts+mode Streaming+session+1+conversation+1; slash cmd→spinner inactive+mode Idle+session unchanged+conversation unchanged BUT cmd returned; BOTH paths add to history (verified via Up arrow recall) and dismiss welcome; whitespace-only submit triggers NEITHER path (welcome stays). | ✅ pass |
-### Next B61: Next unique behavior to validate
+| B61 | TestParity_UserMessageMultiBlockPrefixing | 4 subtests distinguishing user vs assistant multi-block prefix semantics: two user text blocks→TWO ❯ prefixes (per-block, unlike assistant's single-latch), text+tool_result→❯ AND ⎿ with correct ordering, ContentToolUse block silently dropped from user msg (only text+tool_result handled), only-dropped-blocks message renders empty (no orphan ❯). | ✅ pass |
+### Next B62: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
