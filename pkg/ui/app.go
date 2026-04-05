@@ -94,6 +94,7 @@ type AppModel struct {
 	header       *components.Header
 	conversation *components.ConversationPane
 	input        *components.InputPane
+	slashInput   *components.SlashCommandInput
 	statusLine   *components.StatusLine
 	bubble       *components.MessageBubble
 	streaming    *components.StreamingText
@@ -134,6 +135,14 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 	inputPane := components.NewInputPane()
 	inputPane.Focus()
 
+	// Slash autocomplete: load built-ins + user/project commands + skills.
+	slashInput := components.NewSlashCommandInput(t)
+	sessCWD := ""
+	if sess != nil {
+		sessCWD = sess.CWD
+	}
+	slashInput.SetCommands(components.LoadSlashCommands(sessCWD))
+
 	app := &AppModel{
 		session:         sess,
 		bridge:          bridge,
@@ -141,6 +150,7 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 		header:          header,
 		conversation:    components.NewConversationPane(),
 		input:           inputPane,
+		slashInput:      slashInput,
 		statusLine:      components.NewStatusLine(sess),
 		bubble:          components.NewMessageBubble(t, 80),
 		streaming:       components.NewStreamingText(t),
@@ -188,6 +198,15 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case components.SubmitMsg:
 		return a.handleSubmit(msg)
+
+	case components.SlashCommandSelectedMsg:
+		// Fill the input with the chosen command; the user presses Enter
+		// to submit. Matches Claude Code: autocomplete completes the name
+		// but does not auto-submit.
+		if a.input != nil {
+			a.input.SetValue(msg.Command.Name + " ")
+		}
+		return a, nil
 
 	case components.SpinnerTickMsg:
 		a.spinner.Update(msg)
@@ -295,6 +314,11 @@ func (a *AppModel) View() tea.View {
 	// Input pane (always visible)
 	sections = append(sections, a.input.View().Content)
 
+	// Slash-command autocomplete, rendered directly below the input when active.
+	if a.slashInput != nil && a.slashInput.IsActive() {
+		sections = append(sections, a.slashInput.View().Content)
+	}
+
 	// Second divider below input (Claude has dividers above AND below prompt)
 	sections = append(sections, dividerStyle.Render(strings.Repeat(components.DividerChar, a.width)))
 
@@ -395,9 +419,36 @@ func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
 		}
 	}
 
-	// Route to focused component
+	// Slash autocomplete: when active, arrow keys / Enter / Tab / Escape
+	// are routed to the autocomplete. Other keys fall through so the user
+	// can keep typing to filter suggestions.
+	if a.slashInput != nil && a.slashInput.IsActive() {
+		switch msg.Code {
+		case tea.KeyUp, tea.KeyDown, tea.KeyTab, tea.KeyEscape, tea.KeyEnter:
+			_, cmd := a.slashInput.Update(msg)
+			return a, cmd
+		}
+	}
+
+	// Route to focused component (input pane) then refresh autocomplete
+	// state from the resulting input-buffer contents.
 	cmd := a.focus.Route(msg)
+	a.refreshSlashAutocomplete()
 	return a, cmd
+}
+
+// refreshSlashAutocomplete activates/deactivates and refilters the slash
+// autocomplete based on the current input buffer.
+func (a *AppModel) refreshSlashAutocomplete() {
+	if a.slashInput == nil || a.input == nil {
+		return
+	}
+	text := a.input.Value()
+	if strings.HasPrefix(text, "/") && !strings.Contains(text, " ") {
+		a.slashInput.Activate(text)
+	} else if a.slashInput.IsActive() {
+		a.slashInput.Deactivate()
+	}
 }
 
 func (a *AppModel) handleSubmit(msg components.SubmitMsg) (*AppModel, tea.Cmd) {

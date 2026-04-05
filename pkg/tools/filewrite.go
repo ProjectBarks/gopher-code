@@ -47,6 +47,12 @@ func (f *FileWriteTool) Execute(_ context.Context, tc *ToolContext, input json.R
 		path = filepath.Join(tc.CWD, path)
 	}
 
+	// Capture existing content for diff rendering (empty if file is new).
+	var oldContent string
+	if existing, readErr := os.ReadFile(path); readErr == nil {
+		oldContent = string(existing)
+	}
+
 	// Check if file exists — if so, require prior read (staleness guard)
 	// Source: FileWriteTool.ts:198-219
 	if _, statErr := os.Stat(path); statErr == nil {
@@ -83,5 +89,9 @@ func (f *FileWriteTool) Execute(_ context.Context, tc *ToolContext, input json.R
 		tc.ReadFileState.Record(path, in.Content, false)
 	}
 
-	return SuccessOutput(fmt.Sprintf("Successfully wrote to %s", path)), nil
+	diff := BuildUnifiedDiff(oldContent, in.Content, path)
+	if diff == "" {
+		return SuccessOutput(fmt.Sprintf("Wrote %s", path)), nil
+	}
+	return SuccessOutput(fmt.Sprintf("Wrote %s\n%s", path, diff)), nil
 }

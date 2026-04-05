@@ -232,6 +232,15 @@ func (mb *MessageBubble) renderToolResultBlock(block message.ContentBlock) strin
 		return connectorStyle.Render(ResponseConnector) + errorStyle.Render(errMsg)
 	}
 
+	// If the result embeds a unified diff (from Edit/Write), render it with
+	// red/green colored lines instead of as plain truncated text.
+	if diffIdx := strings.Index(content, "--- a/"); diffIdx >= 0 &&
+		strings.Contains(content[diffIdx:], "@@") {
+		header := strings.TrimRight(content[:diffIdx], "\n")
+		diffText := content[diffIdx:]
+		return mb.renderDiffResult(header, diffText, cs)
+	}
+
 	// Successful result: show with "  └ " connector
 	resultStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(cs.TextSecondary))
@@ -261,6 +270,63 @@ func (mb *MessageBubble) renderToolResultBlock(block message.ContentBlock) strin
 	}
 
 	return strings.Join(resultLines, "\n")
+}
+
+// renderDiffResult renders a colored unified-diff block from an edit/write
+// tool result. `header` is the "Edited /path" prefix line; `diffText` is
+// the unified-diff body starting with "--- a/".
+func (mb *MessageBubble) renderDiffResult(header, diffText string, cs theme.ColorScheme) string {
+	connectorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(cs.TextSecondary))
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(cs.TextSecondary))
+	addedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(cs.DiffAdded))
+	removedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(cs.DiffRemoved))
+	hunkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(cs.Info))
+	contextStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(cs.TextSecondary))
+
+	diffLines := parseDiffLines(diffText)
+
+	var added, removed int
+	for _, dl := range diffLines {
+		switch dl.Type {
+		case DiffAdded:
+			added++
+		case DiffRemoved:
+			removed++
+		}
+	}
+
+	var out []string
+	if header != "" {
+		line := connectorStyle.Render(ResponseConnector) + headerStyle.Render(header)
+		if added > 0 || removed > 0 {
+			line += contextStyle.Render(fmt.Sprintf(" (%s%d %s%d)",
+				addedStyle.Render("+"), added,
+				removedStyle.Render("-"), removed))
+		}
+		out = append(out, line)
+	}
+
+	for _, dl := range diffLines {
+		if dl.Type == DiffHeader {
+			if strings.HasPrefix(dl.Content, "---") || strings.HasPrefix(dl.Content, "+++") {
+				continue // path is already in the header line
+			}
+			out = append(out,
+				connectorStyle.Render(ResponseContinuation)+hunkStyle.Render(dl.Content))
+			continue
+		}
+		var rendered string
+		switch dl.Type {
+		case DiffAdded:
+			rendered = addedStyle.Render(fmt.Sprintf("%4d + %s", dl.NewNum, dl.Content))
+		case DiffRemoved:
+			rendered = removedStyle.Render(fmt.Sprintf("%4d - %s", dl.OldNum, dl.Content))
+		default:
+			rendered = contextStyle.Render(fmt.Sprintf("%4d   %s", dl.NewNum, dl.Content))
+		}
+		out = append(out, connectorStyle.Render(ResponseContinuation)+rendered)
+	}
+	return strings.Join(out, "\n")
 }
 
 func (mb *MessageBubble) renderThinkingBlock(thinking string) string {
