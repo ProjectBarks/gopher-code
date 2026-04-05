@@ -267,7 +267,8 @@ against the captured Claude snapshots in `data/claude/`. Use the existing test f
 | B63 | TestParity_SlashInputFilterContract | 8 subtests for filterSuggestions rule: empty prefix→all match, case-insensitive, simple prefix path, fuzzy subsequence path, no-slash prefix matches via fuzzy, description NEVER matched (only Name), no-match→empty non-nil slice, declaration order preserved. Pins the matcher contract so description-search can't silently creep in. | ✅ pass |
 | B64 | TestParity_SubmitQueryFuncDispatch | handleSubmit's queryFunc path: initial cancelQuery=nil+queryCtx=nil; submit with nil queryFunc leaves both nil (spinner still starts+mode Streaming); submit with queryFunc set populates both and cancelQuery() fires queryCtx.Done channel within 200ms. | ✅ pass |
 | B65 | TestParity_TurnCompleteEmptyStreamingGuard | 5 subtests for handleTurnComplete's empty-buffer guard: non-empty streaming→+1 msg, EMPTY streaming→0 msgs (guard prevents empty bubbles from cancelled turns), both paths reset mode+spinner+streamingText+activeToolCalls, 5 repeated empty TurnComplete=0 msgs total, post-empty-turn a fresh cycle still works. | ✅ pass |
-### Next B66: Next unique behavior to validate
+| B66 | TestParity_SlashAutocompleteFullDeletion | refreshSlashAutocomplete toggle semantics: backspace-from-/ deactivates (text no longer starts with /), typing "hello world" never activates (never starts with /), swapping buffer to "regular text" deactivates on next key, /c +space→deactivate+backspace→reactivate round-trip. | ✅ pass |
+### Next B67: Next unique behavior to validate
 
 ### Summary so far:
 - **65 TestParity_ functions** (auditing for quality)
