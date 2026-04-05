@@ -3463,6 +3463,154 @@ func TestParity_DiffApprovalAllThreeKeys(t *testing.T) {
 	}
 }
 
+// TestParity_RenderDiffDisplayLineNumbers validates MessageBubble's
+// renderDiffDisplay output — specifically the line-number accounting that
+// advances old/new counters differently for each marker type.
+//
+// Unique behaviors (no existing test covers the diff renderer's line-number
+// math or the +N/-M summary badge):
+//  1. Header line contains a "(+N -M)" badge where N and M match the exact
+//     counts across all hunks in the display payload.
+//  2. Each hunk emits a "@@ -OldStart,OldLines +NewStart,NewLines @@" line.
+//  3. "+" lines display with NEW line number; new counter advances by 1
+//     per "+" line, old counter unchanged.
+//  4. "-" lines display with OLD line number; old counter advances by 1
+//     per "-" line, new counter unchanged.
+//  5. Context lines (" ") display with NEW line number; BOTH counters
+//     advance by 1.
+//  6. Empty lines in the Lines array are skipped (no panic, no blank row).
+//  7. Multiple hunks each get their own @@ header and independent counter
+//     sequences starting from that hunk's OldStart/NewStart.
+//  8. Line numbers are rendered as right-aligned 4-wide integers.
+//
+// Cross-ref: message_bubble.go:278-340 renderDiffDisplay.
+// Cross-ref: Claude Code src/components/StructuredDiffList.tsx.
+func TestParity_RenderDiffDisplayLineNumbers(t *testing.T) {
+	mb := components.NewMessageBubble(theme.Current(), 120)
+
+	// Construct a DiffDisplay with known counts and line numbers.
+	disp := tools.DiffDisplay{
+		FilePath: "main.go",
+		Hunks: []tools.DiffHunk{{
+			OldStart: 10, OldLines: 7, NewStart: 10, NewLines: 8,
+			Lines: []string{
+				" ctx-a", " ctx-b", " ctx-c",
+				"-del-1", "-del-2",
+				"+add-1", "+add-2", "+add-3",
+				" ctx-d", " ctx-e",
+			},
+		}},
+	}
+
+	block := message.ContentBlock{
+		Type:    message.ContentToolResult,
+		Content: "Edited /main.go",
+		Display: disp,
+	}
+	out := strip(mb.RenderContent(block))
+
+	// -- Behavior 1: header badge shows (+3 -2) --
+	if !strings.Contains(out, "+3") || !strings.Contains(out, "-2") {
+		t.Errorf("header badge should reflect +3 added / -2 removed, got:\n%s", out)
+	}
+	if !strings.Contains(out, "(") || !strings.Contains(out, ")") {
+		t.Errorf("header badge should be wrapped in parentheses, got:\n%s", out)
+	}
+
+	// -- Behavior 2: @@ header line present --
+	if !strings.Contains(out, "@@ -10,7 +10,8 @@") {
+		t.Errorf("hunk header must be '@@ -10,7 +10,8 @@', got:\n%s", out)
+	}
+
+	// -- Behaviors 3+4+5+8: line-number advancement per marker type --
+	// Counters: oldLn starts at 10, newLn starts at 10.
+	// Context advances BOTH. "-" uses oldLn & advances oldLn only.
+	// "+" uses newLn & advances newLn only.
+	//
+	//   " ctx-a" → display newLn=10, then both→11
+	//   " ctx-b" → display newLn=11, then both→12
+	//   " ctx-c" → display newLn=12, then both→13
+	//   "-del-1" → display oldLn=13, then oldLn→14
+	//   "-del-2" → display oldLn=14, then oldLn→15
+	//   "+add-1" → display newLn=13, then newLn→14
+	//   "+add-2" → display newLn=14, then newLn→15
+	//   "+add-3" → display newLn=15, then newLn→16
+	//   " ctx-d" → display newLn=16, then both→17 (oldLn was 15, now 16)
+	//   " ctx-e" → display newLn=17, then both→18
+	//
+	// Expected rendered lines (with 4-wide right-aligned number padding):
+	wantLines := []string{
+		"  10   ctx-a",
+		"  11   ctx-b",
+		"  12   ctx-c",
+		"  13 - del-1",
+		"  14 - del-2",
+		"  13 + add-1",
+		"  14 + add-2",
+		"  15 + add-3",
+		"  16   ctx-d",
+		"  17   ctx-e",
+	}
+	for _, want := range wantLines {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing expected line %q in:\n%s", want, out)
+		}
+	}
+
+	// -- Behavior 6: empty lines in hunk Lines are skipped --
+	t.Run("empty-lines-skipped", func(t *testing.T) {
+		dispEmpty := tools.DiffDisplay{
+			FilePath: "x",
+			Hunks: []tools.DiffHunk{{
+				OldStart: 1, OldLines: 2, NewStart: 1, NewLines: 2,
+				Lines: []string{" a", "", "+b"}, // empty string between entries
+			}},
+		}
+		blockE := message.ContentBlock{
+			Type: message.ContentToolResult, Content: "h", Display: dispEmpty,
+		}
+		// Must not panic
+		gotOut := strip(mb.RenderContent(blockE))
+		if !strings.Contains(gotOut, "a") || !strings.Contains(gotOut, "b") {
+			t.Errorf("non-empty lines should still render when empties are present:\n%s", gotOut)
+		}
+	})
+
+	// -- Behavior 7: multi-hunk independence --
+	t.Run("multi-hunk", func(t *testing.T) {
+		disp2 := tools.DiffDisplay{
+			FilePath: "z",
+			Hunks: []tools.DiffHunk{
+				{OldStart: 5, OldLines: 1, NewStart: 5, NewLines: 1,
+					Lines: []string{"-HunkA-old", "+HunkA-new"}},
+				{OldStart: 100, OldLines: 1, NewStart: 101, NewLines: 1,
+					Lines: []string{"-HunkB-old", "+HunkB-new"}},
+			},
+		}
+		blockM := message.ContentBlock{
+			Type: message.ContentToolResult, Content: "m", Display: disp2,
+		}
+		gotOut := strip(mb.RenderContent(blockM))
+		// Both @@ headers present
+		if !strings.Contains(gotOut, "@@ -5,1 +5,1 @@") {
+			t.Errorf("first hunk header missing:\n%s", gotOut)
+		}
+		if !strings.Contains(gotOut, "@@ -100,1 +101,1 @@") {
+			t.Errorf("second hunk header missing:\n%s", gotOut)
+		}
+		// Each hunk uses its OWN OldStart/NewStart
+		if !strings.Contains(gotOut, "   5 - HunkA-old") {
+			t.Errorf("hunk A should use OldStart=5, got:\n%s", gotOut)
+		}
+		if !strings.Contains(gotOut, " 100 - HunkB-old") {
+			t.Errorf("hunk B should use OldStart=100, got:\n%s", gotOut)
+		}
+		if !strings.Contains(gotOut, " 101 + HunkB-new") {
+			t.Errorf("hunk B addition should use NewStart=101, got:\n%s", gotOut)
+		}
+	})
+}
+
 // TestParity_ComputeDiffHunksContract validates ComputeDiffHunks, the pure
 // function that tools (Edit/Write) use to build structured DiffDisplay
 // payloads. A bug here silently corrupts every diff the UI renders.
