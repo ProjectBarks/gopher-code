@@ -202,6 +202,69 @@ func TestSavePreservesPreview(t *testing.T) {
 	}
 }
 
+// T108: totalAPIDurationWithoutRetries
+func TestAPIDurationWithoutRetries(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+	if s.TotalAPIDurationWithoutRetries != 0 {
+		t.Errorf("initial TotalAPIDurationWithoutRetries = %f, want 0", s.TotalAPIDurationWithoutRetries)
+	}
+	s.AddAPIDurationWithoutRetries(100.5)
+	s.AddAPIDurationWithoutRetries(200.3)
+	if !approxEqual(s.TotalAPIDurationWithoutRetries, 300.8, 0.01) {
+		t.Errorf("TotalAPIDurationWithoutRetries = %f, want ~300.8", s.TotalAPIDurationWithoutRetries)
+	}
+	s.ResetAPIDurationWithoutRetries()
+	if s.TotalAPIDurationWithoutRetries != 0 {
+		t.Errorf("after reset TotalAPIDurationWithoutRetries = %f, want 0", s.TotalAPIDurationWithoutRetries)
+	}
+}
+
+// T109: turnHookDurationMs / turnToolDurationMs / turnClassifierDurationMs
+func TestTurnDurationMetrics(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	s.AddTurnToolDuration(50)
+	s.AddTurnToolDuration(30)
+	if !approxEqual(s.TurnToolDurationMs, 80, 0.01) {
+		t.Errorf("TurnToolDurationMs = %f, want 80", s.TurnToolDurationMs)
+	}
+	if s.TurnToolCount != 2 {
+		t.Errorf("TurnToolCount = %d, want 2", s.TurnToolCount)
+	}
+	s.ResetTurnToolMetrics()
+	if s.TurnToolDurationMs != 0 || s.TurnToolCount != 0 {
+		t.Error("ResetTurnToolMetrics should zero both fields")
+	}
+
+	s.AddTurnHookDuration(10)
+	s.AddTurnHookDuration(20)
+	s.AddTurnHookDuration(30)
+	if !approxEqual(s.TurnHookDurationMs, 60, 0.01) {
+		t.Errorf("TurnHookDurationMs = %f, want 60", s.TurnHookDurationMs)
+	}
+	if s.TurnHookCount != 3 {
+		t.Errorf("TurnHookCount = %d, want 3", s.TurnHookCount)
+	}
+	s.ResetTurnHookMetrics()
+	if s.TurnHookDurationMs != 0 || s.TurnHookCount != 0 {
+		t.Error("ResetTurnHookMetrics should zero both fields")
+	}
+
+	s.AddTurnClassifierDuration(5)
+	if !approxEqual(s.TurnClassifierDurationMs, 5, 0.01) {
+		t.Errorf("TurnClassifierDurationMs = %f, want 5", s.TurnClassifierDurationMs)
+	}
+	if s.TurnClassifierCount != 1 {
+		t.Errorf("TurnClassifierCount = %d, want 1", s.TurnClassifierCount)
+	}
+	s.ResetTurnClassifierMetrics()
+	if s.TurnClassifierDurationMs != 0 || s.TurnClassifierCount != 0 {
+		t.Error("ResetTurnClassifierMetrics should zero both fields")
+	}
+}
+
+// T110: turnToolCount / turnHookCount / turnClassifierCount — tested above in TestTurnDurationMetrics
+
 func TestSaveAndLoad_NewFields(t *testing.T) {
 	setupTestHome(t)
 
