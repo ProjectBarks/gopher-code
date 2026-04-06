@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/projectbarks/gopher-code/pkg/compact"
+	"github.com/projectbarks/gopher-code/pkg/coordinator"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
 	"github.com/projectbarks/gopher-code/pkg/provider"
@@ -119,6 +120,18 @@ func Query(
 	// Consume prefetch result (blocks until ready, but file read is fast)
 	memoryContent := <-memCh
 	systemPrompt := buildSystemPrompt(sess.Config.SystemPrompt, memoryContent)
+
+	// Coordinator mode check: reconcile session mode on resume.
+	// Source: coordinatorMode.ts — matchSessionMode called during query setup
+	if msg := coordinator.MatchSessionMode(coordinator.SessionMode(sess.CoordinatorMode)); msg != "" {
+		emit(onEvent, QueryEvent{Type: QEventTextDelta, Text: msg + "\n"})
+	}
+	// Record whether we're in coordinator mode for this session.
+	if coordinator.IsCoordinatorMode() {
+		sess.CoordinatorMode = string(coordinator.SessionModeCoordinator)
+	} else {
+		sess.CoordinatorMode = string(coordinator.SessionModeNormal)
+	}
 
 	for {
 		// 1. Check context cancellation
