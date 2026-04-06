@@ -90,6 +90,29 @@ type SessionState struct {
 	TurnHookCount       int `json:"turn_hook_count"`
 	TurnClassifierCount int `json:"turn_classifier_count"`
 
+	// T111: Monotonic start time, set once at session creation.
+	// Source: bootstrap/state.ts line 61 — startTime
+	StartTime time.Time `json:"start_time"`
+
+	// T112: Last interaction time tracking. The dirty flag defers Date.now()
+	// calls until a render frame flush, avoiding per-keypress overhead.
+	// Source: bootstrap/state.ts lines 62, 665-689
+	LastInteractionTime time.Time `json:"last_interaction_time"`
+	interactionDirty    bool      `json:"-"`
+
+	// T113: Flag set when the model's pricing isn't in the cost table.
+	// Source: bootstrap/state.ts line 65
+	HasUnknownModelCost bool `json:"has_unknown_model_cost,omitempty"`
+
+	// T114: Model override for the session main loop.
+	// Source: bootstrap/state.ts lines 68-69
+	MainLoopModelOverride string `json:"main_loop_model_override,omitempty"`
+	InitialMainLoopModel  string `json:"initial_main_loop_model,omitempty"`
+
+	// T115: Cache of resolved model display strings.
+	// Source: bootstrap/state.ts line 70
+	ModelStrings map[string]string `json:"model_strings,omitempty"`
+
 	// Per-model usage tracking — Source: bootstrap/state.ts line 67
 	mu         sync.Mutex               `json:"-"`
 	ModelUsage map[string]*ModelUsageEntry `json:"model_usage,omitempty"`
@@ -120,15 +143,18 @@ type SessionState struct {
 // New creates a new SessionState with the given config and working directory.
 // Source: bootstrap/state.ts — getInitialState()
 func New(config SessionConfig, cwd string) *SessionState {
+	now := time.Now()
 	return &SessionState{
-		ID:          uuid.New().String(),
-		Config:      config,
-		Messages:    make([]message.Message, 0),
-		CWD:         cwd,
-		OriginalCWD: cwd,
-		ProjectRoot: cwd,
-		CreatedAt:   time.Now(),
-		ModelUsage:  make(map[string]*ModelUsageEntry),
+		ID:                  uuid.New().String(),
+		Config:              config,
+		Messages:            make([]message.Message, 0),
+		CWD:                 cwd,
+		OriginalCWD:         cwd,
+		ProjectRoot:         cwd,
+		CreatedAt:           now,
+		StartTime:           now,
+		LastInteractionTime: now,
+		ModelUsage:          make(map[string]*ModelUsageEntry),
 	}
 }
 
@@ -209,6 +235,41 @@ func (s *SessionState) ResetTurnClassifierMetrics() {
 func (s *SessionState) AddLinesChanged(added, removed int) {
 	s.TotalLinesAdded += added
 	s.TotalLinesRemoved += removed
+}
+
+// UpdateLastInteractionTime marks an interaction. When immediate is true the
+// timestamp is updated right away; otherwise it is deferred until the next
+// FlushInteractionTime call (batching many keypresses into one clock read).
+// Source: bootstrap/state.ts — updateLastInteractionTime()
+func (s *SessionState) UpdateLastInteractionTime(immediate bool) {
+	if immediate {
+		s.LastInteractionTime = time.Now()
+		s.interactionDirty = false
+	} else {
+		s.interactionDirty = true
+	}
+}
+
+// FlushInteractionTime updates the timestamp if an interaction was recorded
+// since the last flush. Called by the render loop before each frame.
+// Source: bootstrap/state.ts — flushInteractionTime()
+func (s *SessionState) FlushInteractionTime() {
+	if s.interactionDirty {
+		s.LastInteractionTime = time.Now()
+		s.interactionDirty = false
+	}
+}
+
+// SetModelStrings replaces the cached model display strings.
+// Source: bootstrap/state.ts — setModelStrings()
+func (s *SessionState) SetModelStrings(m map[string]string) {
+	s.ModelStrings = m
+}
+
+// ClearModelStrings resets the model strings cache to nil.
+// Source: bootstrap/state.ts — clearModelStrings()
+func (s *SessionState) ClearModelStrings() {
+	s.ModelStrings = nil
 }
 
 // RegenerateSessionID creates a new session ID, optionally setting the current as parent.

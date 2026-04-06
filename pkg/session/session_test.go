@@ -4,6 +4,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/provider"
@@ -264,6 +265,109 @@ func TestTurnDurationMetrics(t *testing.T) {
 }
 
 // T110: turnToolCount / turnHookCount / turnClassifierCount — tested above in TestTurnDurationMetrics
+
+// T111: startTime is set on creation
+func TestStartTime(t *testing.T) {
+	before := time.Now()
+	s := New(DefaultConfig(), "/tmp/test")
+	after := time.Now()
+
+	if s.StartTime.Before(before) || s.StartTime.After(after) {
+		t.Errorf("StartTime = %v, want between %v and %v", s.StartTime, before, after)
+	}
+	if s.StartTime.IsZero() {
+		t.Error("StartTime should not be zero")
+	}
+}
+
+// T112: lastInteractionTime + updateLastInteractionTime + flushInteractionTime
+func TestInteractionTime(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+	initial := s.LastInteractionTime
+
+	if initial.IsZero() {
+		t.Fatal("LastInteractionTime should be set on creation")
+	}
+
+	// Deferred update: dirty flag set but timestamp unchanged
+	s.UpdateLastInteractionTime(false)
+	if s.LastInteractionTime != initial {
+		t.Error("deferred UpdateLastInteractionTime should not change timestamp immediately")
+	}
+
+	// Flush applies the deferred update
+	time.Sleep(time.Millisecond) // ensure clock moves
+	s.FlushInteractionTime()
+	if !s.LastInteractionTime.After(initial) {
+		t.Error("FlushInteractionTime should update the timestamp")
+	}
+
+	// Flush with no dirty flag is a no-op
+	afterFlush := s.LastInteractionTime
+	s.FlushInteractionTime()
+	if s.LastInteractionTime != afterFlush {
+		t.Error("FlushInteractionTime without dirty flag should be a no-op")
+	}
+
+	// Immediate update
+	time.Sleep(time.Millisecond)
+	s.UpdateLastInteractionTime(true)
+	if !s.LastInteractionTime.After(afterFlush) {
+		t.Error("immediate UpdateLastInteractionTime should update the timestamp")
+	}
+}
+
+// T113: hasUnknownModelCost
+func TestHasUnknownModelCost(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+	if s.HasUnknownModelCost {
+		t.Error("HasUnknownModelCost should default to false")
+	}
+	s.HasUnknownModelCost = true
+	if !s.HasUnknownModelCost {
+		t.Error("HasUnknownModelCost should be settable to true")
+	}
+}
+
+// T114: mainLoopModelOverride / initialMainLoopModel
+func TestModelOverride(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+	if s.MainLoopModelOverride != "" {
+		t.Errorf("MainLoopModelOverride = %q, want empty", s.MainLoopModelOverride)
+	}
+	if s.InitialMainLoopModel != "" {
+		t.Errorf("InitialMainLoopModel = %q, want empty", s.InitialMainLoopModel)
+	}
+
+	s.MainLoopModelOverride = "claude-opus-4-6"
+	s.InitialMainLoopModel = "claude-sonnet-4-6"
+
+	if s.MainLoopModelOverride != "claude-opus-4-6" {
+		t.Errorf("MainLoopModelOverride = %q, want claude-opus-4-6", s.MainLoopModelOverride)
+	}
+	if s.InitialMainLoopModel != "claude-sonnet-4-6" {
+		t.Errorf("InitialMainLoopModel = %q, want claude-sonnet-4-6", s.InitialMainLoopModel)
+	}
+}
+
+// T115: modelStrings cache
+func TestModelStrings(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+	if s.ModelStrings != nil {
+		t.Error("ModelStrings should default to nil")
+	}
+
+	cache := map[string]string{"claude-sonnet-4-6": "Sonnet"}
+	s.SetModelStrings(cache)
+	if s.ModelStrings["claude-sonnet-4-6"] != "Sonnet" {
+		t.Errorf("ModelStrings[claude-sonnet-4-6] = %q, want Sonnet", s.ModelStrings["claude-sonnet-4-6"])
+	}
+
+	s.ClearModelStrings()
+	if s.ModelStrings != nil {
+		t.Error("ClearModelStrings should set ModelStrings to nil")
+	}
+}
 
 func TestSaveAndLoad_NewFields(t *testing.T) {
 	setupTestHome(t)
