@@ -476,6 +476,44 @@ func TestQuestionPreviewFormat(t *testing.T) {
 	}
 }
 
+// T130: lastAPIRequest / lastAPIRequestMessages
+func TestLastAPIRequest(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	// Defaults to nil
+	if s.LastAPIRequest != nil {
+		t.Error("LastAPIRequest should default to nil")
+	}
+	if s.LastAPIRequestMessages != nil {
+		t.Error("LastAPIRequestMessages should default to nil")
+	}
+
+	// Set via method
+	msgs := []provider.RequestMessage{
+		{Role: "user", Content: []provider.RequestContent{{Type: "text", Text: "hello"}}},
+	}
+	s.SetLastAPIRequest(map[string]string{"model": "test"}, msgs)
+
+	if s.LastAPIRequest == nil {
+		t.Error("LastAPIRequest should be non-nil after set")
+	}
+	if len(s.LastAPIRequestMessages) != 1 {
+		t.Errorf("LastAPIRequestMessages len = %d, want 1", len(s.LastAPIRequestMessages))
+	}
+	if s.LastAPIRequestMessages[0].Role != "user" {
+		t.Errorf("LastAPIRequestMessages[0].Role = %q, want user", s.LastAPIRequestMessages[0].Role)
+	}
+
+	// Clear
+	s.ClearLastAPIRequest()
+	if s.LastAPIRequest != nil {
+		t.Error("LastAPIRequest should be nil after clear")
+	}
+	if s.LastAPIRequestMessages != nil {
+		t.Error("LastAPIRequestMessages should be nil after clear")
+	}
+}
+
 func TestSaveAndLoad_NewFields(t *testing.T) {
 	setupTestHome(t)
 

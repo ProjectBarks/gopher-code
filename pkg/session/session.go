@@ -166,6 +166,11 @@ type SessionState struct {
 	// sampling completes, before tool execution.
 	// Source: utils/hooks/postSamplingHooks.ts:24-33
 	PostSamplingHooks []interface{} `json:"-"`
+
+	// T130: Last API request/response for debugging (/share, bug reports).
+	// Source: bootstrap/state.ts — lastAPIRequest, lastAPIRequestMessages
+	LastAPIRequest         interface{}             `json:"-"` // raw API request body (for debug/share)
+	LastAPIRequestMessages []provider.RequestMessage `json:"-"` // messages from the last API request
 }
 
 // New creates a new SessionState with the given config and working directory.
@@ -318,6 +323,19 @@ func (s *SessionState) SetSessionSource(source string) {
 // Source: bootstrap/state.ts — setQuestionPreviewFormat()
 func (s *SessionState) SetQuestionPreviewFormat(format string) {
 	s.QuestionPreviewFormat = format
+}
+
+// SetLastAPIRequest stores the raw API request and messages for debugging.
+// Source: bootstrap/state.ts — lastAPIRequest, lastAPIRequestMessages
+func (s *SessionState) SetLastAPIRequest(request interface{}, messages []provider.RequestMessage) {
+	s.LastAPIRequest = request
+	s.LastAPIRequestMessages = messages
+}
+
+// ClearLastAPIRequest resets the debug request fields.
+func (s *SessionState) ClearLastAPIRequest() {
+	s.LastAPIRequest = nil
+	s.LastAPIRequestMessages = nil
 }
 
 // RegenerateSessionID creates a new session ID, optionally setting the current as parent.
