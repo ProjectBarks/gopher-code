@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/projectbarks/gopher-code/pkg/message"
@@ -405,5 +406,59 @@ func TestAppModelSlashCommandUnknown(t *testing.T) {
 	// Should add error message
 	if app.conversation.MessageCount() != 1 {
 		t.Errorf("Expected 1 error message, got %d", app.conversation.MessageCount())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T164: Scroll activity tracking
+// ---------------------------------------------------------------------------
+
+func TestScrollTracker_NotDrainingByDefault(t *testing.T) {
+	app := newTestApp()
+	if app.GetIsScrollDraining() {
+		t.Error("scroll should not be draining by default")
+	}
+}
+
+func TestScrollTracker_MarkAndDrain(t *testing.T) {
+	st := newScrollTracker()
+
+	st.MarkScrollActivity()
+	if !st.GetIsScrollDraining() {
+		t.Error("scroll should be draining after MarkScrollActivity")
+	}
+
+	// WaitForScrollIdle should return once the timer fires
+	st.WaitForScrollIdle()
+	if st.GetIsScrollDraining() {
+		t.Error("scroll should not be draining after WaitForScrollIdle")
+	}
+}
+
+func TestScrollTracker_ImmediateIdleWhenNotDraining(t *testing.T) {
+	st := newScrollTracker()
+	// WaitForScrollIdle returns immediately when not draining
+	done := make(chan struct{})
+	go func() {
+		st.WaitForScrollIdle()
+		close(done)
+	}()
+	select {
+	case <-done:
+		// ok
+	case <-time.After(time.Second):
+		t.Fatal("WaitForScrollIdle should return immediately when not draining")
+	}
+}
+
+func TestScrollTracker_AppModelDelegation(t *testing.T) {
+	app := newTestApp()
+	app.MarkScrollActivity()
+	if !app.GetIsScrollDraining() {
+		t.Error("AppModel.GetIsScrollDraining should delegate to scrollTracker")
+	}
+	app.WaitForScrollIdle()
+	if app.GetIsScrollDraining() {
+		t.Error("AppModel should not be draining after WaitForScrollIdle")
 	}
 }

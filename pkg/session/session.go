@@ -289,6 +289,26 @@ type SessionState struct {
 	// shutdown to send cache eviction hints to inference.
 	// Source: bootstrap/state.ts — lastMainRequestId
 	LastMainRequestId string `json:"-"`
+
+	// T161: Timestamp of the last successful API call completion. Used to
+	// compute timeSinceLastApiCallMs for correlating cache misses with idle
+	// time (cache TTL is ~5 min).
+	// Source: bootstrap/state.ts — lastApiCompletionTimestamp
+	LastApiCompletionTimestamp *time.Time `json:"-"`
+
+	// T162: Set to true after compaction (auto or manual /compact). Consumed
+	// by logAPISuccess to tag the first post-compaction API call so we can
+	// distinguish compaction-induced cache misses from TTL expiry.
+	// Source: bootstrap/state.ts — pendingPostCompaction
+	PendingPostCompaction bool `json:"-"`
+
+	// T163: Callbacks fired when SwitchSession changes the active session ID.
+	// Source: bootstrap/state.ts — onSessionSwitch (createSignal pattern)
+	sessionSwitchCallbacks []func(sessionID string) `json:"-"`
+
+	// T165: Per-turn output token budget tracking.
+	// Source: bootstrap/state.ts — module-scope turn budget variables
+	turnBudget TurnBudgetState `json:"-"`
 }
 
 // New creates a new SessionState with the given config and working directory.
@@ -1004,6 +1024,9 @@ func (s *SessionState) SwitchSession(sessionID string, projectDir string) {
 	s.ModelStrings = nil
 	s.PromptId = ""
 	s.LastMainRequestId = ""
+
+	// T163: Notify listeners that the active session changed.
+	s.notifySessionSwitch(sessionID)
 }
 
 // ---------------------------------------------------------------------------
@@ -1067,4 +1090,61 @@ func (s *SessionState) GetLastMainRequestId() string {
 // Source: bootstrap/state.ts — setLastMainRequestId
 func (s *SessionState) SetLastMainRequestId(requestID string) {
 	s.LastMainRequestId = requestID
+}
+
+// ---------------------------------------------------------------------------
+// T161: Last API completion timestamp — Source: bootstrap/state.ts
+// ---------------------------------------------------------------------------
+
+// GetLastApiCompletionTimestamp returns the timestamp of the last successful
+// API call completion, or nil if no call has completed yet.
+// Source: bootstrap/state.ts — getLastApiCompletionTimestamp
+func (s *SessionState) GetLastApiCompletionTimestamp() *time.Time {
+	return s.LastApiCompletionTimestamp
+}
+
+// SetLastApiCompletionTimestamp records the time of the last successful API
+// call completion.
+// Source: bootstrap/state.ts — setLastApiCompletionTimestamp
+func (s *SessionState) SetLastApiCompletionTimestamp(t time.Time) {
+	s.LastApiCompletionTimestamp = &t
+}
+
+// ---------------------------------------------------------------------------
+// T162: Post-compaction tracking — Source: bootstrap/state.ts
+// ---------------------------------------------------------------------------
+
+// MarkPostCompaction marks that a compaction just occurred. The next API
+// success event will include isPostCompaction=true, then the flag auto-resets.
+// Source: bootstrap/state.ts — markPostCompaction
+func (s *SessionState) MarkPostCompaction() {
+	s.PendingPostCompaction = true
+}
+
+// ConsumePostCompaction returns true once after compaction, then returns false
+// until the next compaction. The flag auto-resets on consumption.
+// Source: bootstrap/state.ts — consumePostCompaction
+func (s *SessionState) ConsumePostCompaction() bool {
+	was := s.PendingPostCompaction
+	s.PendingPostCompaction = false
+	return was
+}
+
+// ---------------------------------------------------------------------------
+// T163: Session switch signal — Source: bootstrap/state.ts — onSessionSwitch
+// ---------------------------------------------------------------------------
+
+// OnSessionSwitch registers a callback that fires when SwitchSession changes
+// the active session ID. Callers that need to react to session changes (e.g.
+// PID file updates, cache invalidation) register via this method.
+// Source: bootstrap/state.ts — onSessionSwitch (createSignal pattern)
+func (s *SessionState) OnSessionSwitch(fn func(sessionID string)) {
+	s.sessionSwitchCallbacks = append(s.sessionSwitchCallbacks, fn)
+}
+
+// notifySessionSwitch fires all registered session switch callbacks.
+func (s *SessionState) notifySessionSwitch(sessionID string) {
+	for _, fn := range s.sessionSwitchCallbacks {
+		fn(sessionID)
+	}
 }

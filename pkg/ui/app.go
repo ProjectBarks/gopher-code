@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -19,6 +21,94 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/ui/screens"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
+
+// ---------------------------------------------------------------------------
+// T164: Scroll activity tracking — Source: bootstrap/state.ts
+// Background intervals check GetIsScrollDraining() before doing work so they
+// don't compete with scroll frames for the event loop. Set by scroll events,
+// cleared ScrollDrainIdleMs after the last scroll event.
+// ---------------------------------------------------------------------------
+
+const ScrollDrainIdleMs = 150 * time.Millisecond
+
+// scrollTracker tracks scroll activity for drain suspension.
+// Module-scope (not in STATE) — ephemeral hot-path flag, no test-reset needed
+// since the debounce timer self-clears.
+type scrollTracker struct {
+	mu             sync.Mutex
+	draining       bool
+	timer          *time.Timer
+	idleNotifyCh   chan struct{} // closed when draining becomes false
+}
+
+func newScrollTracker() *scrollTracker {
+	return &scrollTracker{}
+}
+
+// MarkScrollActivity marks that a scroll event just happened.
+// Source: bootstrap/state.ts — markScrollActivity
+func (st *scrollTracker) MarkScrollActivity() {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	st.draining = true
+
+	// Close any pending idle-notify channel — waiters re-check draining.
+	if st.idleNotifyCh != nil {
+		select {
+		case <-st.idleNotifyCh:
+			// already closed
+		default:
+		}
+	}
+
+	if st.timer != nil {
+		st.timer.Stop()
+	}
+	st.timer = time.AfterFunc(ScrollDrainIdleMs, func() {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		st.draining = false
+		st.timer = nil
+		// Signal any waiters
+		if st.idleNotifyCh != nil {
+			close(st.idleNotifyCh)
+			st.idleNotifyCh = nil
+		}
+	})
+}
+
+// GetIsScrollDraining returns true while scroll is actively draining
+// (within 150ms of last event). Intervals should early-return when this
+// is set — the work picks up next tick after scroll settles.
+// Source: bootstrap/state.ts — getIsScrollDraining
+func (st *scrollTracker) GetIsScrollDraining() bool {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.draining
+}
+
+// WaitForScrollIdle blocks until scroll is no longer draining. Resolves
+// immediately if not scrolling; otherwise waits until the debounce clears.
+// Source: bootstrap/state.ts — waitForScrollIdle
+func (st *scrollTracker) WaitForScrollIdle() {
+	for {
+		st.mu.Lock()
+		if !st.draining {
+			st.mu.Unlock()
+			return
+		}
+		// Ensure there is an idle-notify channel
+		if st.idleNotifyCh == nil {
+			st.idleNotifyCh = make(chan struct{})
+		}
+		ch := st.idleNotifyCh
+		st.mu.Unlock()
+
+		// Wait for signal
+		<-ch
+	}
+}
 
 // --- Message types ---
 
@@ -141,6 +231,9 @@ type AppModel struct {
 	// Claude requires two Ctrl+C presses on empty idle input to quit.
 	// First press shows "Press Ctrl-C again to exit" hint.
 	ctrlCPending bool
+
+	// T164: Scroll activity tracking
+	scrollTracker *scrollTracker
 }
 
 // NewAppModel creates a new AppModel with the given session and bridge.
@@ -177,6 +270,7 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 		streaming:       components.NewStreamingText(t),
 		spinner:         components.NewThinkingSpinner(t),
 		activeToolCalls: make(map[string]string),
+		scrollTracker:   newScrollTracker(),
 	}
 
 	// Remote permission bridge for CCR synthetic wrapping
@@ -919,6 +1013,24 @@ func (a *AppModel) handleResumeSelect(sessionID string) (*AppModel, tea.Cmd) {
 	}
 
 	return a, nil
+}
+
+// MarkScrollActivity records a scroll event for drain tracking.
+// Source: bootstrap/state.ts — markScrollActivity
+func (a *AppModel) MarkScrollActivity() {
+	a.scrollTracker.MarkScrollActivity()
+}
+
+// GetIsScrollDraining returns true while scroll is actively draining.
+// Source: bootstrap/state.ts — getIsScrollDraining
+func (a *AppModel) GetIsScrollDraining() bool {
+	return a.scrollTracker.GetIsScrollDraining()
+}
+
+// WaitForScrollIdle blocks until scroll is no longer draining.
+// Source: bootstrap/state.ts — waitForScrollIdle
+func (a *AppModel) WaitForScrollIdle() {
+	a.scrollTracker.WaitForScrollIdle()
 }
 
 // shortSessionID returns first 8 chars of a session ID.

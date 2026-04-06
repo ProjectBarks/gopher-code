@@ -1494,3 +1494,180 @@ func TestLastMainRequestId(t *testing.T) {
 		t.Errorf("LastMainRequestId = %q, want %q", s.GetLastMainRequestId(), "req_def456")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T161: Last API completion timestamp
+// ---------------------------------------------------------------------------
+
+func TestLastApiCompletionTimestamp(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	// Initially nil
+	if s.GetLastApiCompletionTimestamp() != nil {
+		t.Error("LastApiCompletionTimestamp should default to nil")
+	}
+
+	now := time.Now()
+	s.SetLastApiCompletionTimestamp(now)
+
+	got := s.GetLastApiCompletionTimestamp()
+	if got == nil {
+		t.Fatal("LastApiCompletionTimestamp should not be nil after set")
+	}
+	if !got.Equal(now) {
+		t.Errorf("LastApiCompletionTimestamp = %v, want %v", *got, now)
+	}
+
+	// Update with a later time
+	later := now.Add(5 * time.Second)
+	s.SetLastApiCompletionTimestamp(later)
+	got = s.GetLastApiCompletionTimestamp()
+	if got == nil || !got.Equal(later) {
+		t.Errorf("LastApiCompletionTimestamp = %v, want %v", got, later)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T162: Post-compaction tracking
+// ---------------------------------------------------------------------------
+
+func TestPostCompaction(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	// Initially false
+	if s.PendingPostCompaction {
+		t.Error("PendingPostCompaction should default to false")
+	}
+
+	// Consume with no prior mark → false
+	if s.ConsumePostCompaction() {
+		t.Error("ConsumePostCompaction should return false when not marked")
+	}
+
+	// Mark → consume returns true once
+	s.MarkPostCompaction()
+	if !s.PendingPostCompaction {
+		t.Error("PendingPostCompaction should be true after MarkPostCompaction")
+	}
+	if !s.ConsumePostCompaction() {
+		t.Error("ConsumePostCompaction should return true after MarkPostCompaction")
+	}
+
+	// Second consume → false (auto-reset)
+	if s.ConsumePostCompaction() {
+		t.Error("ConsumePostCompaction should return false on second call")
+	}
+
+	// Mark twice, consume once → still only returns true once
+	s.MarkPostCompaction()
+	s.MarkPostCompaction()
+	if !s.ConsumePostCompaction() {
+		t.Error("ConsumePostCompaction should return true after double mark")
+	}
+	if s.ConsumePostCompaction() {
+		t.Error("ConsumePostCompaction should return false after consume")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T163: Session switch signal
+// ---------------------------------------------------------------------------
+
+func TestOnSessionSwitch(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+	origID := s.ID
+
+	var called []string
+	s.OnSessionSwitch(func(sessionID string) {
+		called = append(called, sessionID)
+	})
+
+	// Register a second callback
+	var called2 []string
+	s.OnSessionSwitch(func(sessionID string) {
+		called2 = append(called2, sessionID)
+	})
+
+	// SwitchSession should fire both callbacks
+	s.SwitchSession("new-session-id", "/other/project")
+
+	if len(called) != 1 || called[0] != "new-session-id" {
+		t.Errorf("first callback called = %v, want [new-session-id]", called)
+	}
+	if len(called2) != 1 || called2[0] != "new-session-id" {
+		t.Errorf("second callback called = %v, want [new-session-id]", called2)
+	}
+
+	// Verify the session ID actually changed
+	if s.ID == origID {
+		t.Error("session ID should have changed after SwitchSession")
+	}
+	if s.ID != "new-session-id" {
+		t.Errorf("session ID = %q, want %q", s.ID, "new-session-id")
+	}
+
+	// Switch again — callbacks fire again
+	s.SwitchSession("third-session", "")
+	if len(called) != 2 || called[1] != "third-session" {
+		t.Errorf("callback after second switch = %v", called)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T165: Turn output token budget
+// ---------------------------------------------------------------------------
+
+func TestTurnOutputTokenBudget(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	// Initially no budget and zero turn output tokens
+	if s.GetCurrentTurnTokenBudget() != nil {
+		t.Error("CurrentTurnTokenBudget should default to nil")
+	}
+	if s.GetTurnOutputTokens() != 0 {
+		t.Error("TurnOutputTokens should default to 0")
+	}
+	if s.GetBudgetContinuationCount() != 0 {
+		t.Error("BudgetContinuationCount should default to 0")
+	}
+
+	// Simulate some output tokens before snapshot
+	s.TotalOutputTokens = 1000
+
+	// Snapshot with a budget
+	budget := 5000
+	s.SnapshotOutputTokensForTurn(&budget)
+
+	if s.GetTurnOutputTokens() != 0 {
+		t.Errorf("TurnOutputTokens after snapshot = %d, want 0", s.GetTurnOutputTokens())
+	}
+	if got := s.GetCurrentTurnTokenBudget(); got == nil || *got != 5000 {
+		t.Errorf("CurrentTurnTokenBudget = %v, want 5000", got)
+	}
+
+	// Simulate output tokens being produced
+	s.TotalOutputTokens = 3500
+	if got := s.GetTurnOutputTokens(); got != 2500 {
+		t.Errorf("TurnOutputTokens = %d, want 2500", got)
+	}
+
+	// Increment budget continuation count
+	s.IncrementBudgetContinuationCount()
+	s.IncrementBudgetContinuationCount()
+	if s.GetBudgetContinuationCount() != 2 {
+		t.Errorf("BudgetContinuationCount = %d, want 2", s.GetBudgetContinuationCount())
+	}
+
+	// New turn snapshot resets everything
+	s.TotalOutputTokens = 4000
+	s.SnapshotOutputTokensForTurn(nil)
+	if s.GetTurnOutputTokens() != 0 {
+		t.Errorf("TurnOutputTokens after new snapshot = %d, want 0", s.GetTurnOutputTokens())
+	}
+	if s.GetCurrentTurnTokenBudget() != nil {
+		t.Error("CurrentTurnTokenBudget should be nil after snapshot with nil budget")
+	}
+	if s.GetBudgetContinuationCount() != 0 {
+		t.Error("BudgetContinuationCount should reset to 0 after snapshot")
+	}
+}
