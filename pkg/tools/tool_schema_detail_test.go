@@ -282,8 +282,8 @@ func TestPerToolExpectedValues(t *testing.T) {
 		{"TaskOutput", false, true, 100000, 2, 2, []string{"taskId", "output"}},
 		{"AskUserQuestion", true, true, 100000, 4, 1, []string{"questions"}},
 		{"PowerShell", false, false, 30000, 2, 1, []string{"command"}},
-		{"TeamCreate", false, true, 100000, 2, 1, []string{"name"}},
-		{"TeamDelete", false, true, 100000, 1, 1, []string{"name"}},
+		{"TeamCreate", false, true, 100000, 3, 1, []string{"team_name"}},
+		{"TeamDelete", false, true, 100000, 1, 1, []string{"team_name"}},
 		{"Config", true, true, 100000, 3, 1, []string{"action"}},
 		{"RemoteTrigger", false, true, 100000, 2, 2, []string{"agent", "prompt"}},
 		{"SyntheticOutput", true, true, 100000, 1, 1, []string{"text"}},
@@ -466,10 +466,11 @@ func TestPropertyTypes(t *testing.T) {
 		{"PowerShell", "command", "string", false, nil},
 		{"PowerShell", "timeout", "integer", false, nil},
 		// TeamCreate
-		{"TeamCreate", "name", "string", false, nil},
-		{"TeamCreate", "members", "array", false, nil},
+		{"TeamCreate", "team_name", "string", false, nil},
+		{"TeamCreate", "description", "string", false, nil},
+		{"TeamCreate", "agent_type", "string", false, nil},
 		// TeamDelete
-		{"TeamDelete", "name", "string", false, nil},
+		{"TeamDelete", "team_name", "string", false, nil},
 		// Config
 		{"Config", "action", "string", true, []string{"get", "set", "list"}},
 		{"Config", "key", "string", false, nil},
