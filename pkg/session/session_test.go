@@ -514,6 +514,106 @@ func TestLastAPIRequest(t *testing.T) {
 	}
 }
 
+// T131: lastClassifierRequests
+func TestLastClassifierRequests(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.LastClassifierRequests != nil {
+		t.Error("LastClassifierRequests should default to nil")
+	}
+
+	// Add requests
+	s.AddClassifierRequest(map[string]string{"model": "classifier-v1"})
+	s.AddClassifierRequest(map[string]string{"model": "classifier-v2"})
+
+	if len(s.LastClassifierRequests) != 2 {
+		t.Fatalf("LastClassifierRequests len = %d, want 2", len(s.LastClassifierRequests))
+	}
+
+	// Clear
+	s.ClearClassifierRequests()
+	if s.LastClassifierRequests != nil {
+		t.Error("LastClassifierRequests should be nil after clear")
+	}
+}
+
+// T132: cachedClaudeMdContent
+func TestCachedClaudeMdContent(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.GetCachedClaudeMdContent() != "" {
+		t.Error("CachedClaudeMdContent should default to empty")
+	}
+
+	content := "# CLAUDE.md\nAlways use gofmt."
+	s.SetCachedClaudeMdContent(content)
+	if got := s.GetCachedClaudeMdContent(); got != content {
+		t.Errorf("GetCachedClaudeMdContent() = %q, want %q", got, content)
+	}
+
+	// Overwrite
+	s.SetCachedClaudeMdContent("")
+	if got := s.GetCachedClaudeMdContent(); got != "" {
+		t.Errorf("GetCachedClaudeMdContent() after clear = %q, want empty", got)
+	}
+}
+
+// T133: inMemoryErrorLog
+func TestInMemoryErrorLog(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.InMemoryErrorLog != nil {
+		t.Error("InMemoryErrorLog should default to nil")
+	}
+
+	// Append errors
+	s.AppendError("connection timeout")
+	s.AppendError("rate limited")
+	s.AppendError("invalid response")
+
+	if len(s.InMemoryErrorLog) != 3 {
+		t.Fatalf("InMemoryErrorLog len = %d, want 3", len(s.InMemoryErrorLog))
+	}
+	if s.InMemoryErrorLog[0] != "connection timeout" {
+		t.Errorf("InMemoryErrorLog[0] = %q, want %q", s.InMemoryErrorLog[0], "connection timeout")
+	}
+
+	// GetErrorLog returns a copy
+	log := s.GetErrorLog()
+	if len(log) != 3 {
+		t.Fatalf("GetErrorLog() len = %d, want 3", len(log))
+	}
+	log[0] = "mutated"
+	if s.InMemoryErrorLog[0] == "mutated" {
+		t.Error("GetErrorLog should return a copy, not a reference")
+	}
+
+	// GetErrorLog on empty session
+	s2 := New(DefaultConfig(), "/tmp/test")
+	if got := s2.GetErrorLog(); got != nil {
+		t.Errorf("GetErrorLog() on empty session = %v, want nil", got)
+	}
+}
+
+// T135: sessionBypassPermissionsMode
+func TestSessionBypassPermissionsMode(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.SessionBypassPermissionsMode {
+		t.Error("SessionBypassPermissionsMode should default to false")
+	}
+
+	s.SetBypassPermissionsMode(true)
+	if !s.SessionBypassPermissionsMode {
+		t.Error("SessionBypassPermissionsMode should be true after SetBypassPermissionsMode(true)")
+	}
+
+	s.SetBypassPermissionsMode(false)
+	if s.SessionBypassPermissionsMode {
+		t.Error("SessionBypassPermissionsMode should be false after SetBypassPermissionsMode(false)")
+	}
+}
+
 func TestSaveAndLoad_NewFields(t *testing.T) {
 	setupTestHome(t)
 

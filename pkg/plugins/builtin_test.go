@@ -340,6 +340,87 @@ func TestSkillDefinitionToCommand_AllFields(t *testing.T) {
 	}
 }
 
+// ── T134: PluginState runtime fields ─────────────────────────────────
+
+func TestPluginState_Defaults(t *testing.T) {
+	ps := NewPluginState()
+
+	if ps.InlinePlugins != nil {
+		t.Error("InlinePlugins should default to nil")
+	}
+	if ps.ChromeFlagOverride != nil {
+		t.Error("ChromeFlagOverride should default to nil")
+	}
+	if ps.UseCoworkPlugins {
+		t.Error("UseCoworkPlugins should default to false")
+	}
+	if ps.AllowedChannels != nil {
+		t.Error("AllowedChannels should default to nil")
+	}
+	if ps.HasDevChannels {
+		t.Error("HasDevChannels should default to false")
+	}
+}
+
+func TestPluginState_InlinePlugins(t *testing.T) {
+	ps := NewPluginState()
+	ps.InlinePlugins = []string{"/path/to/plugin1", "/path/to/plugin2"}
+
+	if len(ps.InlinePlugins) != 2 {
+		t.Fatalf("InlinePlugins len = %d, want 2", len(ps.InlinePlugins))
+	}
+	if ps.InlinePlugins[0] != "/path/to/plugin1" {
+		t.Errorf("InlinePlugins[0] = %q, want %q", ps.InlinePlugins[0], "/path/to/plugin1")
+	}
+}
+
+func TestPluginState_ChromeFlagOverride(t *testing.T) {
+	ps := NewPluginState()
+
+	// Initially nil (unset)
+	if ps.ChromeFlagOverride != nil {
+		t.Error("ChromeFlagOverride should start nil")
+	}
+
+	// Set to true (--chrome)
+	ps.SetChromeFlagOverride(true)
+	if ps.ChromeFlagOverride == nil || !*ps.ChromeFlagOverride {
+		t.Error("ChromeFlagOverride should be *true after SetChromeFlagOverride(true)")
+	}
+
+	// Set to false (--no-chrome)
+	ps.SetChromeFlagOverride(false)
+	if ps.ChromeFlagOverride == nil || *ps.ChromeFlagOverride {
+		t.Error("ChromeFlagOverride should be *false after SetChromeFlagOverride(false)")
+	}
+
+	// Clear back to nil
+	ps.ClearChromeFlagOverride()
+	if ps.ChromeFlagOverride != nil {
+		t.Error("ChromeFlagOverride should be nil after ClearChromeFlagOverride")
+	}
+}
+
+func TestPluginState_AllFlags(t *testing.T) {
+	ps := NewPluginState()
+	ps.UseCoworkPlugins = true
+	ps.HasDevChannels = true
+	ps.AllowedChannels = []string{"stable", "beta"}
+
+	if !ps.UseCoworkPlugins {
+		t.Error("UseCoworkPlugins should be true")
+	}
+	if !ps.HasDevChannels {
+		t.Error("HasDevChannels should be true")
+	}
+	if len(ps.AllowedChannels) != 2 {
+		t.Fatalf("AllowedChannels len = %d, want 2", len(ps.AllowedChannels))
+	}
+	if ps.AllowedChannels[1] != "beta" {
+		t.Errorf("AllowedChannels[1] = %q, want %q", ps.AllowedChannels[1], "beta")
+	}
+}
+
 func TestClearBuiltinPlugins(t *testing.T) {
 	ClearBuiltinPlugins()
 

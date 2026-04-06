@@ -74,6 +74,39 @@ type PluginLoadResult struct {
 	Disabled []LoadedPlugin
 }
 
+// PluginState holds runtime plugin configuration flags set from CLI flags
+// and session state. These are session-scoped and not persisted.
+// Source: bootstrap/state.ts — inlinePlugins, chromeFlagOverride,
+// useCoworkPlugins, allowedChannels, hasDevChannels (T134)
+type PluginState struct {
+	// InlinePlugins are plugin directories specified via --plugin-dir.
+	InlinePlugins []string
+	// ChromeFlagOverride is the --chrome/--no-chrome tri-state:
+	// nil = unset, *true = --chrome, *false = --no-chrome.
+	ChromeFlagOverride *bool
+	// UseCoworkPlugins enables cowork plugins (--cowork flag).
+	UseCoworkPlugins bool
+	// AllowedChannels restricts plugin channels (--channels flag).
+	AllowedChannels []string
+	// HasDevChannels enables development channels (--dangerously-load-development-channels).
+	HasDevChannels bool
+}
+
+// NewPluginState returns a zero-value PluginState.
+func NewPluginState() *PluginState {
+	return &PluginState{}
+}
+
+// SetChromeFlagOverride sets the chrome flag tri-state.
+func (ps *PluginState) SetChromeFlagOverride(enabled bool) {
+	ps.ChromeFlagOverride = &enabled
+}
+
+// ClearChromeFlagOverride resets chrome flag to unset.
+func (ps *PluginState) ClearChromeFlagOverride() {
+	ps.ChromeFlagOverride = nil
+}
+
 // Command represents a skill command surfaced to the model.
 // Source: types/command.ts — Command (subset for plugin skills)
 type Command struct {

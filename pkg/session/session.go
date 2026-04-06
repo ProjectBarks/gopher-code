@@ -171,6 +171,22 @@ type SessionState struct {
 	// Source: bootstrap/state.ts — lastAPIRequest, lastAPIRequestMessages
 	LastAPIRequest         interface{}             `json:"-"` // raw API request body (for debug/share)
 	LastAPIRequestMessages []provider.RequestMessage `json:"-"` // messages from the last API request
+
+	// T131: Recent classifier API calls stored for debugging.
+	// Source: bootstrap/state.ts — lastClassifierRequests
+	LastClassifierRequests []interface{} `json:"-"`
+
+	// T132: Cached CLAUDE.md file content. Avoids re-reading the file on every prompt build.
+	// Source: bootstrap/state.ts — cachedClaudeMdContent
+	CachedClaudeMdContent string `json:"-"`
+
+	// T133: Append-only in-memory error log for /doctor and bug reports.
+	// Source: bootstrap/state.ts — inMemoryErrorLog
+	InMemoryErrorLog []string `json:"-"`
+
+	// T135: Runtime permission bypass toggle (session-scoped).
+	// Source: bootstrap/state.ts — sessionBypassPermissionsMode
+	SessionBypassPermissionsMode bool `json:"-"`
 }
 
 // New creates a new SessionState with the given config and working directory.
@@ -336,6 +352,50 @@ func (s *SessionState) SetLastAPIRequest(request interface{}, messages []provide
 func (s *SessionState) ClearLastAPIRequest() {
 	s.LastAPIRequest = nil
 	s.LastAPIRequestMessages = nil
+}
+
+// AddClassifierRequest appends a classifier API call to the debug log.
+// Source: bootstrap/state.ts — lastClassifierRequests
+func (s *SessionState) AddClassifierRequest(req interface{}) {
+	s.LastClassifierRequests = append(s.LastClassifierRequests, req)
+}
+
+// ClearClassifierRequests resets the classifier request log.
+func (s *SessionState) ClearClassifierRequests() {
+	s.LastClassifierRequests = nil
+}
+
+// SetCachedClaudeMdContent stores the cached CLAUDE.md content.
+// Source: bootstrap/state.ts — cachedClaudeMdContent
+func (s *SessionState) SetCachedClaudeMdContent(content string) {
+	s.CachedClaudeMdContent = content
+}
+
+// GetCachedClaudeMdContent returns the cached CLAUDE.md content.
+func (s *SessionState) GetCachedClaudeMdContent() string {
+	return s.CachedClaudeMdContent
+}
+
+// AppendError adds an error message to the in-memory error log.
+// Source: bootstrap/state.ts — inMemoryErrorLog
+func (s *SessionState) AppendError(errMsg string) {
+	s.InMemoryErrorLog = append(s.InMemoryErrorLog, errMsg)
+}
+
+// GetErrorLog returns a copy of the in-memory error log.
+func (s *SessionState) GetErrorLog() []string {
+	if s.InMemoryErrorLog == nil {
+		return nil
+	}
+	out := make([]string, len(s.InMemoryErrorLog))
+	copy(out, s.InMemoryErrorLog)
+	return out
+}
+
+// SetBypassPermissionsMode enables or disables the session-scoped permission bypass.
+// Source: bootstrap/state.ts — sessionBypassPermissionsMode
+func (s *SessionState) SetBypassPermissionsMode(bypass bool) {
+	s.SessionBypassPermissionsMode = bypass
 }
 
 // RegenerateSessionID creates a new session ID, optionally setting the current as parent.
