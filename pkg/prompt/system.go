@@ -2,11 +2,129 @@ package prompt
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/projectbarks/gopher-code/pkg/provider"
 )
+
+// Source: constants/system.ts
+
+// System-prompt prefix constants — must match TS verbatim because
+// splitSysPromptPrefix identifies prefix blocks by content, not position.
+const (
+	DefaultPrefix               = `You are Claude Code, Anthropic's official CLI for Claude.`
+	AgentSDKClaudeCodePresetPrefix = `You are Claude Code, Anthropic's official CLI for Claude, running within the Claude Agent SDK.`
+	AgentSDKPrefix              = `You are a Claude agent, built on Anthropic's Claude Agent SDK.`
+)
+
+// CLISyspromptPrefixes is the set of all possible CLI sysprompt prefix values,
+// used by splitSysPromptPrefix to identify prefix blocks by content.
+var CLISyspromptPrefixes = map[string]struct{}{
+	DefaultPrefix:               {},
+	AgentSDKClaudeCodePresetPrefix: {},
+	AgentSDKPrefix:              {},
+}
+
+// PrefixOptions controls the 3-way prefix selector.
+type PrefixOptions struct {
+	IsNonInteractive     bool
+	HasAppendSystemPrompt bool
+}
+
+// GetCLISyspromptPrefix returns the appropriate system prompt prefix.
+//
+// Decision tree:
+//   - vertex provider → DefaultPrefix
+//   - isNonInteractive + hasAppendSystemPrompt → AgentSDKClaudeCodePresetPrefix
+//   - isNonInteractive → AgentSDKPrefix
+//   - else → DefaultPrefix
+func GetCLISyspromptPrefix(opts *PrefixOptions) string {
+	if provider.GetAPIProvider() == provider.ProviderVertex {
+		return DefaultPrefix
+	}
+	if opts != nil && opts.IsNonInteractive {
+		if opts.HasAppendSystemPrompt {
+			return AgentSDKClaudeCodePresetPrefix
+		}
+		return AgentSDKPrefix
+	}
+	return DefaultPrefix
+}
+
+// isEnvDefinedFalsy returns true when the env var is set to a falsy value
+// (0, false, no, empty string). Returns false if the env var is unset.
+func isEnvDefinedFalsy(key string) bool {
+	val, ok := os.LookupEnv(key)
+	if !ok {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(val)) {
+	case "", "0", "false", "no":
+		return true
+	}
+	return false
+}
+
+// AttributionConfig holds injectable dependencies for attribution header
+// construction, making the function testable without global state for
+// the growthbook killswitch and native attestation feature.
+type AttributionConfig struct {
+	// Version is the build version (MACRO.VERSION equivalent).
+	Version string
+	// GrowthBookEnabled returns the tengu_attribution_header flag.
+	// Defaults to true when nil.
+	GrowthBookEnabled func() bool
+	// NativeClientAttestation gates the cch=00000 placeholder.
+	NativeClientAttestation bool
+	// GetWorkload returns the turn-scoped QoS hint. Nil means no workload.
+	GetWorkload func() string
+}
+
+// GetAttributionHeader builds the x-anthropic-billing-header value.
+//
+// Disabled when CLAUDE_CODE_ATTRIBUTION_HEADER is set to a falsy value
+// or when the GrowthBook tengu_attribution_header killswitch is off.
+func GetAttributionHeader(fingerprint string, cfg AttributionConfig) string {
+	// Env gate
+	if isEnvDefinedFalsy("CLAUDE_CODE_ATTRIBUTION_HEADER") {
+		return ""
+	}
+	// GrowthBook killswitch (default enabled)
+	if cfg.GrowthBookEnabled != nil && !cfg.GrowthBookEnabled() {
+		return ""
+	}
+
+	version := cfg.Version + "." + fingerprint
+	entrypoint := os.Getenv("CLAUDE_CODE_ENTRYPOINT")
+	if entrypoint == "" {
+		entrypoint = "unknown"
+	}
+
+	var sb strings.Builder
+	sb.WriteString("x-anthropic-billing-header: cc_version=")
+	sb.WriteString(version)
+	sb.WriteString("; cc_entrypoint=")
+	sb.WriteString(entrypoint)
+	sb.WriteByte(';')
+
+	if cfg.NativeClientAttestation {
+		sb.WriteString(" cch=00000;")
+	}
+
+	if cfg.GetWorkload != nil {
+		if w := cfg.GetWorkload(); w != "" {
+			sb.WriteString(" cc_workload=")
+			sb.WriteString(w)
+			sb.WriteByte(';')
+		}
+	}
+
+	return sb.String()
+}
 
 // BuildSystemPrompt constructs the full system prompt with environment context.
 func BuildSystemPrompt(base string, cwd string, model string) string {
