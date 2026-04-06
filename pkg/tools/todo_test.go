@@ -53,6 +53,7 @@ func TestTodoTools(t *testing.T) {
 	})
 
 	t.Run("read_empty_list", func(t *testing.T) {
+		_, reader := tools.NewTodoTools()
 		out, err := reader.Execute(context.Background(), nil, json.RawMessage(`{}`))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -65,12 +66,15 @@ func TestTodoTools(t *testing.T) {
 		}
 	})
 
-	t.Run("write_and_read", func(t *testing.T) {
+	// --- T534: full schema (content, status, activeForm) ---
+
+	t.Run("write_and_read_full_schema", func(t *testing.T) {
+		writer, reader := tools.NewTodoTools()
 		input := json.RawMessage(`{
 			"todos": [
-				{"id": "1", "description": "First task", "status": "pending"},
-				{"id": "2", "description": "Second task", "status": "in_progress"},
-				{"id": "3", "description": "Third task", "status": "done"}
+				{"content": "First task", "status": "pending", "activeForm": "Working on first task"},
+				{"content": "Second task", "status": "in_progress", "activeForm": "Working on second task"},
+				{"content": "Third task", "status": "completed", "activeForm": "Completing third task"}
 			]
 		}`)
 		out, err := writer.Execute(context.Background(), nil, input)
@@ -80,8 +84,11 @@ func TestTodoTools(t *testing.T) {
 		if out.IsError {
 			t.Fatalf("unexpected tool error: %s", out.Content)
 		}
-		if !strings.Contains(out.Content, "3 tasks") {
-			t.Errorf("expected '3 tasks' in output, got %q", out.Content)
+
+		// TS result message: "Todos have been modified successfully..."
+		const wantResult = "Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable"
+		if out.Content != wantResult {
+			t.Errorf("result mismatch\n got: %q\nwant: %q", out.Content, wantResult)
 		}
 
 		// Read back
@@ -92,24 +99,124 @@ func TestTodoTools(t *testing.T) {
 		if out.IsError {
 			t.Fatalf("unexpected tool error: %s", out.Content)
 		}
-		if !strings.Contains(out.Content, "[ ] 1 First task") {
-			t.Errorf("expected pending task, got %q", out.Content)
+		if !strings.Contains(out.Content, "First task") {
+			t.Errorf("expected 'First task' in read output, got %q", out.Content)
 		}
-		if !strings.Contains(out.Content, "[~] 2 Second task") {
-			t.Errorf("expected in_progress task, got %q", out.Content)
+		if !strings.Contains(out.Content, "Second task") {
+			t.Errorf("expected 'Second task' in read output, got %q", out.Content)
 		}
-		if !strings.Contains(out.Content, "[x] 3 Third task") {
-			t.Errorf("expected done task, got %q", out.Content)
+		if !strings.Contains(out.Content, "Third task") {
+			t.Errorf("expected 'Third task' in read output, got %q", out.Content)
+		}
+	})
+
+	t.Run("status_validation_completed_accepted", func(t *testing.T) {
+		writer, _ := tools.NewTodoTools()
+		input := json.RawMessage(`{
+			"todos": [
+				{"content": "Done task", "status": "completed", "activeForm": "Completing task"}
+			]
+		}`)
+		out, err := writer.Execute(context.Background(), nil, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.IsError {
+			t.Fatalf("unexpected tool error for 'completed' status: %s", out.Content)
+		}
+	})
+
+	t.Run("status_validation_done_rejected", func(t *testing.T) {
+		// TS uses "completed" not "done" — "done" should be invalid
+		writer, _ := tools.NewTodoTools()
+		input := json.RawMessage(`{
+			"todos": [
+				{"content": "Bad status", "status": "done", "activeForm": "Doing bad status"}
+			]
+		}`)
+		out, err := writer.Execute(context.Background(), nil, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !out.IsError {
+			t.Error("expected error for 'done' status — TS uses 'completed'")
+		}
+	})
+
+	t.Run("status_validation_cancelled_rejected", func(t *testing.T) {
+		writer, _ := tools.NewTodoTools()
+		input := json.RawMessage(`{
+			"todos": [
+				{"content": "Cancelled task", "status": "cancelled", "activeForm": "Cancelling task"}
+			]
+		}`)
+		out, err := writer.Execute(context.Background(), nil, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !out.IsError {
+			t.Error("expected error for 'cancelled' status — not a valid TS status")
+		}
+	})
+
+	t.Run("status_pending_in_progress_completed_are_valid", func(t *testing.T) {
+		writer, _ := tools.NewTodoTools()
+		for _, status := range []string{"pending", "in_progress", "completed"} {
+			input, _ := json.Marshal(map[string]interface{}{
+				"todos": []map[string]string{
+					{"content": "Task", "status": status, "activeForm": "Tasking"},
+				},
+			})
+			out, err := writer.Execute(context.Background(), nil, input)
+			if err != nil {
+				t.Fatalf("status %q: unexpected error: %v", status, err)
+			}
+			if out.IsError {
+				t.Errorf("status %q should be valid, got error: %s", status, out.Content)
+			}
+		}
+	})
+
+	t.Run("empty_content_rejected", func(t *testing.T) {
+		writer, _ := tools.NewTodoTools()
+		input := json.RawMessage(`{
+			"todos": [
+				{"content": "", "status": "pending", "activeForm": "Working"}
+			]
+		}`)
+		out, err := writer.Execute(context.Background(), nil, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !out.IsError {
+			t.Error("expected error for empty content")
+		}
+	})
+
+	t.Run("empty_activeForm_rejected", func(t *testing.T) {
+		writer, _ := tools.NewTodoTools()
+		input := json.RawMessage(`{
+			"todos": [
+				{"content": "A task", "status": "pending", "activeForm": ""}
+			]
+		}`)
+		out, err := writer.Execute(context.Background(), nil, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !out.IsError {
+			t.Error("expected error for empty activeForm")
 		}
 	})
 
 	t.Run("update_replaces_list", func(t *testing.T) {
+		writer, reader := tools.NewTodoTools()
 		// First write 3 tasks
 		input1 := json.RawMessage(`{
 			"todos": [
-				{"id": "1", "description": "Task A", "status": "pending"},
-				{"id": "2", "description": "Task B", "status": "pending"},
-				{"id": "3", "description": "Task C", "status": "pending"}
+				{"content": "Task A", "status": "pending", "activeForm": "Working on A"},
+				{"content": "Task B", "status": "pending", "activeForm": "Working on B"},
+				{"content": "Task C", "status": "pending", "activeForm": "Working on C"}
 			]
 		}`)
 		writer.Execute(context.Background(), nil, input1)
@@ -117,19 +224,13 @@ func TestTodoTools(t *testing.T) {
 		// Now replace with 1 task
 		input2 := json.RawMessage(`{
 			"todos": [
-				{"id": "1", "description": "Task A updated", "status": "done"}
+				{"content": "Task A updated", "status": "completed", "activeForm": "Updating A"}
 			]
 		}`)
-		out, err := writer.Execute(context.Background(), nil, input2)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !strings.Contains(out.Content, "1 tasks") {
-			t.Errorf("expected '1 tasks', got %q", out.Content)
-		}
+		writer.Execute(context.Background(), nil, input2)
 
 		// Read back - should only have 1 task
-		out, err = reader.Execute(context.Background(), nil, json.RawMessage(`{}`))
+		out, err := reader.Execute(context.Background(), nil, json.RawMessage(`{}`))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -142,9 +243,10 @@ func TestTodoTools(t *testing.T) {
 	})
 
 	t.Run("clear_all_todos", func(t *testing.T) {
+		writer, reader := tools.NewTodoTools()
 		// First add something
 		writer.Execute(context.Background(), nil, json.RawMessage(`{
-			"todos": [{"id": "1", "description": "temp", "status": "pending"}]
+			"todos": [{"content": "temp", "status": "pending", "activeForm": "Temping"}]
 		}`))
 
 		// Clear by writing empty list
@@ -166,54 +268,6 @@ func TestTodoTools(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid_status_rejected", func(t *testing.T) {
-		input := json.RawMessage(`{
-			"todos": [
-				{"id": "1", "description": "Bad status", "status": "invalid"}
-			]
-		}`)
-		out, err := writer.Execute(context.Background(), nil, input)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !out.IsError {
-			t.Error("expected error for invalid status")
-		}
-		if !strings.Contains(out.Content, "invalid status") {
-			t.Errorf("expected 'invalid status' in error, got %q", out.Content)
-		}
-	})
-
-	t.Run("missing_id_rejected", func(t *testing.T) {
-		input := json.RawMessage(`{
-			"todos": [
-				{"id": "", "description": "No ID", "status": "pending"}
-			]
-		}`)
-		out, err := writer.Execute(context.Background(), nil, input)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !out.IsError {
-			t.Error("expected error for missing ID")
-		}
-	})
-
-	t.Run("missing_description_rejected", func(t *testing.T) {
-		input := json.RawMessage(`{
-			"todos": [
-				{"id": "1", "description": "", "status": "pending"}
-			]
-		}`)
-		out, err := writer.Execute(context.Background(), nil, input)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !out.IsError {
-			t.Error("expected error for missing description")
-		}
-	})
-
 	t.Run("invalid_json_write", func(t *testing.T) {
 		out, err := writer.Execute(context.Background(), nil, json.RawMessage(`{bad}`))
 		if err != nil {
@@ -221,6 +275,139 @@ func TestTodoTools(t *testing.T) {
 		}
 		if !out.IsError {
 			t.Error("expected error for invalid JSON")
+		}
+	})
+
+	// --- T534: prompt text ---
+
+	t.Run("description_matches_ts", func(t *testing.T) {
+		const wantDesc = "Update the todo list for the current session. To be used proactively and often to track progress and pending tasks. Make sure that at least one task is in_progress at all times. Always provide both content (imperative) and activeForm (present continuous) for each task."
+		got := writer.Description()
+		if got != wantDesc {
+			t.Errorf("description mismatch\n got: %q\nwant: %q", got, wantDesc)
+		}
+	})
+
+	t.Run("prompt_contains_key_sections", func(t *testing.T) {
+		prompt := tools.GetToolPrompt(writer)
+		if prompt == "" {
+			t.Fatal("TodoWriteTool must implement ToolPrompter (Prompt() string)")
+		}
+
+		requiredFragments := []string{
+			"Use this tool to create and manage a structured task list for your current coding session.",
+			"It also helps the user understand the progress of the task and overall progress of their requests.",
+			"## When to Use This Tool",
+			"Complex multi-step tasks",
+			"## When NOT to Use This Tool",
+			"NOTE that you should not use this tool if there is only one trivial task to do.",
+			"## Examples of When to Use the Todo List",
+			"## Examples of When NOT to Use the Todo List",
+			"## Task States and Management",
+			"pending: Task not yet started",
+			"in_progress: Currently working on",
+			"completed: Task finished successfully",
+			"Ideally you should only have one todo as in_progress at a time",
+			"**Task Breakdown**",
+			"content: ",
+			"activeForm: ",
+		}
+		for _, frag := range requiredFragments {
+			if !strings.Contains(prompt, frag) {
+				t.Errorf("prompt missing fragment: %q", frag)
+			}
+		}
+	})
+
+	// --- T534: search hint ---
+
+	t.Run("search_hint", func(t *testing.T) {
+		hint := tools.GetSearchHint(writer)
+		if hint == "" {
+			t.Fatal("TodoWriteTool must implement SearchHinter")
+		}
+		if hint != "manage the session task checklist" {
+			t.Errorf("search hint mismatch: got %q", hint)
+		}
+	})
+
+	// --- T534: maxResultSizeChars ---
+
+	t.Run("max_result_size_chars", func(t *testing.T) {
+		got := tools.GetMaxResultSizeChars(writer)
+		if got != 100_000 {
+			t.Errorf("maxResultSizeChars: got %d, want 100000", got)
+		}
+	})
+
+	// --- T534: input schema has content, status, activeForm (not id/description) ---
+
+	t.Run("input_schema_fields", func(t *testing.T) {
+		schema := writer.InputSchema()
+		var parsed map[string]interface{}
+		if err := json.Unmarshal(schema, &parsed); err != nil {
+			t.Fatalf("InputSchema() is not valid JSON: %v", err)
+		}
+		props := parsed["properties"].(map[string]interface{})
+		todosObj := props["todos"].(map[string]interface{})
+		items := todosObj["items"].(map[string]interface{})
+		itemProps := items["properties"].(map[string]interface{})
+
+		// Must have content, status, activeForm
+		for _, field := range []string{"content", "status", "activeForm"} {
+			if _, ok := itemProps[field]; !ok {
+				t.Errorf("input schema items missing field %q", field)
+			}
+		}
+		// Must NOT have old id/description fields
+		for _, field := range []string{"id", "description"} {
+			if _, ok := itemProps[field]; ok {
+				t.Errorf("input schema items should not have old field %q", field)
+			}
+		}
+
+		// required should list content, status, activeForm
+		required := items["required"].([]interface{})
+		requiredSet := map[string]bool{}
+		for _, r := range required {
+			requiredSet[r.(string)] = true
+		}
+		for _, field := range []string{"content", "status", "activeForm"} {
+			if !requiredSet[field] {
+				t.Errorf("input schema items missing required field %q", field)
+			}
+		}
+	})
+
+	// --- T534: read output format with new schema ---
+
+	t.Run("read_output_format", func(t *testing.T) {
+		writer, reader := tools.NewTodoTools()
+		input := json.RawMessage(`{
+			"todos": [
+				{"content": "Fix bug", "status": "pending", "activeForm": "Fixing bug"},
+				{"content": "Write tests", "status": "in_progress", "activeForm": "Writing tests"},
+				{"content": "Deploy", "status": "completed", "activeForm": "Deploying"}
+			]
+		}`)
+		writer.Execute(context.Background(), nil, input)
+
+		out, err := reader.Execute(context.Background(), nil, json.RawMessage(`{}`))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// Should show content with status icons
+		if !strings.Contains(out.Content, "[ ]") {
+			t.Errorf("expected [ ] for pending, got %q", out.Content)
+		}
+		if !strings.Contains(out.Content, "[~]") {
+			t.Errorf("expected [~] for in_progress, got %q", out.Content)
+		}
+		if !strings.Contains(out.Content, "[x]") {
+			t.Errorf("expected [x] for completed, got %q", out.Content)
+		}
+		if !strings.Contains(out.Content, "Fix bug") {
+			t.Errorf("expected 'Fix bug' in output, got %q", out.Content)
 		}
 	})
 }
@@ -231,7 +418,7 @@ func TestTodoToolsSharedState(t *testing.T) {
 	writer2, reader2 := tools.NewTodoTools()
 
 	writer1.Execute(context.Background(), nil, json.RawMessage(`{
-		"todos": [{"id": "1", "description": "From set 1", "status": "pending"}]
+		"todos": [{"content": "From set 1", "status": "pending", "activeForm": "Working on set 1"}]
 	}`))
 
 	// Reader2 should not see set1's todos
@@ -248,7 +435,7 @@ func TestTodoToolsSharedState(t *testing.T) {
 
 	// Writer2 should not affect reader1
 	writer2.Execute(context.Background(), nil, json.RawMessage(`{
-		"todos": [{"id": "x", "description": "From set 2", "status": "done"}]
+		"todos": [{"content": "From set 2", "status": "completed", "activeForm": "Working on set 2"}]
 	}`))
 
 	out, _ = reader1.Execute(context.Background(), nil, json.RawMessage(`{}`))
