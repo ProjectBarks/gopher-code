@@ -247,6 +247,22 @@ type SessionState struct {
 	// T150: The agent type for the main conversation thread.
 	// Source: bootstrap/state.ts — mainThreadAgentType
 	MainThreadAgentType string `json:"-"`
+
+	// T151: Whether running as a remote/bridge session.
+	// Source: bootstrap/state.ts — isRemoteMode
+	IsRemoteMode bool `json:"-"`
+
+	// T152: URL of the direct-connect server (set in remote/bridge mode).
+	// Source: bootstrap/state.ts — directConnectServerUrl
+	DirectConnectServerUrl string `json:"-"`
+
+	// T154: The last date string emitted in the system prompt (for date-change detection).
+	// Source: bootstrap/state.ts — lastEmittedDate
+	LastEmittedDate string `json:"-"`
+
+	// T155: Extra directories to scan for CLAUDE.md files (beyond project root).
+	// Source: bootstrap/state.ts — additionalDirectoriesForClaudeMd
+	AdditionalDirectoriesForClaudeMd []string `json:"-"`
 }
 
 // New creates a new SessionState with the given config and working directory.
@@ -875,4 +891,60 @@ func (s *SessionState) ToRequestMessages() []provider.RequestMessage {
 		msgs = append(msgs, rm)
 	}
 	return msgs
+}
+
+// ---------------------------------------------------------------------------
+// T151: Remote mode — Source: bootstrap/state.ts — isRemoteMode
+// ---------------------------------------------------------------------------
+
+// SetIsRemoteMode sets whether the session is running in remote/bridge mode.
+func (s *SessionState) SetIsRemoteMode(remote bool) {
+	s.IsRemoteMode = remote
+}
+
+// GetIsRemoteMode returns whether the session is in remote mode.
+func (s *SessionState) GetIsRemoteMode() bool {
+	return s.IsRemoteMode
+}
+
+// ---------------------------------------------------------------------------
+// T152: Direct connect server URL — Source: bootstrap/state.ts
+// ---------------------------------------------------------------------------
+
+// SetDirectConnectServerUrl sets the direct-connect server URL.
+func (s *SessionState) SetDirectConnectServerUrl(url string) {
+	s.DirectConnectServerUrl = url
+}
+
+// GetDirectConnectServerUrl returns the direct-connect server URL.
+func (s *SessionState) GetDirectConnectServerUrl() string {
+	return s.DirectConnectServerUrl
+}
+
+// ---------------------------------------------------------------------------
+// T154: Last emitted date — Source: bootstrap/state.ts — lastEmittedDate
+// ---------------------------------------------------------------------------
+
+// SetLastEmittedDate stores the last date string emitted in the system prompt.
+func (s *SessionState) SetLastEmittedDate(date string) {
+	s.LastEmittedDate = date
+}
+
+// GetLastEmittedDate returns the last date string emitted in the system prompt.
+func (s *SessionState) GetLastEmittedDate() string {
+	return s.LastEmittedDate
+}
+
+// ---------------------------------------------------------------------------
+// T155: Additional directories for CLAUDE.md — Source: bootstrap/state.ts
+// ---------------------------------------------------------------------------
+
+// SetAdditionalDirectoriesForClaudeMd sets extra directories to scan for CLAUDE.md.
+func (s *SessionState) SetAdditionalDirectoriesForClaudeMd(dirs []string) {
+	s.AdditionalDirectoriesForClaudeMd = dirs
+}
+
+// GetAdditionalDirectoriesForClaudeMd returns the extra CLAUDE.md directories.
+func (s *SessionState) GetAdditionalDirectoriesForClaudeMd() []string {
+	return s.AdditionalDirectoriesForClaudeMd
 }

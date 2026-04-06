@@ -1232,4 +1232,119 @@ func TestNew_InitializesT146_T150Fields(t *testing.T) {
 	if s.MainThreadAgentType != "" {
 		t.Errorf("MainThreadAgentType = %q, want empty", s.MainThreadAgentType)
 	}
+	// T151
+	if s.IsRemoteMode {
+		t.Error("IsRemoteMode should default to false")
+	}
+	// T152
+	if s.DirectConnectServerUrl != "" {
+		t.Errorf("DirectConnectServerUrl = %q, want empty", s.DirectConnectServerUrl)
+	}
+	// T154
+	if s.LastEmittedDate != "" {
+		t.Errorf("LastEmittedDate = %q, want empty", s.LastEmittedDate)
+	}
+	// T155
+	if s.AdditionalDirectoriesForClaudeMd != nil {
+		t.Error("AdditionalDirectoriesForClaudeMd should default to nil")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T151: Remote mode
+// ---------------------------------------------------------------------------
+
+func TestIsRemoteMode(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.GetIsRemoteMode() {
+		t.Error("GetIsRemoteMode should default to false")
+	}
+
+	s.SetIsRemoteMode(true)
+	if !s.GetIsRemoteMode() {
+		t.Error("GetIsRemoteMode should be true after SetIsRemoteMode(true)")
+	}
+
+	s.SetIsRemoteMode(false)
+	if s.GetIsRemoteMode() {
+		t.Error("GetIsRemoteMode should be false after SetIsRemoteMode(false)")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T152: Direct connect server URL
+// ---------------------------------------------------------------------------
+
+func TestDirectConnectServerUrl(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.GetDirectConnectServerUrl() != "" {
+		t.Errorf("GetDirectConnectServerUrl should default to empty, got %q", s.GetDirectConnectServerUrl())
+	}
+
+	s.SetDirectConnectServerUrl("https://example.com:8443")
+	if got := s.GetDirectConnectServerUrl(); got != "https://example.com:8443" {
+		t.Errorf("GetDirectConnectServerUrl = %q, want %q", got, "https://example.com:8443")
+	}
+
+	s.SetDirectConnectServerUrl("")
+	if got := s.GetDirectConnectServerUrl(); got != "" {
+		t.Errorf("GetDirectConnectServerUrl = %q, want empty", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T154: Last emitted date
+// ---------------------------------------------------------------------------
+
+func TestLastEmittedDate(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.GetLastEmittedDate() != "" {
+		t.Errorf("GetLastEmittedDate should default to empty, got %q", s.GetLastEmittedDate())
+	}
+
+	s.SetLastEmittedDate("2026-04-05")
+	if got := s.GetLastEmittedDate(); got != "2026-04-05" {
+		t.Errorf("GetLastEmittedDate = %q, want %q", got, "2026-04-05")
+	}
+
+	// Update to new date
+	s.SetLastEmittedDate("2026-04-06")
+	if got := s.GetLastEmittedDate(); got != "2026-04-06" {
+		t.Errorf("GetLastEmittedDate = %q, want %q", got, "2026-04-06")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T155: Additional directories for CLAUDE.md
+// ---------------------------------------------------------------------------
+
+func TestAdditionalDirectoriesForClaudeMd(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.GetAdditionalDirectoriesForClaudeMd() != nil {
+		t.Error("GetAdditionalDirectoriesForClaudeMd should default to nil")
+	}
+
+	dirs := []string{"/home/user/project-a", "/home/user/project-b"}
+	s.SetAdditionalDirectoriesForClaudeMd(dirs)
+
+	got := s.GetAdditionalDirectoriesForClaudeMd()
+	if len(got) != 2 {
+		t.Fatalf("GetAdditionalDirectoriesForClaudeMd len = %d, want 2", len(got))
+	}
+	if got[0] != "/home/user/project-a" {
+		t.Errorf("got[0] = %q, want %q", got[0], "/home/user/project-a")
+	}
+	if got[1] != "/home/user/project-b" {
+		t.Errorf("got[1] = %q, want %q", got[1], "/home/user/project-b")
+	}
+
+	// Clear
+	s.SetAdditionalDirectoriesForClaudeMd(nil)
+	if s.GetAdditionalDirectoriesForClaudeMd() != nil {
+		t.Error("GetAdditionalDirectoriesForClaudeMd should be nil after clearing")
+	}
 }
