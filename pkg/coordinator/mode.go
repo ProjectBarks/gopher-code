@@ -96,10 +96,28 @@ func isFeatureGateEnabled(gate string) bool {
 	return FeatureGateChecker(gate)
 }
 
-// isEnvTruthy checks if a string looks truthy (1, true, yes).
+// simpleModeEnv is the environment variable for simple mode.
+// Source: src/coordinator/coordinatorMode.ts, src/utils/envUtils.ts
+const simpleModeEnv = "CLAUDE_CODE_SIMPLE"
+
+// SimpleToolNames are the tool names available in simple mode.
+// Source: coordinatorMode.ts — workerTools branch when CLAUDE_CODE_SIMPLE is truthy.
+var SimpleToolNames = []string{"Bash", "Read", "Edit"}
+
+// IsSimpleMode reports whether CLAUDE_CODE_SIMPLE is set to a truthy value.
+// When enabled, worker capabilities are reduced to Bash, Read, and Edit,
+// and the coordinator system prompt uses a simplified description.
+//
+// Source: coordinatorMode.ts — isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)
+func IsSimpleMode() bool {
+	return isEnvTruthy(os.Getenv(simpleModeEnv))
+}
+
+// isEnvTruthy checks if a string looks truthy (1, true, yes, on).
+// Source: src/utils/envUtils.ts — isEnvTruthy()
 func isEnvTruthy(val string) bool {
-	switch strings.ToLower(val) {
-	case "1", "true", "yes":
+	switch strings.ToLower(strings.TrimSpace(val)) {
+	case "1", "true", "yes", "on":
 		return true
 	}
 	return false

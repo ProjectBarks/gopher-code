@@ -1,20 +1,19 @@
 package tools
 
 import (
-	"os"
-
+	"github.com/projectbarks/gopher-code/pkg/coordinator"
 	"github.com/projectbarks/gopher-code/pkg/provider"
 )
 
 // SimpleToolNames are the only tools available in simple mode.
-// Source: tools.ts:287 — [BashTool, FileReadTool, FileEditTool]
-var SimpleToolNames = []string{"Bash", "Read", "Edit"}
+// Delegates to coordinator.SimpleToolNames for the canonical list.
+var SimpleToolNames = coordinator.SimpleToolNames
 
-// IsSimpleMode returns true when CLAUDE_CODE_SIMPLE=1 is set.
-// Source: tools.ts:273
+// IsSimpleMode returns true when CLAUDE_CODE_SIMPLE is set to a truthy value.
+// Delegates to coordinator.IsSimpleMode which checks the env var using the
+// same isEnvTruthy logic as the TS source (1, true, yes, on).
 func IsSimpleMode() bool {
-	v := os.Getenv("CLAUDE_CODE_SIMPLE")
-	return v == "1" || v == "true"
+	return coordinator.IsSimpleMode()
 }
 
 // RegisterDefaults registers all built-in tools with the given registry.

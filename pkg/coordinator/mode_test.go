@@ -24,6 +24,7 @@ func (s *captureSink) Shutdown()                                              {}
 func resetEnv(t *testing.T) {
 	t.Helper()
 	os.Unsetenv(coordinatorModeEnv)
+	os.Unsetenv(simpleModeEnv)
 	FeatureGateChecker = nil
 	analytics.ResetForTesting()
 }
@@ -233,5 +234,60 @@ func TestAnalyticsEventName(t *testing.T) {
 	}
 	if sink.events[0].name != "tengu_coordinator_mode_switched" {
 		t.Fatalf("event name must be tengu_coordinator_mode_switched, got %q", sink.events[0].name)
+	}
+}
+
+// --- T22: CLAUDE_CODE_SIMPLE mode branch ---
+
+func TestIsSimpleMode_FalseByDefault(t *testing.T) {
+	resetEnv(t)
+	if IsSimpleMode() {
+		t.Fatal("expected false when CLAUDE_CODE_SIMPLE is unset")
+	}
+}
+
+func TestIsSimpleMode_TruthyValues(t *testing.T) {
+	resetEnv(t)
+	for _, val := range []string{"1", "true", "TRUE", "True", "yes", "Yes", "YES", "on", "ON", "On"} {
+		os.Setenv(simpleModeEnv, val)
+		if !IsSimpleMode() {
+			t.Fatalf("expected true for CLAUDE_CODE_SIMPLE=%q", val)
+		}
+	}
+}
+
+func TestIsSimpleMode_FalsyValues(t *testing.T) {
+	resetEnv(t)
+	for _, val := range []string{"0", "false", "no", "off", "", "random"} {
+		os.Setenv(simpleModeEnv, val)
+		if IsSimpleMode() {
+			t.Fatalf("expected false for CLAUDE_CODE_SIMPLE=%q", val)
+		}
+	}
+}
+
+func TestIsSimpleMode_TrimmedInput(t *testing.T) {
+	resetEnv(t)
+	os.Setenv(simpleModeEnv, "  true  ")
+	if !IsSimpleMode() {
+		t.Fatal("expected true for whitespace-padded truthy value")
+	}
+}
+
+func TestSimpleToolNames(t *testing.T) {
+	expected := []string{"Bash", "Read", "Edit"}
+	if len(SimpleToolNames) != len(expected) {
+		t.Fatalf("expected %d simple tool names, got %d", len(expected), len(SimpleToolNames))
+	}
+	for i, name := range expected {
+		if SimpleToolNames[i] != name {
+			t.Fatalf("SimpleToolNames[%d] = %q, want %q", i, SimpleToolNames[i], name)
+		}
+	}
+}
+
+func TestSimpleModeEnvName(t *testing.T) {
+	if simpleModeEnv != "CLAUDE_CODE_SIMPLE" {
+		t.Fatalf("env name must be CLAUDE_CODE_SIMPLE, got %q", simpleModeEnv)
 	}
 }
