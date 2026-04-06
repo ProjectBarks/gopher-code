@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/coordinator"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
@@ -112,9 +111,9 @@ func Query(
 
 	// Token budget tracker for +500k feature
 	// Source: query.ts:111, 1308-1355
-	var budgetTracker *compact.BudgetTracker
+	var budgetTracker *BudgetTracker
 	if sess.Config.TokenBudgetTarget > 0 {
-		budgetTracker = compact.NewBudgetTracker()
+		budgetTracker = NewBudgetTracker()
 	}
 
 	// Memory prefetch: load CLAUDE.md async, consume before first API call.
@@ -414,8 +413,8 @@ func Query(
 			// Source: query.ts:1308-1355
 			if sess.Config.TokenBudgetTarget > 0 && budgetTracker != nil {
 				decision := budgetTracker.CheckTokenBudget(sess.Config.TokenBudgetTarget, sess.TotalOutputTokens)
-				if decision.Action == compact.BudgetContinue {
-					nudgeMsg := compact.GetBudgetContinuationMessage(decision.Pct, decision.TurnTokens, decision.Budget)
+				if decision.Action == BudgetContinue {
+					nudgeMsg := GetBudgetContinuationMessage(decision.Pct, decision.TurnTokens, decision.Budget)
 					sess.PushMessage(message.UserMessage(nudgeMsg))
 					continue
 				}

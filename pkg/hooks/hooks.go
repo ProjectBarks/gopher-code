@@ -418,24 +418,44 @@ func parseHookJSONOutput(stdout string) *HookJSONOutput {
 }
 
 // applyJSONOutput applies structured JSON output to the hook result.
+// Handles both PreToolUse decisions ("approve"/"block") and Stop hook
+// decisions ("continue"/"stop").
+// Source: types/hooks.ts:50-166, query/stopHooks.ts decision resolution
 func applyJSONOutput(result *HookResult, command string) {
 	out := result.JSONOutput
 	if out == nil {
 		return
 	}
 
+	// "continue" field: explicit false prevents continuation (default true).
+	// Source: types/hooks.ts:50
 	if !out.ShouldContinue() {
 		result.PreventContinuation = true
 		result.StopReason = out.StopReason
 	}
 
-	if out.Decision == "block" {
+	// "decision" field: handles both PreToolUse and Stop hook semantics.
+	// PreToolUse: "approve" or "block"
+	// Stop hooks: "continue" or "stop"
+	// Source: query/stopHooks.ts — decision='continue'/'stop' resolution (T52)
+	switch out.Decision {
+	case "block":
 		result.Blocked = true
 		result.Outcome = OutcomeBlocking
 		result.BlockingError = &HookBlockingError{
 			BlockingError: out.Reason,
 			Command:       command,
 		}
+	case "stop":
+		result.PreventContinuation = true
+		if out.Reason != "" {
+			result.StopReason = out.Reason
+		} else if out.StopReason != "" {
+			result.StopReason = out.StopReason
+		}
+	case "continue":
+		// Explicit continue: ensure continuation is not prevented.
+		result.PreventContinuation = false
 	}
 
 	if out.SystemMessage != "" {
