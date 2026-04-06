@@ -77,6 +77,37 @@ func (b *BashTool) InputSchema() json.RawMessage {
 	}`)
 }
 
+// CheckPermissions implements ToolPermissionChecker for BashTool.
+// Runs security and validation checks before the generic permission waterfall.
+// Source: BashTool.tsx — pre-execution validation pipeline
+func (b *BashTool) CheckPermissions(_ context.Context, tc *ToolContext, input json.RawMessage) PermissionCheckResult {
+	var in bashInput
+	if err := json.Unmarshal(input, &in); err != nil {
+		return PermissionCheckResult{Behavior: "deny", Message: fmt.Sprintf("invalid input: %s", err)}
+	}
+
+	if rejection := ValidateBashCommand(in.Command, tc.CWD, tc.ProjectDir, tc.PlanMode); rejection != nil {
+		return PermissionCheckResult{Behavior: "deny", Message: rejection.Content}
+	}
+
+	// Check for destructive commands — surface warning but don't block
+	if warning := GetDestructiveCommandWarning(in.Command); warning != "" {
+		return PermissionCheckResult{Behavior: "ask", Message: warning}
+	}
+
+	return PermissionCheckResult{Behavior: "passthrough"}
+}
+
+// IsDestructive implements DestructiveChecker for BashTool.
+// Source: BashTool.tsx — destructive command detection
+func (b *BashTool) IsDestructive(input json.RawMessage) bool {
+	var in bashInput
+	if err := json.Unmarshal(input, &in); err != nil {
+		return false
+	}
+	return GetDestructiveCommandWarning(in.Command) != ""
+}
+
 func (b *BashTool) Execute(ctx context.Context, tc *ToolContext, input json.RawMessage) (*ToolOutput, error) {
 	var in bashInput
 	if err := json.Unmarshal(input, &in); err != nil {
@@ -84,6 +115,11 @@ func (b *BashTool) Execute(ctx context.Context, tc *ToolContext, input json.RawM
 	}
 	if in.Command == "" {
 		return ErrorOutput("command is required"), nil
+	}
+
+	// Run validation pipeline (security + path + mode checks)
+	if rejection := ValidateBashCommand(in.Command, tc.CWD, tc.ProjectDir, tc.PlanMode); rejection != nil {
+		return rejection, nil
 	}
 
 	// Timeout: default 120s, max 600s, matching TS source
