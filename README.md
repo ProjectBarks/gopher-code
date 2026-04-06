@@ -81,25 +81,39 @@ gopher/
 
 ## Porting Status
 
-The rewrite is structured in phases, each building on the last:
+Full parity audit of 1,885 TypeScript source files against the Go port.
+594 tasks identified across 24 subsystems. Every behavior, string, flag,
+keybinding, and error message has been classified.
 
-| Phase | Subsystem | Status |
-|-------|-----------|--------|
-| 1 | Message types & normalization | **Done** |
-| 2 | System prompt assembly | **Done** |
-| 3 | Token budget & context compaction | **Done** |
-| 4 | 33 built-in tools (Bash, Read, Edit, Write, Glob, Grep, Agent, ...) | **Done** |
-| 5 | LLM API provider with SSE streaming | **Done** |
-| 6 | Query loop orchestration (L1-L4 parity tests passing) | **Done** |
-| 7 | CLI entry point & interactive REPL | **Done** |
-| 8 | Session persistence & resume | **In Progress** |
-| 9 | MCP client integration (stdio, SSE, WebSocket) | **In Progress** |
-| 10 | Permission system & security analysis | **In Progress** |
-| 11 | Charm v2 TUI (bubbletea, glamour, lipgloss) | **Planned** |
-| 12 | Slash commands & skills | **Planned** |
-| 13 | Git/GitHub integration | **Planned** |
-| 14 | Subagent & task spawning | **Planned** |
-| 15 | Observability & telemetry | **Planned** |
+| Subsystem | Parity | Tasks | Notes |
+|-----------|-------:|------:|-------|
+| API & Streaming | 8% | 25 | Core SSE streaming works; billing, analytics, retry gaps |
+| CLI & Headless Mode | 0% | 21 | Auth, `--print` mode, subcommands not started |
+| Commands (60+ slash) | 1% | 89 | Descriptors registered, handlers mostly stubs |
+| Compaction & Context | 22% | 10 | Auto-compact works; reactive/collapse pipelines missing |
+| Configuration & Constants | 13% | 22 | Beta headers ~80% done; OAuth config, prompt builders gap |
+| Context & Overlays | 0% | 10 | Notification queue, modal system, voice state |
+| Hook System | 1% | 25 | Execution exists; 100+ React hooks need bubbletea equivalents |
+| IDE & Desktop | 0% | — | Entirely new subsystem |
+| Keybindings | 0% | 15 | 13 of ~100 bindings across 17 contexts |
+| Memory & CLAUDE.md | 5% | 8 | Type enum exists; scanning, relevance, paths missing |
+| MCP Protocol | 0% | — | Client exists; service layer + 18 util files absent |
+| Migrations | 0% | 12 | Startup migration registry not started |
+| Model & Provider | 57% | — | Best coverage area; edge cases + allowlists remain |
+| Permissions | 13% | — | Rule engine works; UI, classifiers, auto-mode missing |
+| Plugins | 0% | 10 | Entirely new subsystem |
+| Remote / Bridge (CCR) | 0% | 32 | 31-file subsystem, 100% absent |
+| Session & Storage | 18% | 61 | Core state exists; 195 of 215 fields missing |
+| Terminal UI (Ink → Bubbletea) | 1% | 17 | Architecture replaced; behavioral parity gaps |
+| Tools (33 built-in) | 9% | 63 | Skeletons exist; validation, permissions, UI missing |
+| UI Components (390 files) | 0% | 56 | Largest gap — design system, messages, permissions |
+| Utilities (564 files) | 5% | 31 | Sprawling helper layer across 50+ subdirs |
+| Vim Mode | 0% | 5 | 1,513 LOC absent |
+| Voice | 0% | — | Entirely new subsystem |
+| **Overall** | **~3%** | **594** | **~301 impl / ~9,100 missing / ~124 fix** |
+
+> **Parity %** = implemented items / (implemented + missing + fix). Tasks = numbered
+> work items in the full porting plan (`notes/plan-v2/02-tasks.md`).
 
 ---
 

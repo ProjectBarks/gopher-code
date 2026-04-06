@@ -12,7 +12,7 @@ run-phase.sh
 testdata/tui-snapshots/
 
 # Implementation planning docs (not source code)
-/md/
+md/
 /GETTING_STARTED.md
 /PLAN.md
 pkg/ui/BENCHMARKS.md
