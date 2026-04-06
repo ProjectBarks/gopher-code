@@ -40,6 +40,18 @@ func NormalizeLegacyToolName(name string) string {
 	return name
 }
 
+// GetLegacyToolNames returns all legacy names that map to the given canonical name.
+// Source: permissionRuleParser.ts:35-41
+func GetLegacyToolNames(canonicalName string) []string {
+	var names []string
+	for legacy, canonical := range legacyToolNameAliases {
+		if canonical == canonicalName {
+			names = append(names, legacy)
+		}
+	}
+	return names
+}
+
 // ParsePermissionRuleValue parses a rule string like "Bash(npm install)" into components.
 // Source: permissionRuleParser.ts:93-133
 func ParsePermissionRuleValue(ruleString string) PermissionRuleValue {

@@ -143,6 +143,38 @@ func TestRuleMatchesToolCall(t *testing.T) {
 	}
 }
 
+func TestGetLegacyToolNames(t *testing.T) {
+	// Source: permissionRuleParser.ts:35-41
+
+	t.Run("agent_has_legacy_name", func(t *testing.T) {
+		names := GetLegacyToolNames("Agent")
+		if len(names) != 1 || names[0] != "Task" {
+			t.Errorf("Agent legacy names = %v, want [Task]", names)
+		}
+	})
+
+	t.Run("task_output_has_two_legacy_names", func(t *testing.T) {
+		names := GetLegacyToolNames("TaskOutput")
+		if len(names) != 2 {
+			t.Errorf("TaskOutput legacy names = %v, want 2 entries", names)
+		}
+		found := map[string]bool{}
+		for _, n := range names {
+			found[n] = true
+		}
+		if !found["AgentOutputTool"] || !found["BashOutputTool"] {
+			t.Errorf("TaskOutput legacy names = %v, want AgentOutputTool+BashOutputTool", names)
+		}
+	})
+
+	t.Run("no_legacy_names", func(t *testing.T) {
+		names := GetLegacyToolNames("Bash")
+		if len(names) != 0 {
+			t.Errorf("Bash should have no legacy names, got %v", names)
+		}
+	})
+}
+
 func TestNormalizeLegacyToolName(t *testing.T) {
 	// Source: permissionRuleParser.ts:21-29, 31-33
 	tests := []struct{ input, expected string }{
