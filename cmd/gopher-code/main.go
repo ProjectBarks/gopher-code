@@ -23,6 +23,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/prompt"
 	"github.com/projectbarks/gopher-code/pkg/provider"
 	"github.com/projectbarks/gopher-code/pkg/query"
+	_ "github.com/projectbarks/gopher-code/pkg/server" // T89-T90: server types for direct-connect mode
 	"github.com/projectbarks/gopher-code/pkg/session"
 	"github.com/projectbarks/gopher-code/pkg/skills"
 	"github.com/projectbarks/gopher-code/pkg/tools"
