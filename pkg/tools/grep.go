@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -20,26 +22,133 @@ const DefaultGrepHeadLimit = 250
 // GrepTool searches for patterns in files.
 type GrepTool struct{}
 
+// grepInput holds the parsed input for a grep invocation.
+// Fields with dash-prefixed JSON keys (-B, -A, -C, -n, -i) require
+// custom unmarshaling because Go's encoding/json treats "-" specially.
 type grepInput struct {
-	Pattern       string `json:"pattern"`
-	Path          string `json:"path"`
-	Glob          string `json:"glob"`
-	Type          string `json:"type"`
-	OutputMode    string `json:"output_mode"`
-	ContextBefore *int   `json:"-B"`
-	ContextAfter  *int   `json:"-A"`
-	ContextC      *int   `json:"-C"`
-	Context       *int   `json:"context"`
-	ShowLineNums  *bool  `json:"-n"`
-	CaseInsensitive *bool `json:"-i"`
-	HeadLimit     *int   `json:"head_limit"`
-	Offset        int    `json:"offset"`
-	Multiline     bool   `json:"multiline"`
+	Pattern         string `json:"pattern"`
+	Path            string `json:"path"`
+	Glob            string `json:"glob"`
+	Type            string `json:"type"`
+	OutputMode      string `json:"output_mode"`
+	ContextBefore   *int
+	ContextAfter    *int
+	ContextC        *int
+	Context         *int
+	ShowLineNums    *bool
+	CaseInsensitive *bool
+	HeadLimit       *int
+	Offset          int
+	Multiline       bool
 }
 
-func (g *GrepTool) Name() string        { return "Grep" }
-func (g *GrepTool) Description() string { return "A powerful search tool built on ripgrep" }
-func (g *GrepTool) IsReadOnly() bool    { return true }
+// UnmarshalJSON handles the dash-prefixed field names (-B, -A, -C, -n, -i)
+// that Go's standard json tags cannot express.
+func (g *grepInput) UnmarshalJSON(data []byte) error {
+	// Use a raw map to capture all fields including dash-prefixed ones.
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if v, ok := raw["pattern"]; ok {
+		json.Unmarshal(v, &g.Pattern)
+	}
+	if v, ok := raw["path"]; ok {
+		json.Unmarshal(v, &g.Path)
+	}
+	if v, ok := raw["glob"]; ok {
+		json.Unmarshal(v, &g.Glob)
+	}
+	if v, ok := raw["type"]; ok {
+		json.Unmarshal(v, &g.Type)
+	}
+	if v, ok := raw["output_mode"]; ok {
+		json.Unmarshal(v, &g.OutputMode)
+	}
+	if v, ok := raw["-B"]; ok {
+		var n int
+		if json.Unmarshal(v, &n) == nil {
+			g.ContextBefore = &n
+		}
+	}
+	if v, ok := raw["-A"]; ok {
+		var n int
+		if json.Unmarshal(v, &n) == nil {
+			g.ContextAfter = &n
+		}
+	}
+	if v, ok := raw["-C"]; ok {
+		var n int
+		if json.Unmarshal(v, &n) == nil {
+			g.ContextC = &n
+		}
+	}
+	if v, ok := raw["context"]; ok {
+		var n int
+		if json.Unmarshal(v, &n) == nil {
+			g.Context = &n
+		}
+	}
+	if v, ok := raw["-n"]; ok {
+		var b bool
+		if json.Unmarshal(v, &b) == nil {
+			g.ShowLineNums = &b
+		}
+	}
+	if v, ok := raw["-i"]; ok {
+		var b bool
+		if json.Unmarshal(v, &b) == nil {
+			g.CaseInsensitive = &b
+		}
+	}
+	if v, ok := raw["head_limit"]; ok {
+		var n int
+		if json.Unmarshal(v, &n) == nil {
+			g.HeadLimit = &n
+		}
+	}
+	if v, ok := raw["offset"]; ok {
+		json.Unmarshal(v, &g.Offset)
+	}
+	if v, ok := raw["multiline"]; ok {
+		json.Unmarshal(v, &g.Multiline)
+	}
+	return nil
+}
+
+func (g *GrepTool) Name() string { return "Grep" }
+
+// Description returns the full prompt text matching the TS source.
+// Source: prompt.ts:6-18
+func (g *GrepTool) Description() string {
+	return `A powerful search tool built on ripgrep
+
+  Usage:
+  - ALWAYS use Grep for search tasks. NEVER invoke ` + "`grep`" + ` or ` + "`rg`" + ` as a Bash command. The Grep tool has been optimized for correct permissions and access.
+  - Supports full regex syntax (e.g., "log.*Error", "function\s+\w+")
+  - Filter files with glob parameter (e.g., "*.js", "**/*.tsx") or type parameter (e.g., "js", "py", "rust")
+  - Output modes: "content" shows matching lines, "files_with_matches" shows only file paths (default), "count" shows match counts
+  - Use Agent tool for open-ended searches requiring multiple rounds
+  - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use ` + "`interface\\{\\}`" + ` to find ` + "`interface{}`" + ` in Go code)
+  - Multiline matching: By default patterns match within single lines only. For cross-line patterns like ` + "`struct \\{[\\s\\S]*?field`" + `, use ` + "`multiline: true`" + `
+`
+}
+
+func (g *GrepTool) IsReadOnly() bool { return true }
+
+// SearchHint implements SearchHinter for tool discovery.
+// Source: GrepTool.ts:162
+func (g *GrepTool) SearchHint() string {
+	return "search file contents with regex (ripgrep)"
+}
+
+// IsConcurrencySafe implements ConcurrencySafeChecker.
+// Source: GrepTool.ts:184-186
+func (g *GrepTool) IsConcurrencySafe(_ json.RawMessage) bool { return true }
+
+// Prompt implements ToolPrompter — returns same text as Description.
+// Source: GrepTool.ts:241-243
+func (g *GrepTool) Prompt() string { return g.Description() }
 
 // Source: GrepTool.ts:30-92
 func (g *GrepTool) InputSchema() json.RawMessage {
@@ -49,17 +158,17 @@ func (g *GrepTool) InputSchema() json.RawMessage {
 			"pattern": {"type": "string", "description": "The regular expression pattern to search for in file contents"},
 			"path": {"type": "string", "description": "File or directory to search in (rg PATH). Defaults to current working directory."},
 			"glob": {"type": "string", "description": "Glob pattern to filter files (e.g. \"*.js\", \"*.{ts,tsx}\") - maps to rg --glob"},
-			"type": {"type": "string", "description": "File type to search (rg --type). Common types: js, py, rust, go, java, etc."},
-			"output_mode": {"type": "string", "enum": ["content", "files_with_matches", "count"], "description": "Output mode: \"content\" shows matching lines, \"files_with_matches\" shows file paths (default), \"count\" shows match counts."},
-			"-B": {"type": "number", "description": "Number of lines to show before each match (rg -B). Requires output_mode: \"content\"."},
-			"-A": {"type": "number", "description": "Number of lines to show after each match (rg -A). Requires output_mode: \"content\"."},
+			"type": {"type": "string", "description": "File type to search (rg --type). Common types: js, py, rust, go, java, etc. More efficient than include for standard file types."},
+			"output_mode": {"type": "string", "enum": ["content", "files_with_matches", "count"], "description": "Output mode: \"content\" shows matching lines (supports -A/-B/-C context, -n line numbers, head_limit), \"files_with_matches\" shows file paths (supports head_limit), \"count\" shows match counts (supports head_limit). Defaults to \"files_with_matches\"."},
+			"-B": {"type": "number", "description": "Number of lines to show before each match (rg -B). Requires output_mode: \"content\", ignored otherwise."},
+			"-A": {"type": "number", "description": "Number of lines to show after each match (rg -A). Requires output_mode: \"content\", ignored otherwise."},
 			"-C": {"type": "number", "description": "Alias for context."},
-			"context": {"type": "number", "description": "Number of lines to show before and after each match (rg -C). Requires output_mode: \"content\"."},
-			"-n": {"type": "boolean", "description": "Show line numbers in output (rg -n). Requires output_mode: \"content\". Defaults to true."},
+			"context": {"type": "number", "description": "Number of lines to show before and after each match (rg -C). Requires output_mode: \"content\", ignored otherwise."},
+			"-n": {"type": "boolean", "description": "Show line numbers in output (rg -n). Requires output_mode: \"content\", ignored otherwise. Defaults to true."},
 			"-i": {"type": "boolean", "description": "Case insensitive search (rg -i)"},
-			"head_limit": {"type": "number", "description": "Limit output to first N lines/entries. Defaults to 250. Pass 0 for unlimited."},
-			"offset": {"type": "number", "description": "Skip first N lines/entries before applying head_limit. Defaults to 0."},
-			"multiline": {"type": "boolean", "description": "Enable multiline mode (rg -U --multiline-dotall). Default: false."}
+			"head_limit": {"type": "number", "description": "Limit output to first N lines/entries, equivalent to \"| head -N\". Works across all output modes: content (limits output lines), files_with_matches (limits file paths), count (limits count entries). Defaults to 250 when unspecified. Pass 0 for unlimited (use sparingly — large result sets waste context)."},
+			"offset": {"type": "number", "description": "Skip first N lines/entries before applying head_limit, equivalent to \"| tail -n +N | head -N\". Works across all output modes. Defaults to 0."},
+			"multiline": {"type": "boolean", "description": "Enable multiline mode where . matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false."}
 		},
 		"required": ["pattern"],
 		"additionalProperties": false
@@ -85,6 +194,14 @@ func (g *GrepTool) Execute(ctx context.Context, tc *ToolContext, input json.RawM
 		}
 	}
 
+	// Validate path exists.
+	// Source: GrepTool.ts:201-229
+	if in.Path != "" {
+		if _, err := os.Stat(searchPath); os.IsNotExist(err) {
+			return ErrorOutput(fmt.Sprintf("Path does not exist: %s. Make sure the path is correct and accessible from the current working directory: %s.", in.Path, tc.CWD)), nil
+		}
+	}
+
 	outputMode := in.OutputMode
 	if outputMode == "" {
 		outputMode = "files_with_matches"
@@ -95,8 +212,8 @@ func (g *GrepTool) Execute(ctx context.Context, tc *ToolContext, input json.RawM
 		return g.executeWithRg(ctx, rgPath, searchPath, &in, outputMode)
 	}
 
-	// Fall back to Go-native implementation (files_with_matches only)
-	return g.executeNative(in.Pattern, searchPath, in.Glob, outputMode, in.HeadLimit, in.Offset)
+	// Fall back to Go-native implementation
+	return g.executeNative(searchPath, &in, outputMode)
 }
 
 // Source: GrepTool.ts:329-440
@@ -169,9 +286,12 @@ func (g *GrepTool) executeWithRg(ctx context.Context, rgPath, searchPath string,
 		args = append(args, "--type", in.Type)
 	}
 
-	// Glob filter
+	// Glob filter — brace-aware splitting
+	// Source: GrepTool.ts:392-409
 	if in.Glob != "" {
-		args = append(args, "--glob", in.Glob)
+		for _, gp := range splitGlobPatterns(in.Glob) {
+			args = append(args, "--glob", gp)
+		}
 	}
 
 	// Add search path
@@ -185,30 +305,34 @@ func (g *GrepTool) executeWithRg(ctx context.Context, rgPath, searchPath string,
 	err := cmd.Run()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			return SuccessOutput("No matches found"), nil
+			// No matches
+			return g.formatNoMatches(outputMode), nil
 		}
 		return ErrorOutput(fmt.Sprintf("rg failed: %s\n%s", err, stderr.String())), nil
 	}
 
 	output := stdout.String()
 	if output == "" {
-		return SuccessOutput("No matches found"), nil
+		return g.formatNoMatches(outputMode), nil
 	}
 
-	// Apply head_limit and offset
-	// Source: GrepTool.ts:450-454, 481-485
 	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
-	lines, limitInfo := applyGrepHeadLimit(lines, in.HeadLimit, in.Offset)
 
-	result := strings.Join(lines, "\n")
-	if limitInfo != "" {
-		result += "\n" + limitInfo
+	// Convert absolute paths to relative paths to save tokens
+	// Source: GrepTool.ts:456-465, 488-497
+	for i, line := range lines {
+		lines[i] = relativizeLine(line, searchPath, outputMode)
 	}
 
-	return SuccessOutput(result), nil
+	return g.formatOutput(lines, outputMode, in.HeadLimit, in.Offset, searchPath)
 }
 
-func (g *GrepTool) executeNative(pattern, searchPath, globFilter, outputMode string, headLimit *int, offset int) (*ToolOutput, error) {
+func (g *GrepTool) executeNative(searchPath string, in *grepInput, outputMode string) (*ToolOutput, error) {
+	pattern := in.Pattern
+	// Case-insensitive: compile with (?i) prefix
+	if in.CaseInsensitive != nil && *in.CaseInsensitive {
+		pattern = "(?i)" + pattern
+	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return ErrorOutput(fmt.Sprintf("invalid regex pattern: %s", err)), nil
@@ -226,8 +350,8 @@ func (g *GrepTool) executeNative(pattern, searchPath, globFilter, outputMode str
 			}
 			return nil
 		}
-		if globFilter != "" {
-			matched, _ := filepath.Match(globFilter, d.Name())
+		if in.Glob != "" {
+			matched, _ := filepath.Match(in.Glob, d.Name())
 			if !matched {
 				return nil
 			}
@@ -244,6 +368,12 @@ func (g *GrepTool) executeNative(pattern, searchPath, globFilter, outputMode str
 		lineNum := 0
 		matchCount := 0
 
+		// Determine line number display
+		showLineNums := true
+		if in.ShowLineNums != nil {
+			showLineNums = *in.ShowLineNums
+		}
+
 		for scanner.Scan() {
 			lineNum++
 			line := scanner.Text()
@@ -255,7 +385,11 @@ func (g *GrepTool) executeNative(pattern, searchPath, globFilter, outputMode str
 				}
 				switch outputMode {
 				case "content":
-					results = append(results, fmt.Sprintf("%s:%d:%s", relPath, lineNum, line))
+					if showLineNums {
+						results = append(results, fmt.Sprintf("%s:%d:%s", relPath, lineNum, line))
+					} else {
+						results = append(results, fmt.Sprintf("%s:%s", relPath, line))
+					}
 				case "count":
 					// Handled after file scan
 				default: // files_with_matches
@@ -281,18 +415,178 @@ func (g *GrepTool) executeNative(pattern, searchPath, globFilter, outputMode str
 	}
 
 	if len(results) == 0 {
-		return SuccessOutput("No matches found"), nil
+		return g.formatNoMatches(outputMode), nil
 	}
 
-	// Apply head_limit and offset
-	results, limitInfo := applyGrepHeadLimit(results, headLimit, offset)
+	return g.formatOutput(results, outputMode, in.HeadLimit, in.Offset, searchPath)
+}
 
-	result := strings.Join(results, "\n")
-	if limitInfo != "" {
-		result += "\n" + limitInfo
+// formatNoMatches returns the appropriate no-match message per output mode.
+// Source: GrepTool.ts:269, 295-300
+func (g *GrepTool) formatNoMatches(outputMode string) *ToolOutput {
+	if outputMode == "files_with_matches" {
+		return SuccessOutput("No files found")
+	}
+	return SuccessOutput("No matches found")
+}
+
+// formatOutput applies head_limit/offset and formats the result string
+// according to the output mode, matching the TS mapToolResultToToolResultBlockParam.
+// Source: GrepTool.ts:256-308
+func (g *GrepTool) formatOutput(lines []string, outputMode string, headLimit *int, offset int, _ string) (*ToolOutput, error) {
+	switch outputMode {
+	case "content":
+		limited, limitInfo := applyGrepHeadLimit(lines, headLimit, offset)
+		content := strings.Join(limited, "\n")
+		if content == "" {
+			content = "No matches found"
+		}
+		if limitInfo != "" {
+			content += "\n\n[Showing results with pagination = " + limitInfo + "]"
+		}
+		return SuccessOutput(content), nil
+
+	case "count":
+		limited, limitInfo := applyGrepHeadLimit(lines, headLimit, offset)
+		content := strings.Join(limited, "\n")
+		if content == "" {
+			content = "No matches found"
+		}
+		// Parse counts for summary
+		totalMatches := 0
+		fileCount := 0
+		for _, line := range limited {
+			idx := strings.LastIndex(line, ":")
+			if idx > 0 {
+				if n, err := strconv.Atoi(line[idx+1:]); err == nil {
+					totalMatches += n
+					fileCount++
+				}
+			}
+		}
+		summary := fmt.Sprintf("\n\nFound %d total %s across %d %s.",
+			totalMatches, plural(totalMatches, "occurrence"),
+			fileCount, plural(fileCount, "file"))
+		if limitInfo != "" {
+			summary = summary[:len(summary)-1] + " with pagination = " + limitInfo + "."
+		}
+		return SuccessOutput(content + summary), nil
+
+	default: // files_with_matches
+		// Sort by mtime (newest first), filename tiebreaker.
+		// In test mode, sort by filename only for determinism.
+		// Source: GrepTool.ts:529-554
+		sortFilesByMtime(lines)
+
+		limited, limitInfo := applyGrepHeadLimit(lines, headLimit, offset)
+		if len(limited) == 0 {
+			return SuccessOutput("No files found"), nil
+		}
+		header := fmt.Sprintf("Found %d %s", len(limited), plural(len(limited), "file"))
+		if limitInfo != "" {
+			header += " " + limitInfo
+		}
+		result := header + "\n" + strings.Join(limited, "\n")
+		return SuccessOutput(result), nil
+	}
+}
+
+// sortFilesByMtime sorts file paths by modification time (newest first),
+// with filename as tiebreaker. If GOPHER_TEST_DETERMINISTIC is set or
+// stat fails, sorts by filename only.
+// Source: GrepTool.ts:529-553
+func sortFilesByMtime(files []string) {
+	deterministic := os.Getenv("GOPHER_TEST_DETERMINISTIC") != ""
+
+	type entry struct {
+		path  string
+		mtime int64
+	}
+	entries := make([]entry, len(files))
+	for i, f := range files {
+		entries[i].path = f
+		if !deterministic {
+			if info, err := os.Stat(f); err == nil {
+				entries[i].mtime = info.ModTime().UnixNano()
+			}
+		}
 	}
 
-	return SuccessOutput(result), nil
+	sort.SliceStable(entries, func(i, j int) bool {
+		if deterministic {
+			return entries[i].path < entries[j].path
+		}
+		if entries[i].mtime != entries[j].mtime {
+			return entries[i].mtime > entries[j].mtime // newest first
+		}
+		return entries[i].path < entries[j].path
+	})
+
+	for i, e := range entries {
+		files[i] = e.path
+	}
+}
+
+// relativizeLine converts absolute paths in rg output lines to relative paths.
+// Source: GrepTool.ts:456-465 (content), 488-497 (count)
+func relativizeLine(line, searchPath, outputMode string) string {
+	switch outputMode {
+	case "content":
+		// Format: /absolute/path:linenum:content or /absolute/path-content (context)
+		idx := strings.Index(line, ":")
+		if idx > 0 {
+			filePath := line[:idx]
+			rest := line[idx:]
+			if rel, err := filepath.Rel(searchPath, filePath); err == nil {
+				return rel + rest
+			}
+		}
+	case "count":
+		// Format: /absolute/path:count
+		idx := strings.LastIndex(line, ":")
+		if idx > 0 {
+			filePath := line[:idx]
+			rest := line[idx:]
+			if rel, err := filepath.Rel(searchPath, filePath); err == nil {
+				return rel + rest
+			}
+		}
+	default: // files_with_matches
+		if rel, err := filepath.Rel(searchPath, line); err == nil {
+			return rel
+		}
+	}
+	return line
+}
+
+// splitGlobPatterns splits a glob string on whitespace, preserving brace patterns.
+// Source: GrepTool.ts:392-409
+func splitGlobPatterns(glob string) []string {
+	rawPatterns := strings.Fields(glob)
+	var result []string
+	for _, rp := range rawPatterns {
+		if strings.Contains(rp, "{") && strings.Contains(rp, "}") {
+			// Brace pattern — keep as-is
+			result = append(result, rp)
+		} else {
+			// Split on commas for patterns without braces
+			for _, p := range strings.Split(rp, ",") {
+				if p != "" {
+					result = append(result, p)
+				}
+			}
+		}
+	}
+	return result
+}
+
+// plural returns word or word+"s" based on count.
+// Source: GrepTool.ts plural helper
+func plural(n int, word string) string {
+	if n == 1 {
+		return word
+	}
+	return word + "s"
 }
 
 // applyGrepHeadLimit applies head_limit and offset to results.
@@ -301,7 +595,7 @@ func applyGrepHeadLimit(items []string, limit *int, offset int) ([]string, strin
 	// Explicit 0 = unlimited
 	if limit != nil && *limit == 0 {
 		if offset > 0 && offset < len(items) {
-			return items[offset:], ""
+			return items[offset:], formatLimitInfo(nil, offset)
 		}
 		return items, ""
 	}
@@ -324,19 +618,29 @@ func applyGrepHeadLimit(items []string, limit *int, offset int) ([]string, strin
 	sliced := items[start:end]
 	wasTruncated := len(items)-start > effectiveLimit
 
-	// Format limit info
-	// Source: GrepTool.ts:134-142
-	var info string
-	if wasTruncated || offset > 0 {
-		var parts []string
-		if wasTruncated {
-			parts = append(parts, fmt.Sprintf("limit: %d", effectiveLimit))
-		}
-		if offset > 0 {
-			parts = append(parts, fmt.Sprintf("offset: %d", offset))
-		}
-		info = "(" + strings.Join(parts, ", ") + ")"
+	// Only report appliedLimit when truncation actually occurred
+	// Source: GrepTool.ts:123-127
+	var appliedLimit *int
+	if wasTruncated {
+		appliedLimit = &effectiveLimit
 	}
 
+	info := formatLimitInfo(appliedLimit, offset)
 	return sliced, info
+}
+
+// formatLimitInfo builds the (limit: N, offset: N) string.
+// Source: GrepTool.ts:134-142
+func formatLimitInfo(appliedLimit *int, offset int) string {
+	var parts []string
+	if appliedLimit != nil {
+		parts = append(parts, fmt.Sprintf("limit: %d", *appliedLimit))
+	}
+	if offset > 0 {
+		parts = append(parts, fmt.Sprintf("offset: %d", offset))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
 }
