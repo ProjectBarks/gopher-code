@@ -272,7 +272,7 @@ func TestPerToolExpectedValues(t *testing.T) {
 		{"Skill", false, false, 100000, 2, 1, []string{"skill"}},
 		{"ToolSearch", true, true, 100000, 2, 1, []string{"query"}},
 		{"LSP", true, true, 100000, 4, 4, []string{"operation", "filePath", "line", "character"}},
-		{"NotebookEdit", false, false, 100000, 5, 2, []string{"notebook_path", "new_source"}},
+		{"NotebookEdit", false, false, 100000, 5, 3, []string{"notebook_path", "cell_number", "new_source"}},
 		{"TodoWrite", false, false, 100000, 1, 1, []string{"todos"}},
 		{"TaskCreate", false, true, 100000, 4, 2, []string{"subject", "description"}},
 		{"TaskUpdate", false, true, 100000, 9, 1, []string{"taskId"}},
@@ -431,7 +431,7 @@ func TestPropertyTypes(t *testing.T) {
 		{"LSP", "character", "number", false, nil},
 		// NotebookEdit
 		{"NotebookEdit", "notebook_path", "string", false, nil},
-		{"NotebookEdit", "cell_id", "string", false, nil},
+		{"NotebookEdit", "cell_number", "integer", false, nil},
 		{"NotebookEdit", "new_source", "string", false, nil},
 		{"NotebookEdit", "cell_type", "string", true, []string{"code", "markdown"}},
 		{"NotebookEdit", "edit_mode", "string", true, []string{"replace", "insert", "delete"}},

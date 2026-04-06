@@ -436,7 +436,7 @@
   },
   {
     "name": "NotebookEdit",
-    "description": "Edit Jupyter notebook cells.",
+    "description": "Replace the contents of a specific cell in a Jupyter notebook.",
     "is_read_only": false,
     "is_concurrency_safe": false,
     "max_result_size_chars": 100000,
@@ -445,11 +445,11 @@
       "properties": {
         "notebook_path": {
           "type": "string",
-          "description": "The absolute path to the Jupyter notebook file to edit"
+          "description": "The absolute path to the Jupyter notebook file to edit (must be absolute, not relative)"
         },
-        "cell_id": {
-          "type": "string",
-          "description": "The ID of the cell to edit."
+        "cell_number": {
+          "type": "integer",
+          "description": "The 0-indexed cell number to edit"
         },
         "new_source": {
           "type": "string",
@@ -461,7 +461,7 @@
             "code",
             "markdown"
           ],
-          "description": "The type of the cell."
+          "description": "The type of the cell (code or markdown). If not specified, it defaults to the current cell type. If using edit_mode=insert, this is required."
         },
         "edit_mode": {
           "type": "string",
@@ -470,11 +470,12 @@
             "insert",
             "delete"
           ],
-          "description": "The type of edit to make. Defaults to replace."
+          "description": "The type of edit to make (replace, insert, delete). Defaults to replace."
         }
       },
       "required": [
         "notebook_path",
+        "cell_number",
         "new_source"
       ],
       "additionalProperties": false
