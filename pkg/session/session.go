@@ -83,6 +83,11 @@ type SessionState struct {
 	mu         sync.Mutex               `json:"-"`
 	ModelUsage map[string]*ModelUsageEntry `json:"model_usage,omitempty"`
 
+	// CoordinatorMode stores the session's coordinator mode for resume reconciliation.
+	// Values: "coordinator", "normal", or "" (unset/legacy session).
+	// Source: coordinatorMode.ts — sessionMode field
+	CoordinatorMode string `json:"coordinator_mode,omitempty"`
+
 	// IsInteractive distinguishes TUI/REPL mode from headless/pipe mode.
 	// Source: bootstrap/state.ts line 71
 	IsInteractive bool `json:"is_interactive"`
