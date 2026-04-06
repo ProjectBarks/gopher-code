@@ -5,7 +5,6 @@ package coordinator
 
 import (
 	"os"
-	"strings"
 )
 
 // Tool name constants matching the TS source.
