@@ -156,6 +156,27 @@ func (s *SessionState) RegenerateSessionID(setCurrentAsParent bool) string {
 	return s.ID
 }
 
+// FirstUserPreview extracts the first user message text, truncated to
+// PreviewMaxLen characters. Used for the resume session picker.
+// Source: ResumeConversation.tsx — first user message preview
+func (s *SessionState) FirstUserPreview() string {
+	for _, m := range s.Messages {
+		if m.Role != message.RoleUser {
+			continue
+		}
+		for _, b := range m.Content {
+			if b.Type == message.ContentText && b.Text != "" {
+				text := b.Text
+				if len(text) > PreviewMaxLen {
+					text = text[:PreviewMaxLen-3] + "..."
+				}
+				return text
+			}
+		}
+	}
+	return ""
+}
+
 // PushMessage appends a message to the session history.
 func (s *SessionState) PushMessage(msg message.Message) {
 	s.Messages = append(s.Messages, msg)

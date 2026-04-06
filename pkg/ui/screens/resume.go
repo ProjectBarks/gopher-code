@@ -171,14 +171,26 @@ func (m *ResumeModel) renderSessionRow(meta session.SessionMetadata, selected bo
 		tokens = fmt.Sprintf(" (%d turns)", meta.TurnCount)
 	}
 
+	// Preview text (first user message)
+	preview := ""
+	if meta.Preview != "" {
+		p := meta.Preview
+		if len(p) > 60 {
+			p = p[:57] + "..."
+		}
+		// Replace newlines with spaces for single-line display
+		p = strings.ReplaceAll(p, "\n", " ")
+		preview = fmt.Sprintf("\n%s  %s", "  ", dim.Italic(true).Render(p))
+	}
+
 	// Build row
 	if selected {
 		titleStr := accent.Bold(true).Render(title)
-		return fmt.Sprintf("%s%s  %s  %s%s",
-			prefix, titleStr, dim.Render(cwd), dim.Render(age), dim.Render(tokens))
+		return fmt.Sprintf("%s%s  %s  %s%s%s",
+			prefix, titleStr, dim.Render(cwd), dim.Render(age), dim.Render(tokens), preview)
 	}
-	return fmt.Sprintf("%s%s  %s  %s%s",
-		prefix, title, dim.Render(cwd), dim.Render(age), dim.Render(tokens))
+	return fmt.Sprintf("%s%s  %s  %s%s%s",
+		prefix, title, dim.Render(cwd), dim.Render(age), dim.Render(tokens), preview)
 }
 
 // ensureVisible adjusts scroll to keep cursor in view.

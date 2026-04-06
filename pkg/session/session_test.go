@@ -2,8 +2,10 @@ package session
 
 import (
 	"math"
+	"strings"
 	"testing"
 
+	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/provider"
 )
 
@@ -131,6 +133,72 @@ func TestRegenerateSessionID(t *testing.T) {
 	}
 	if s.ID == prevID {
 		t.Error("ID should change after regeneration")
+	}
+}
+
+func TestFirstUserPreview(t *testing.T) {
+	// Source: ResumeConversation.tsx — first user message preview
+
+	t.Run("extracts_first_user_text", func(t *testing.T) {
+		s := New(DefaultConfig(), "/tmp")
+		s.PushMessage(message.Message{
+			Role:    message.RoleAssistant,
+			Content: []message.ContentBlock{message.TextBlock("hello")},
+		})
+		s.PushMessage(message.UserMessage("fix the bug in main.go"))
+		s.PushMessage(message.UserMessage("second question"))
+
+		got := s.FirstUserPreview()
+		if got != "fix the bug in main.go" {
+			t.Errorf("FirstUserPreview() = %q, want %q", got, "fix the bug in main.go")
+		}
+	})
+
+	t.Run("truncates_long_messages", func(t *testing.T) {
+		s := New(DefaultConfig(), "/tmp")
+		long := strings.Repeat("x", 200)
+		s.PushMessage(message.UserMessage(long))
+
+		got := s.FirstUserPreview()
+		if len(got) > PreviewMaxLen {
+			t.Errorf("preview len = %d, want <= %d", len(got), PreviewMaxLen)
+		}
+		if !strings.HasSuffix(got, "...") {
+			t.Errorf("truncated preview should end with ..., got %q", got[len(got)-10:])
+		}
+	})
+
+	t.Run("empty_when_no_user_messages", func(t *testing.T) {
+		s := New(DefaultConfig(), "/tmp")
+		if got := s.FirstUserPreview(); got != "" {
+			t.Errorf("FirstUserPreview() = %q, want empty", got)
+		}
+	})
+}
+
+func TestSavePreservesPreview(t *testing.T) {
+	setupTestHome(t)
+
+	s := New(DefaultConfig(), "/tmp/project")
+	s.Name = "test session"
+	s.PushMessage(message.UserMessage("what is the meaning of life"))
+
+	if err := s.Save(); err != nil {
+		t.Fatalf("Save() error: %v", err)
+	}
+
+	metas, err := ListSessions()
+	if err != nil {
+		t.Fatalf("ListSessions() error: %v", err)
+	}
+	if len(metas) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(metas))
+	}
+	if metas[0].Preview != "what is the meaning of life" {
+		t.Errorf("Preview = %q, want %q", metas[0].Preview, "what is the meaning of life")
+	}
+	if metas[0].Name != "test session" {
+		t.Errorf("Name = %q, want %q", metas[0].Name, "test session")
 	}
 }
 

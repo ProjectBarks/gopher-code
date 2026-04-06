@@ -25,7 +25,13 @@ type SessionMetadata struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	TurnCount int       `json:"turn_count"`
 	Name      string    `json:"name,omitempty"`
+	// Preview is the first user message, truncated to PreviewMaxLen chars.
+	// Source: ResumeConversation.tsx — first user message for session row display.
+	Preview string `json:"preview,omitempty"`
 }
+
+// PreviewMaxLen is the maximum length of the Preview field.
+const PreviewMaxLen = 80
 
 // SetHomeDirForTest overrides the home directory function for testing.
 func SetHomeDirForTest(dir string) {
@@ -57,6 +63,8 @@ func (s *SessionState) Save() error {
 		CreatedAt: s.CreatedAt,
 		UpdatedAt: time.Now(),
 		TurnCount: s.TurnCount,
+		Name:      s.Name,
+		Preview:   s.FirstUserPreview(),
 	}
 	metaData, _ := json.MarshalIndent(meta, "", "  ")
 	metaPath := filepath.Join(dir, s.ID+".meta.json")
