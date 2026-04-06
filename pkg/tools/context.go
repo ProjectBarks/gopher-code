@@ -54,11 +54,22 @@ func (s *ReadFileState) Get(path string) *ReadFileEntry {
 	return s.entries[path]
 }
 
+// FileHistoryTracker provides file checkpoint/backup for undo.
+// Source: FileWriteTool.ts:255-264 — fileHistoryTrackEdit
+type FileHistoryTracker interface {
+	// TrackEdit saves a backup of the file content before an edit.
+	// The implementation is keyed on content hash so duplicate backups are no-ops.
+	TrackEdit(path string, content string) error
+}
+
 // ToolContext provides context for tool execution.
 type ToolContext struct {
 	CWD           string
+	ProjectDir    string                       // root project directory for sandbox enforcement
+	PlanMode      bool                         // true when agent is in plan mode (read-only)
 	Permissions   permissions.PermissionPolicy
 	SessionID     string
-	Hooks         HookRunner     // optional hook runner for pre/post tool hooks
-	ReadFileState *ReadFileState // tracks file read timestamps for staleness guard
+	Hooks         HookRunner          // optional hook runner for pre/post tool hooks
+	ReadFileState *ReadFileState      // tracks file read timestamps for staleness guard
+	FileHistory   FileHistoryTracker  // optional file history for undo/checkpoint
 }
