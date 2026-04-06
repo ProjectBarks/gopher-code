@@ -144,6 +144,68 @@ func TestSaveAndReload(t *testing.T) {
 	}
 }
 
+// ── T38: settings.enabledPlugins map field ────────────────────────────
+
+func TestEnabledPlugins_LoadFromJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsJSON := `{
+  "enabledPlugins": {
+    "my-plugin@builtin": true,
+    "other-plugin@builtin": false
+  }
+}`
+	path := filepath.Join(tmpDir, "settings.json")
+	os.WriteFile(path, []byte(settingsJSON), 0600)
+
+	s := LoadFrom(path)
+	if s.EnabledPlugins == nil {
+		t.Fatal("expected EnabledPlugins to be non-nil")
+	}
+	if !s.EnabledPlugins["my-plugin@builtin"] {
+		t.Error("expected my-plugin@builtin to be true")
+	}
+	if s.EnabledPlugins["other-plugin@builtin"] {
+		t.Error("expected other-plugin@builtin to be false")
+	}
+}
+
+func TestEnabledPlugins_SaveAndReload(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "settings.json")
+
+	original := &Settings{
+		EnabledPlugins: map[string]bool{
+			"test-plugin@builtin": true,
+			"disabled@builtin":    false,
+		},
+	}
+	if err := original.SaveTo(path); err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+
+	reloaded := LoadFrom(path)
+	if len(reloaded.EnabledPlugins) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(reloaded.EnabledPlugins))
+	}
+	if !reloaded.EnabledPlugins["test-plugin@builtin"] {
+		t.Error("expected test-plugin@builtin to be true")
+	}
+	if reloaded.EnabledPlugins["disabled@builtin"] {
+		t.Error("expected disabled@builtin to be false")
+	}
+}
+
+func TestEnabledPlugins_NilWhenAbsent(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "settings.json")
+	os.WriteFile(path, []byte(`{"model": "test"}`), 0600)
+
+	s := LoadFrom(path)
+	if s.EnabledPlugins != nil {
+		t.Errorf("expected nil EnabledPlugins when not in JSON, got %v", s.EnabledPlugins)
+	}
+}
+
 func TestSaveCreatesDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "nested", "deep", "settings.json")
