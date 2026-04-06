@@ -97,3 +97,124 @@ func TestSlashCommandInputViewActive(t *testing.T) {
 		t.Error("Active input should render suggestions")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T174: /remote-control in DefaultSlashCommands
+// ---------------------------------------------------------------------------
+
+func TestDefaultSlashCommands_ContainsRemoteControl(t *testing.T) {
+	cmds := DefaultSlashCommands()
+	found := false
+	for _, c := range cmds {
+		if c.Name == "/remote-control" {
+			found = true
+			if c.Handler != "remote-control" {
+				t.Errorf("Handler = %q, want %q", c.Handler, "remote-control")
+			}
+			if c.Source != "builtin" {
+				t.Errorf("Source = %q, want %q", c.Source, "builtin")
+			}
+		}
+	}
+	if !found {
+		t.Error("/remote-control command not found in DefaultSlashCommands")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T222: SlashCommand struct extensions
+// ---------------------------------------------------------------------------
+
+func TestSlashCommand_AliasesField(t *testing.T) {
+	cmd := SlashCommand{
+		Name:    "/quit",
+		Aliases: []string{"/q", "/exit"},
+	}
+	if len(cmd.Aliases) != 2 {
+		t.Errorf("Aliases length = %d, want 2", len(cmd.Aliases))
+	}
+}
+
+func TestSlashCommand_IsHiddenFiltersFromSuggestions(t *testing.T) {
+	sci := NewSlashCommandInput(theme.Current())
+	sci.SetCommands([]SlashCommand{
+		{Name: "/visible", Description: "shown"},
+		{Name: "/hidden", Description: "hidden", IsHidden: true},
+	})
+	sci.Activate("/")
+	for _, s := range sci.Suggestions() {
+		if s.Name == "/hidden" {
+			t.Error("Hidden commands should not appear in suggestions")
+		}
+	}
+	if len(sci.Suggestions()) != 1 {
+		t.Errorf("Suggestions count = %d, want 1", len(sci.Suggestions()))
+	}
+}
+
+func TestSlashCommand_IsEnabledFiltersFromSuggestions(t *testing.T) {
+	sci := NewSlashCommandInput(theme.Current())
+	sci.SetCommands([]SlashCommand{
+		{Name: "/enabled", Description: "on"},
+		{Name: "/disabled", Description: "off", IsEnabled: func() bool { return false }},
+		{Name: "/default", Description: "nil IsEnabled means enabled"},
+	})
+	sci.Activate("/")
+	names := make(map[string]bool)
+	for _, s := range sci.Suggestions() {
+		names[s.Name] = true
+	}
+	if names["/disabled"] {
+		t.Error("Disabled commands should not appear in suggestions")
+	}
+	if !names["/enabled"] {
+		t.Error("/enabled should appear")
+	}
+	if !names["/default"] {
+		t.Error("/default (nil IsEnabled) should appear")
+	}
+}
+
+func TestSlashCommand_AliasMatchesSuggestions(t *testing.T) {
+	sci := NewSlashCommandInput(theme.Current())
+	sci.SetCommands([]SlashCommand{
+		{Name: "/quit", Description: "Exit", Aliases: []string{"/q"}},
+		{Name: "/help", Description: "Help"},
+	})
+	sci.Activate("/q")
+	found := false
+	for _, s := range sci.Suggestions() {
+		if s.Name == "/quit" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("/quit should match via alias /q")
+	}
+}
+
+func TestSlashCommand_ExtendedFieldsExist(t *testing.T) {
+	// Verify all T222 fields compile and can be set.
+	cmd := SlashCommand{
+		Name:         "/test",
+		Aliases:      []string{"/t"},
+		ArgumentHint: "<file>",
+		IsHidden:     false,
+		IsEnabled:    func() bool { return true },
+		Immediate:    true,
+		Availability: []CommandAvailability{AvailabilityClaudeAI, AvailabilityConsole},
+		Type:         CommandTypeLocal,
+	}
+	if cmd.ArgumentHint != "<file>" {
+		t.Error("ArgumentHint not set")
+	}
+	if !cmd.Immediate {
+		t.Error("Immediate not set")
+	}
+	if len(cmd.Availability) != 2 {
+		t.Errorf("Availability length = %d, want 2", len(cmd.Availability))
+	}
+	if cmd.Type != CommandTypeLocal {
+		t.Errorf("Type = %q, want %q", cmd.Type, CommandTypeLocal)
+	}
+}

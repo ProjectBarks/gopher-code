@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
 	"github.com/projectbarks/gopher-code/pkg/provider"
+	"golang.org/x/text/unicode/norm"
 )
 
 // PermissionPolicyProvider is the interface for permission checking.
@@ -51,6 +53,10 @@ type ModelUsageEntry struct {
 	CacheCreationInputTokens int     `json:"cache_creation_input_tokens"`
 	CacheReadInputTokens     int     `json:"cache_read_input_tokens"`
 	CostUSD                  float64 `json:"cost_usd"`
+
+	// T166: Web search tool usage counter per model.
+	// Source: bootstrap/state.ts — modelUsage.webSearchRequests
+	WebSearchRequests int `json:"web_search_requests"`
 }
 
 // SessionState holds the mutable state of a conversation session.
@@ -311,17 +317,28 @@ type SessionState struct {
 	turnBudget TurnBudgetState `json:"-"`
 }
 
+// resolveCWD resolves symlinks and normalizes the path to Unicode NFC form.
+// Source: bootstrap/state.ts — cwd is resolved via realpath + NFC normalization.
+func resolveCWD(cwd string) string {
+	resolved, err := filepath.EvalSymlinks(cwd)
+	if err != nil {
+		resolved = cwd // fall back to unresolved on error
+	}
+	return norm.NFC.String(resolved)
+}
+
 // New creates a new SessionState with the given config and working directory.
 // Source: bootstrap/state.ts — getInitialState()
 func New(config SessionConfig, cwd string) *SessionState {
 	now := time.Now()
+	resolvedCwd := resolveCWD(cwd)
 	return &SessionState{
 		ID:                  uuid.New().String(),
 		Config:              config,
 		Messages:            make([]message.Message, 0),
-		CWD:                 cwd,
-		OriginalCWD:         cwd,
-		ProjectRoot:         cwd,
+		CWD:                 resolvedCwd,
+		OriginalCWD:         resolvedCwd,
+		ProjectRoot:         resolvedCwd,
 		CreatedAt:           now,
 		StartTime:           now,
 		LastInteractionTime: now,
@@ -351,6 +368,31 @@ func (s *SessionState) AddCost(model string, costUSD float64, usage provider.Tok
 	entry.CacheCreationInputTokens += usage.CacheCreationInputTokens
 	entry.CacheReadInputTokens += usage.CacheReadInputTokens
 	entry.CostUSD += costUSD
+}
+
+// AddWebSearchRequests increments the web search request counter for a model.
+// Source: bootstrap/state.ts — modelUsage.webSearchRequests accumulator
+func (s *SessionState) AddWebSearchRequests(model string, count int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, ok := s.ModelUsage[model]
+	if !ok {
+		entry = &ModelUsageEntry{}
+		s.ModelUsage[model] = entry
+	}
+	entry.WebSearchRequests += count
+}
+
+// GetTotalWebSearchRequests returns the total web search requests across all models.
+// Source: bootstrap/state.ts — getTotalWebSearchRequests()
+func (s *SessionState) GetTotalWebSearchRequests() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	total := 0
+	for _, entry := range s.ModelUsage {
+		total += entry.WebSearchRequests
+	}
+	return total
 }
 
 // AddAPIDurationWithoutRetries accumulates API call time excluding retries.

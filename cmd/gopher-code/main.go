@@ -150,6 +150,26 @@ func main() {
 	// Permission mode
 	permModeFlag := flag.String("permission-mode", "", "Permission mode: auto, interactive, deny")
 
+	// Handle "remote-control" subcommand before flag.Parse()
+	// Source: src/cli.ts — `claude remote-control` CLI subcommand dispatches
+	// to the bridge REPL initializer (pkg/bridge/init_repl.go).
+	if len(os.Args) > 1 && os.Args[1] == "remote-control" {
+		// Extract optional session name from remaining args.
+		rcName := ""
+		if len(os.Args) > 2 {
+			rcName = strings.Join(os.Args[2:], " ")
+		}
+		fmt.Fprintf(os.Stderr, "Starting remote control session")
+		if rcName != "" {
+			fmt.Fprintf(os.Stderr, " %q", rcName)
+		}
+		fmt.Fprintln(os.Stderr, "...")
+		// TODO(T195+): Wire full bridge REPL init once bridge core is implemented.
+		// For now, exit cleanly after printing the intent.
+		_ = rcName
+		cliOk("")
+	}
+
 	// Handle "completion" subcommand before flag.Parse()
 	if len(os.Args) > 1 && os.Args[1] == "completion" {
 		shell := "bash"

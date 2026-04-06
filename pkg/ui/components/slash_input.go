@@ -12,12 +12,53 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
 
+// CommandAvailability declares which auth/provider environments a command is available in.
+// Source: src/types/command.ts — CommandAvailability type
+type CommandAvailability string
+
+const (
+	// AvailabilityClaudeAI means the command is available to claude.ai OAuth subscribers.
+	AvailabilityClaudeAI CommandAvailability = "claude-ai"
+	// AvailabilityConsole means the command is available to Console API key users.
+	AvailabilityConsole CommandAvailability = "console"
+)
+
+// CommandType distinguishes command implementation strategies.
+// Source: src/types/command.ts — Command = CommandBase & (PromptCommand | LocalCommand | LocalJSXCommand)
+type CommandType string
+
+const (
+	CommandTypeLocal    CommandType = "local"
+	CommandTypeLocalJSX CommandType = "local-jsx"
+	CommandTypePrompt   CommandType = "prompt"
+)
+
 // SlashCommand defines an available slash command.
+// Source: src/types/command.ts — CommandBase
 type SlashCommand struct {
 	Name        string
 	Description string
 	Handler     string // Handler key for dispatch
 	Source      string // "builtin", "user", "project", "skill"
+
+	// T222: Extended fields from TS CommandBase.
+	// Source: src/types/command.ts lines 175-203
+
+	// Aliases are alternative names for the command (e.g. /q for /quit).
+	Aliases []string
+	// ArgumentHint is hint text for command arguments (displayed in gray after command name).
+	ArgumentHint string
+	// IsHidden controls whether the command is hidden from typeahead/help. Defaults to false.
+	IsHidden bool
+	// IsEnabled returns whether the command is currently enabled. Nil means always enabled.
+	IsEnabled func() bool
+	// Immediate means the command executes immediately without waiting for a stop point.
+	Immediate bool
+	// Availability declares which auth/provider environments the command is available in.
+	// Nil means available everywhere.
+	Availability []CommandAvailability
+	// Type distinguishes the command implementation strategy.
+	Type CommandType
 }
 
 // DefaultSlashCommands returns the built-in slash commands.
@@ -60,6 +101,7 @@ func DefaultSlashCommands() []SlashCommand {
 		{Name: "/release-notes", Description: "Show release notes", Handler: "release-notes", Source: "builtin"},
 		{Name: "/version", Description: "Show version", Handler: "version", Source: "builtin"},
 		{Name: "/quit", Description: "Exit gopher", Handler: "quit", Source: "builtin"},
+		{Name: "/remote-control", Description: "Start remote control session", Handler: "remote-control", Source: "builtin"},
 	}
 }
 
@@ -364,8 +406,30 @@ func (sci *SlashCommandInput) filterSuggestions() {
 	sci.suggestions = make([]SlashCommand, 0)
 
 	for _, cmd := range sci.commands {
-		if strings.HasPrefix(strings.ToLower(cmd.Name), prefix) || FuzzyMatch(prefix, strings.ToLower(cmd.Name)) {
+		// T222: Skip hidden or disabled commands.
+		if cmd.IsHidden {
+			continue
+		}
+		if cmd.IsEnabled != nil && !cmd.IsEnabled() {
+			continue
+		}
+
+		// Match against primary name.
+		nameLower := strings.ToLower(cmd.Name)
+		if strings.HasPrefix(nameLower, prefix) || FuzzyMatch(prefix, nameLower) {
 			sci.suggestions = append(sci.suggestions, cmd)
+			continue
+		}
+		// T222: Match against aliases.
+		for _, alias := range cmd.Aliases {
+			aliasLower := strings.ToLower(alias)
+			if !strings.HasPrefix(aliasLower, "/") {
+				aliasLower = "/" + aliasLower
+			}
+			if strings.HasPrefix(aliasLower, prefix) || FuzzyMatch(prefix, aliasLower) {
+				sci.suggestions = append(sci.suggestions, cmd)
+				break
+			}
 		}
 	}
 }

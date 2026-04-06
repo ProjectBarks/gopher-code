@@ -2,6 +2,8 @@ package session
 
 import (
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -1669,5 +1671,70 @@ func TestTurnOutputTokenBudget(t *testing.T) {
 	}
 	if s.GetBudgetContinuationCount() != 0 {
 		t.Error("BudgetContinuationCount should reset to 0 after snapshot")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T166: Web search request counter
+// ---------------------------------------------------------------------------
+
+func TestGetTotalWebSearchRequests_Zero(t *testing.T) {
+	s := New(DefaultConfig(), t.TempDir())
+	if got := s.GetTotalWebSearchRequests(); got != 0 {
+		t.Errorf("GetTotalWebSearchRequests() = %d, want 0", got)
+	}
+}
+
+func TestGetTotalWebSearchRequests_Accumulates(t *testing.T) {
+	s := New(DefaultConfig(), t.TempDir())
+	s.AddWebSearchRequests("claude-sonnet-4-6", 3)
+	s.AddWebSearchRequests("claude-opus-4-6", 2)
+	s.AddWebSearchRequests("claude-sonnet-4-6", 1) // same model, additive
+	if got := s.GetTotalWebSearchRequests(); got != 6 {
+		t.Errorf("GetTotalWebSearchRequests() = %d, want 6", got)
+	}
+	// Verify per-model
+	if s.ModelUsage["claude-sonnet-4-6"].WebSearchRequests != 4 {
+		t.Errorf("sonnet web search = %d, want 4", s.ModelUsage["claude-sonnet-4-6"].WebSearchRequests)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T167: CWD symlink resolution + NFC normalization
+// ---------------------------------------------------------------------------
+
+func TestNew_ResolvesCWDSymlink(t *testing.T) {
+	// Create a real directory and a symlink to it.
+	realDir := filepath.Join(t.TempDir(), "real")
+	if err := os.MkdirAll(realDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	linkDir := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(realDir, linkDir); err != nil {
+		t.Skip("symlinks not supported on this platform")
+	}
+	s := New(DefaultConfig(), linkDir)
+	// CWD should resolve to the real directory, not the symlink.
+	if s.CWD == linkDir {
+		t.Errorf("CWD = %q (symlink), want resolved real path", s.CWD)
+	}
+	// Resolve the expected path for comparison.
+	want, _ := filepath.EvalSymlinks(linkDir)
+	if s.CWD != want {
+		t.Errorf("CWD = %q, want %q", s.CWD, want)
+	}
+	if s.OriginalCWD != want {
+		t.Errorf("OriginalCWD = %q, want %q", s.OriginalCWD, want)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T168: ClientType defaults to "cli"
+// ---------------------------------------------------------------------------
+
+func TestNew_ClientTypeDefaultsCLI(t *testing.T) {
+	s := New(DefaultConfig(), t.TempDir())
+	if s.ClientType != "cli" {
+		t.Errorf("ClientType = %q, want %q", s.ClientType, "cli")
 	}
 }
