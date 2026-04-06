@@ -50,6 +50,9 @@ type Settings struct {
 	Theme   string `json:"theme,omitempty"`
 	Verbose bool   `json:"verbose,omitempty"`
 
+	// Updates
+	AutoUpdatesChannel string `json:"autoUpdatesChannel,omitempty"` // "latest", "beta", "stable"
+
 	// API
 	APIURL     string `json:"api_url,omitempty"`
 	APIVersion string `json:"api_version,omitempty"`
