@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/projectbarks/gopher-code/pkg/output_styles"
 	"github.com/projectbarks/gopher-code/pkg/provider"
 )
 
@@ -294,6 +295,23 @@ Is directory a git repo: %s
 OS Version: %s
 </env>
 %s%s`, cwd, isGitStr, additionalDirsInfo, runtime.GOOS, GetShellInfoLine(), GetUnameSR(), modelDescription, knowledgeCutoffMessage)
+}
+
+// GetOutputStyleSection returns the output style instruction block for the
+// system prompt, or "" when no custom style is active. The cwd is used to
+// discover project-level .claude/output-styles/*.md files.
+// Source: constants/outputStyles.ts — getOutputStyleConfig → prompt injection
+func GetOutputStyleSection(cwd string, styleName string) string {
+	if styleName == "" || styleName == "default" {
+		return ""
+	}
+	styles := output_styles.GetOutputStyleDirStyles(cwd)
+	for _, s := range styles {
+		if s.Name == styleName {
+			return "# Output Style: " + s.Name + "\n\n" + s.Prompt
+		}
+	}
+	return ""
 }
 
 // EnhanceSystemPromptWithEnvDetails appends agent notes + env info to an existing prompt.
