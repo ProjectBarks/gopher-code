@@ -101,6 +101,12 @@ func Query(
 	orchestrator *tools.ToolOrchestrator,
 	onEvent EventCallback,
 ) error {
+	// Snapshot immutable config once at query entry.
+	// Source: query.ts — buildQueryConfig() called at query() entry
+	qcfg := BuildQueryConfig(sess.ID)
+	// QueryConfig is threaded through iterations for gate checks.
+	_ = qcfg // consumed by streaming tool exec, summaries, etc. in future tasks
+
 	retryCount := 0
 	compactedOnce := false
 
