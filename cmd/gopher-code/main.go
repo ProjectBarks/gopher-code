@@ -26,7 +26,9 @@ import (
 	_ "github.com/projectbarks/gopher-code/pkg/server" // T89-T90: server types for direct-connect mode
 	"github.com/projectbarks/gopher-code/pkg/session"
 	"github.com/projectbarks/gopher-code/pkg/skills"
+	"github.com/projectbarks/gopher-code/pkg/telemetry"
 	"github.com/projectbarks/gopher-code/pkg/tools"
+	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
 
 // Version is the current gopher-code version.
@@ -191,7 +193,20 @@ func main() {
 	// Source: src/plugins/bundled/index.ts — initBuiltinPlugins
 	pluginsBundled.InitBuiltinPlugins()
 
+	// T126-T128: Initialize telemetry (OTel providers + counters + stats store).
+	// Uses no-op exporters by default; real exporters are configured via OTel env vars.
+	tel, telErr := telemetry.Init()
+	if telErr != nil {
+		slog.Warn("telemetry init failed, using noop", "error", telErr)
+		tel = telemetry.InitNoop()
+	}
+
+	// T129: Agent color assigner for teammate UI coloring.
+	agentColors := theme.NewAgentColorAssigner()
+
 	// Suppress unused variable warnings for flags reserved for future use
+	_ = tel
+	_ = agentColors
 	_ = addDirs
 	_ = includeHookEvents
 	_ = worktree

@@ -216,3 +216,63 @@ func TestRegister(t *testing.T) {
 		t.Error("Registry should have themes from init()")
 	}
 }
+
+// T129: AgentColorIndex has all 8 palette colors in order.
+func TestAgentColorIndex(t *testing.T) {
+	if len(AgentColorIndex) != 8 {
+		t.Fatalf("AgentColorIndex len = %d, want 8", len(AgentColorIndex))
+	}
+	// Each entry must have a corresponding AgentColorMap entry.
+	for _, name := range AgentColorIndex {
+		if _, ok := AgentColorMap[name]; !ok {
+			t.Errorf("AgentColorIndex entry %q not in AgentColorMap", name)
+		}
+	}
+}
+
+// T129: AgentColorAssigner assigns round-robin and is idempotent.
+func TestAgentColorAssigner(t *testing.T) {
+	a := NewAgentColorAssigner()
+
+	// First assignment gets the first color
+	c1 := a.Assign("agent-a")
+	if c1 != AgentColorMap["red"] {
+		t.Errorf("first assign = %q, want %q (red)", c1, AgentColorMap["red"])
+	}
+
+	// Second assignment gets the second color
+	c2 := a.Assign("agent-b")
+	if c2 != AgentColorMap["blue"] {
+		t.Errorf("second assign = %q, want %q (blue)", c2, AgentColorMap["blue"])
+	}
+
+	// Idempotent: same agent gets same color
+	c1again := a.Assign("agent-a")
+	if c1again != c1 {
+		t.Errorf("idempotent check: got %q, want %q", c1again, c1)
+	}
+
+	if a.Count() != 2 {
+		t.Errorf("Count() = %d, want 2", a.Count())
+	}
+
+	// Get returns assigned color
+	if a.Get("agent-a") != c1 {
+		t.Error("Get should return assigned color")
+	}
+	if a.Get("unknown") != "" {
+		t.Error("Get for unknown agent should return empty")
+	}
+
+	// Clear resets
+	a.Clear()
+	if a.Count() != 0 {
+		t.Error("Count after Clear should be 0")
+	}
+
+	// After clear, re-assigns from the beginning
+	c3 := a.Assign("agent-c")
+	if c3 != AgentColorMap["red"] {
+		t.Errorf("after clear, first assign = %q, want %q (red)", c3, AgentColorMap["red"])
+	}
+}
