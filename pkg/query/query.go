@@ -121,6 +121,12 @@ func Query(
 	memoryContent := <-memCh
 	systemPrompt := buildSystemPrompt(sess.Config.SystemPrompt, memoryContent)
 
+	// T19-T21: Append coordinator system prompt when coordinator mode is active.
+	// Source: coordinatorMode.ts — getCoordinatorSystemPrompt appended to system prompt
+	if coordPrompt := coordinator.GetCoordinatorSystemPrompt(); coordPrompt != "" {
+		systemPrompt = systemPrompt + "\n\n" + coordPrompt
+	}
+
 	// Coordinator mode check: reconcile session mode on resume.
 	// Source: coordinatorMode.ts — matchSessionMode called during query setup
 	if msg := coordinator.MatchSessionMode(coordinator.SessionMode(sess.CoordinatorMode)); msg != "" {
