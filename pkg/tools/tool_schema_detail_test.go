@@ -278,8 +278,8 @@ func TestPerToolExpectedValues(t *testing.T) {
 		{"TaskUpdate", false, true, 100000, 9, 1, []string{"taskId"}},
 		{"TaskGet", true, true, 100000, 1, 1, []string{"taskId"}},
 		{"TaskList", true, true, 100000, 0, 0, []string{}},
-		{"TaskStop", false, true, 100000, 1, 1, []string{"taskId"}},
-		{"TaskOutput", false, true, 100000, 2, 2, []string{"taskId", "output"}},
+		{"TaskStop", false, true, 100000, 2, 0, []string{}},
+		{"TaskOutput", false, true, 100000, 4, 1, []string{"task_id"}},
 		{"AskUserQuestion", true, true, 100000, 4, 1, []string{"questions"}},
 		{"PowerShell", false, false, 30000, 2, 1, []string{"command"}},
 		{"TeamCreate", false, true, 100000, 2, 1, []string{"name"}},
@@ -453,10 +453,13 @@ func TestPropertyTypes(t *testing.T) {
 		// TaskGet
 		{"TaskGet", "taskId", "string", false, nil},
 		// TaskStop
-		{"TaskStop", "taskId", "string", false, nil},
+		{"TaskStop", "task_id", "string", false, nil},
+		{"TaskStop", "shell_id", "string", false, nil},
 		// TaskOutput
-		{"TaskOutput", "taskId", "string", false, nil},
+		{"TaskOutput", "task_id", "string", false, nil},
 		{"TaskOutput", "output", "string", false, nil},
+		{"TaskOutput", "block", "boolean", false, nil},
+		{"TaskOutput", "timeout", "number", false, nil},
 		// AskUserQuestion
 		{"AskUserQuestion", "questions", "array", false, nil},
 		{"AskUserQuestion", "answers", "object", false, nil},
