@@ -435,6 +435,47 @@ func TestModelStrings(t *testing.T) {
 	}
 }
 
+// T121: sessionSource
+func TestSessionSource(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+	if s.SessionSource != "" {
+		t.Errorf("SessionSource = %q, want empty", s.SessionSource)
+	}
+
+	s.SetSessionSource("cli")
+	if s.SessionSource != "cli" {
+		t.Errorf("SessionSource = %q, want %q", s.SessionSource, "cli")
+	}
+
+	s.SetSessionSource("sdk")
+	if s.SessionSource != "sdk" {
+		t.Errorf("SessionSource = %q, want %q", s.SessionSource, "sdk")
+	}
+
+	s.SetSessionSource("bridge")
+	if s.SessionSource != "bridge" {
+		t.Errorf("SessionSource = %q, want %q", s.SessionSource, "bridge")
+	}
+}
+
+// T122: questionPreviewFormat
+func TestQuestionPreviewFormat(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+	if s.QuestionPreviewFormat != "" {
+		t.Errorf("QuestionPreviewFormat = %q, want empty", s.QuestionPreviewFormat)
+	}
+
+	s.SetQuestionPreviewFormat("markdown")
+	if s.QuestionPreviewFormat != "markdown" {
+		t.Errorf("QuestionPreviewFormat = %q, want %q", s.QuestionPreviewFormat, "markdown")
+	}
+
+	s.SetQuestionPreviewFormat("html")
+	if s.QuestionPreviewFormat != "html" {
+		t.Errorf("QuestionPreviewFormat = %q, want %q", s.QuestionPreviewFormat, "html")
+	}
+}
+
 func TestSaveAndLoad_NewFields(t *testing.T) {
 	setupTestHome(t)
 

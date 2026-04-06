@@ -206,6 +206,102 @@ func TestEnabledPlugins_NilWhenAbsent(t *testing.T) {
 	}
 }
 
+// ── T123: FlagSettingsPath / FlagSettingsInline ──────────────────────
+
+func TestFlagSettingsPath(t *testing.T) {
+	ResetFlagSettings()
+	defer ResetFlagSettings()
+
+	if got := FlagSettingsPath(); got != "" {
+		t.Errorf("FlagSettingsPath() = %q, want empty", got)
+	}
+
+	SetFlagSettingsPath("/custom/settings.json")
+	if got := FlagSettingsPath(); got != "/custom/settings.json" {
+		t.Errorf("FlagSettingsPath() = %q, want %q", got, "/custom/settings.json")
+	}
+
+	SetFlagSettingsPath("")
+	if got := FlagSettingsPath(); got != "" {
+		t.Errorf("FlagSettingsPath() = %q, want empty after clear", got)
+	}
+}
+
+func TestFlagSettingsInline(t *testing.T) {
+	ResetFlagSettings()
+	defer ResetFlagSettings()
+
+	if got := FlagSettingsInline(); got != nil {
+		t.Errorf("FlagSettingsInline() = %v, want nil", got)
+	}
+
+	inline := map[string]any{"model": "claude-opus-4-6", "max_turns": float64(50)}
+	SetFlagSettingsInline(inline)
+
+	got := FlagSettingsInline()
+	if got == nil {
+		t.Fatal("FlagSettingsInline() = nil, want non-nil")
+	}
+	if got["model"] != "claude-opus-4-6" {
+		t.Errorf("FlagSettingsInline()[model] = %v, want claude-opus-4-6", got["model"])
+	}
+	if got["max_turns"] != float64(50) {
+		t.Errorf("FlagSettingsInline()[max_turns] = %v, want 50", got["max_turns"])
+	}
+
+	SetFlagSettingsInline(nil)
+	if got := FlagSettingsInline(); got != nil {
+		t.Errorf("FlagSettingsInline() = %v, want nil after clear", got)
+	}
+}
+
+// ── T124: AllowedSettingSources ──────────────────────────────────────
+
+func TestAllowedSettingSources_Defaults(t *testing.T) {
+	ResetAllowedSettingSources()
+	defer ResetAllowedSettingSources()
+
+	got := AllowedSettingSources()
+	expected := []SettingSource{SourceUser, SourceProject, SourceLocal, SourceFlag, SourcePolicy}
+	if len(got) != len(expected) {
+		t.Fatalf("AllowedSettingSources() len = %d, want %d", len(got), len(expected))
+	}
+	for i, s := range expected {
+		if got[i] != s {
+			t.Errorf("AllowedSettingSources()[%d] = %q, want %q", i, got[i], s)
+		}
+	}
+}
+
+func TestAllowedSettingSources_SetAndGet(t *testing.T) {
+	ResetAllowedSettingSources()
+	defer ResetAllowedSettingSources()
+
+	restricted := []SettingSource{SourceUser, SourcePolicy}
+	SetAllowedSettingSources(restricted)
+
+	got := AllowedSettingSources()
+	if len(got) != 2 {
+		t.Fatalf("AllowedSettingSources() len = %d, want 2", len(got))
+	}
+	if got[0] != SourceUser || got[1] != SourcePolicy {
+		t.Errorf("AllowedSettingSources() = %v, want [userSettings policySettings]", got)
+	}
+}
+
+func TestAllowedSettingSources_ReturnsDefensiveCopy(t *testing.T) {
+	ResetAllowedSettingSources()
+	defer ResetAllowedSettingSources()
+
+	got := AllowedSettingSources()
+	got[0] = "mutated"
+
+	fresh := AllowedSettingSources()
+	if fresh[0] != SourceUser {
+		t.Errorf("AllowedSettingSources() was mutated through returned slice")
+	}
+}
+
 func TestSaveCreatesDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "nested", "deep", "settings.json")

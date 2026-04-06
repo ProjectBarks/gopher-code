@@ -133,6 +133,14 @@ type SessionState struct {
 	// Source: bootstrap/state.ts — clientType
 	ClientType string `json:"client_type,omitempty"`
 
+	// T121: Where the session was initiated from (e.g. "cli", "sdk", "bridge").
+	// Source: bootstrap/state.ts — sessionSource
+	SessionSource string `json:"session_source,omitempty"`
+
+	// T122: Preview rendering format for AskUserQuestion — "markdown" or "html".
+	// Source: bootstrap/state.ts — questionPreviewFormat
+	QuestionPreviewFormat string `json:"question_preview_format,omitempty"`
+
 	// Per-model usage tracking — Source: bootstrap/state.ts line 67
 	mu         sync.Mutex               `json:"-"`
 	ModelUsage map[string]*ModelUsageEntry `json:"model_usage,omitempty"`
@@ -297,6 +305,19 @@ func (s *SessionState) ClearModelStrings() {
 // Source: bootstrap/state.ts — clientType setter
 func (s *SessionState) SetClientType(ct string) {
 	s.ClientType = ct
+}
+
+// SetSessionSource sets the session source (e.g. "cli", "sdk", "bridge").
+// Source: bootstrap/state.ts — setSessionSource()
+func (s *SessionState) SetSessionSource(source string) {
+	s.SessionSource = source
+}
+
+// SetQuestionPreviewFormat sets the AskUserQuestion preview format.
+// Only "markdown" and "html" are valid values.
+// Source: bootstrap/state.ts — setQuestionPreviewFormat()
+func (s *SessionState) SetQuestionPreviewFormat(format string) {
+	s.QuestionPreviewFormat = format
 }
 
 // RegenerateSessionID creates a new session ID, optionally setting the current as parent.
