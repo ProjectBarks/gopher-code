@@ -10,55 +10,6 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// ToCompatSessionID / ToInfraSessionID
-// ---------------------------------------------------------------------------
-
-func TestToCompatSessionID(t *testing.T) {
-	cases := []struct {
-		in, want string
-	}{
-		{"cse_abc123", "session_abc123"},
-		{"session_abc123", "session_abc123"}, // no-op
-		{"other_abc", "other_abc"},           // no-op
-		{"", ""},
-		{"cse_", "session_"},
-	}
-	for _, c := range cases {
-		got := ToCompatSessionID(c.in)
-		if got != c.want {
-			t.Errorf("ToCompatSessionID(%q) = %q, want %q", c.in, got, c.want)
-		}
-	}
-}
-
-func TestToInfraSessionID(t *testing.T) {
-	cases := []struct {
-		in, want string
-	}{
-		{"session_abc123", "cse_abc123"},
-		{"cse_abc123", "cse_abc123"}, // no-op
-		{"other_abc", "other_abc"},   // no-op
-		{"", ""},
-		{"session_", "cse_"},
-	}
-	for _, c := range cases {
-		got := ToInfraSessionID(c.in)
-		if got != c.want {
-			t.Errorf("ToInfraSessionID(%q) = %q, want %q", c.in, got, c.want)
-		}
-	}
-}
-
-func TestSessionIDRoundTrip(t *testing.T) {
-	id := "cse_uuid-goes-here"
-	compat := ToCompatSessionID(id)
-	back := ToInfraSessionID(compat)
-	if back != id {
-		t.Errorf("round trip failed: %q -> %q -> %q", id, compat, back)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // ParseGitRemote
 // ---------------------------------------------------------------------------
 

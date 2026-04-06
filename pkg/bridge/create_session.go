@@ -578,25 +578,3 @@ func (c *sessionClient) UpdateBridgeSessionTitle(ctx context.Context, sessionID,
 	return fmt.Errorf("%s", msg)
 }
 
-// ---------------------------------------------------------------------------
-// ToCompatSessionID / ToInfraSessionID — session ID tag translation
-// Source: src/bridge/sessionIdCompat.ts
-// ---------------------------------------------------------------------------
-
-// ToCompatSessionID re-tags a cse_* session ID to session_* for the v1 compat API.
-// No-op for IDs that don't start with "cse_".
-func ToCompatSessionID(id string) string {
-	if !strings.HasPrefix(id, "cse_") {
-		return id
-	}
-	return "session_" + id[len("cse_"):]
-}
-
-// ToInfraSessionID re-tags a session_* session ID to cse_* for infrastructure calls.
-// No-op for IDs that don't start with "session_".
-func ToInfraSessionID(id string) string {
-	if !strings.HasPrefix(id, "session_") {
-		return id
-	}
-	return "cse_" + id[len("session_"):]
-}
