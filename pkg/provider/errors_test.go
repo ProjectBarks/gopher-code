@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -393,9 +394,11 @@ func TestAPIErrorTypes(t *testing.T) {
 	types := []APIErrorType{
 		ErrAborted, ErrAPITimeout, ErrRepeated529, ErrRateLimit,
 		ErrServerOverload, ErrPromptTooLong, ErrPDFTooLarge,
-		ErrPDFPasswordProtected, ErrImageTooLarge, ErrToolUseMismatch,
+		ErrPDFPasswordProtected, ErrPDFInvalid, ErrImageTooLarge,
+		ErrRequestTooLarge, ErrToolUseMismatch,
 		ErrInvalidModel, ErrCreditBalanceLow, ErrInvalidAPIKey,
-		ErrTokenRevoked, ErrAuthError, ErrServerError, ErrClientError,
+		ErrTokenRevoked, ErrOrgDisabled, ErrOAuthOrgNotAllowed,
+		ErrAuthError, ErrServerError, ErrClientError,
 		ErrSSLCertError, ErrConnectionError, ErrUnknown,
 	}
 	for _, et := range types {
@@ -414,5 +417,407 @@ func TestAPIError_Error(t *testing.T) {
 	// Should contain status, type, and message
 	if !containsCI(s, "429") || !containsCI(s, "rate_limit") || !containsCI(s, "too fast") {
 		t.Errorf("error string missing info: %q", s)
+	}
+}
+
+// === T478: API error classification and user-facing messages ===
+
+func TestErrorMessageConstants(t *testing.T) {
+	// Source: errors.ts:54-169 — verbatim string constants
+	tests := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"APIErrorMessagePrefix", APIErrorMessagePrefix, "API Error"},
+		{"PromptTooLongErrorMessage", PromptTooLongErrorMessage, "Prompt is too long"},
+		{"CreditBalanceTooLowErrorMessage", CreditBalanceTooLowErrorMessage, "Credit balance is too low"},
+		{"InvalidAPIKeyErrorMessage", InvalidAPIKeyErrorMessage, "Not logged in · Please run /login"},
+		{"InvalidAPIKeyErrorMessageExternal", InvalidAPIKeyErrorMessageExternal, "Invalid API key · Fix external API key"},
+		{"OrgDisabledErrorMessageEnvKeyWithOAuth", OrgDisabledErrorMessageEnvKeyWithOAuth,
+			"Your ANTHROPIC_API_KEY belongs to a disabled organization · Unset the environment variable to use your subscription instead"},
+		{"OrgDisabledErrorMessageEnvKey", OrgDisabledErrorMessageEnvKey,
+			"Your ANTHROPIC_API_KEY belongs to a disabled organization · Update or unset the environment variable"},
+		{"TokenRevokedErrorMessage", TokenRevokedErrorMessage, "OAuth token revoked · Please run /login"},
+		{"CCRAuthErrorMessage", CCRAuthErrorMessage,
+			"Authentication error · This may be a temporary network issue, please try again"},
+		{"Repeated529ErrorMessage", Repeated529ErrorMessage, "Repeated 529 Overloaded errors"},
+		{"CustomOffSwitchMessage", CustomOffSwitchMessage,
+			"Opus is experiencing high load, please use /model to switch to Sonnet"},
+		{"APITimeoutErrorMessage", APITimeoutErrorMessage, "Request timed out"},
+		{"OAuthOrgNotAllowedErrorMessage", OAuthOrgNotAllowedErrorMessage,
+			"Your account does not have access to Claude Code. Please run /login."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.want {
+				t.Errorf("got %q, want %q", tt.got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewErrorTypes(t *testing.T) {
+	// Source: errors.ts — new error type strings added in T478
+	if ErrPDFInvalid != "pdf_invalid" {
+		t.Errorf("ErrPDFInvalid = %q", ErrPDFInvalid)
+	}
+	if ErrRequestTooLarge != "request_too_large" {
+		t.Errorf("ErrRequestTooLarge = %q", ErrRequestTooLarge)
+	}
+	if ErrOrgDisabled != "org_disabled" {
+		t.Errorf("ErrOrgDisabled = %q", ErrOrgDisabled)
+	}
+	if ErrOAuthOrgNotAllowed != "oauth_org_not_allowed" {
+		t.Errorf("ErrOAuthOrgNotAllowed = %q", ErrOAuthOrgNotAllowed)
+	}
+}
+
+func TestIsOverloadedError(t *testing.T) {
+	// Source: errors.ts — 529 or overloaded_error type
+	t.Run("529_is_overloaded", func(t *testing.T) {
+		err := &APIError{StatusCode: 529, Type: ErrServerOverload}
+		if !IsOverloadedError(err) {
+			t.Error("529 should be overloaded")
+		}
+	})
+	t.Run("overloaded_error_in_message", func(t *testing.T) {
+		err := &APIError{StatusCode: 200, Type: ErrServerOverload}
+		if !IsOverloadedError(err) {
+			t.Error("server_overload type should be overloaded")
+		}
+	})
+	t.Run("429_is_not_overloaded", func(t *testing.T) {
+		err := &APIError{StatusCode: 429, Type: ErrRateLimit}
+		if IsOverloadedError(err) {
+			t.Error("429 should not be overloaded")
+		}
+	})
+	t.Run("non_api_error", func(t *testing.T) {
+		if IsOverloadedError(fmt.Errorf("generic")) {
+			t.Error("generic error should not be overloaded")
+		}
+	})
+}
+
+func TestIsBillingError(t *testing.T) {
+	// Source: errors.ts — credit_balance_low classification
+	t.Run("credit_balance_low", func(t *testing.T) {
+		err := &APIError{Type: ErrCreditBalanceLow}
+		if !IsBillingError(err) {
+			t.Error("credit_balance_low should be billing error")
+		}
+	})
+	t.Run("rate_limit_not_billing", func(t *testing.T) {
+		err := &APIError{Type: ErrRateLimit}
+		if IsBillingError(err) {
+			t.Error("rate_limit should not be billing error")
+		}
+	})
+	t.Run("non_api_error", func(t *testing.T) {
+		if IsBillingError(fmt.Errorf("generic")) {
+			t.Error("generic error should not be billing")
+		}
+	})
+}
+
+func TestIsInvalidRequestError(t *testing.T) {
+	// Source: errors.ts — client_error type is invalid request
+	t.Run("client_error", func(t *testing.T) {
+		err := &APIError{Type: ErrClientError}
+		if !IsInvalidRequestError(err) {
+			t.Error("client_error should be invalid request")
+		}
+	})
+	t.Run("invalid_model", func(t *testing.T) {
+		err := &APIError{Type: ErrInvalidModel}
+		if !IsInvalidRequestError(err) {
+			t.Error("invalid_model should be invalid request")
+		}
+	})
+	t.Run("tool_use_mismatch", func(t *testing.T) {
+		err := &APIError{Type: ErrToolUseMismatch}
+		if !IsInvalidRequestError(err) {
+			t.Error("tool_use_mismatch should be invalid request")
+		}
+	})
+	t.Run("rate_limit_not_invalid_request", func(t *testing.T) {
+		err := &APIError{Type: ErrRateLimit}
+		if IsInvalidRequestError(err) {
+			t.Error("rate_limit should not be invalid request")
+		}
+	})
+	t.Run("non_api_error", func(t *testing.T) {
+		if IsInvalidRequestError(fmt.Errorf("generic")) {
+			t.Error("generic error should not be invalid request")
+		}
+	})
+}
+
+func TestIsContextWindowError(t *testing.T) {
+	// Source: errors.ts — prompt_too_long is context window error
+	t.Run("prompt_too_long", func(t *testing.T) {
+		err := &APIError{Type: ErrPromptTooLong}
+		if !IsContextWindowError(err) {
+			t.Error("prompt_too_long should be context window")
+		}
+	})
+	t.Run("rate_limit_not_context_window", func(t *testing.T) {
+		err := &APIError{Type: ErrRateLimit}
+		if IsContextWindowError(err) {
+			t.Error("rate_limit should not be context window")
+		}
+	})
+	t.Run("non_api_error", func(t *testing.T) {
+		if IsContextWindowError(fmt.Errorf("generic")) {
+			t.Error("generic error should not be context window")
+		}
+	})
+}
+
+func TestStartsWithAPIErrorPrefix(t *testing.T) {
+	// Source: errors.ts:56-61
+	t.Run("starts_with_prefix", func(t *testing.T) {
+		if !StartsWithAPIErrorPrefix("API Error: something broke") {
+			t.Error("should match API Error prefix")
+		}
+	})
+	t.Run("starts_with_login_prefix", func(t *testing.T) {
+		if !StartsWithAPIErrorPrefix("Please run /login · API Error: 401") {
+			t.Error("should match login+API Error prefix")
+		}
+	})
+	t.Run("no_match", func(t *testing.T) {
+		if StartsWithAPIErrorPrefix("Something else happened") {
+			t.Error("should not match unrelated text")
+		}
+	})
+}
+
+func TestParsePromptTooLongTokenCounts(t *testing.T) {
+	// Source: errors.ts:85-96
+	t.Run("standard_format", func(t *testing.T) {
+		actual, limit := ParsePromptTooLongTokenCounts(
+			"prompt is too long: 137500 tokens > 135000 maximum",
+		)
+		if actual != 137500 {
+			t.Errorf("actual = %d, want 137500", actual)
+		}
+		if limit != 135000 {
+			t.Errorf("limit = %d, want 135000", limit)
+		}
+	})
+	t.Run("case_insensitive", func(t *testing.T) {
+		actual, limit := ParsePromptTooLongTokenCounts(
+			"Prompt Is Too Long: 250000 tokens > 200000 maximum",
+		)
+		if actual != 250000 || limit != 200000 {
+			t.Errorf("got %d/%d, want 250000/200000", actual, limit)
+		}
+	})
+	t.Run("no_match_returns_zero", func(t *testing.T) {
+		actual, limit := ParsePromptTooLongTokenCounts("generic error")
+		if actual != 0 || limit != 0 {
+			t.Errorf("expected 0/0 for non-matching, got %d/%d", actual, limit)
+		}
+	})
+	t.Run("wrapped_in_sdk_prefix", func(t *testing.T) {
+		actual, limit := ParsePromptTooLongTokenCounts(
+			`400 {"error":{"type":"invalid_request_error","message":"prompt is too long: 137500 tokens > 135000 maximum"}}`,
+		)
+		if actual != 137500 || limit != 135000 {
+			t.Errorf("got %d/%d, want 137500/135000", actual, limit)
+		}
+	})
+}
+
+func TestGetPromptTooLongTokenGap(t *testing.T) {
+	// Source: errors.ts:104-118
+	t.Run("positive_gap", func(t *testing.T) {
+		gap := GetPromptTooLongTokenGap("prompt is too long: 137500 tokens > 135000 maximum")
+		if gap != 2500 {
+			t.Errorf("gap = %d, want 2500", gap)
+		}
+	})
+	t.Run("no_gap_when_under_limit", func(t *testing.T) {
+		gap := GetPromptTooLongTokenGap("prompt is too long: 100 tokens > 200 maximum")
+		if gap != 0 {
+			t.Errorf("gap = %d, want 0 (under limit)", gap)
+		}
+	})
+	t.Run("no_gap_on_non_matching", func(t *testing.T) {
+		gap := GetPromptTooLongTokenGap("generic error")
+		if gap != 0 {
+			t.Errorf("gap = %d, want 0", gap)
+		}
+	})
+}
+
+func TestIsMediaSizeError(t *testing.T) {
+	// Source: errors.ts:133-139
+	t.Run("image_exceeds_maximum", func(t *testing.T) {
+		if !IsMediaSizeError("image exceeds the maximum allowed size") {
+			t.Error("should detect image exceeds + maximum")
+		}
+	})
+	t.Run("pdf_pages", func(t *testing.T) {
+		if !IsMediaSizeError("maximum of 100 PDF pages exceeded") {
+			t.Error("should detect PDF pages pattern")
+		}
+	})
+	t.Run("image_dimensions_many_image", func(t *testing.T) {
+		if !IsMediaSizeError("image dimensions exceed the limit in many-image request") {
+			t.Error("should detect image dimensions exceed + many-image")
+		}
+	})
+	t.Run("unrelated_message", func(t *testing.T) {
+		if IsMediaSizeError("generic error") {
+			t.Error("should not match generic error")
+		}
+	})
+}
+
+func TestClassifyHTTPError_403_OrgDisabled(t *testing.T) {
+	// Source: errors.ts — 403 with "organization has been disabled"
+	err := ClassifyHTTPError(403, []byte(`Your organization has been disabled`), "")
+	if err.Type != ErrOrgDisabled {
+		t.Errorf("type = %q, want org_disabled", err.Type)
+	}
+}
+
+func TestClassifyHTTPError_403_OAuthOrgNotAllowed(t *testing.T) {
+	// Source: errors.ts — 403 with "does not have access to Claude Code"
+	err := ClassifyHTTPError(403, []byte(`Your account does not have access to Claude Code`), "")
+	if err.Type != ErrOAuthOrgNotAllowed {
+		t.Errorf("type = %q, want oauth_org_not_allowed", err.Type)
+	}
+}
+
+func TestUserFacingMessage(t *testing.T) {
+	// Source: errors.ts — UserFacingMessage maps error types to display strings
+	tests := []struct {
+		name    string
+		err     *APIError
+		want    string
+	}{
+		{
+			"rate_limit",
+			&APIError{Type: ErrRateLimit, StatusCode: 429},
+			APIErrorMessagePrefix,
+		},
+		{
+			"overload_529",
+			&APIError{Type: ErrServerOverload, StatusCode: 529},
+			APIErrorMessagePrefix,
+		},
+		{
+			"prompt_too_long",
+			&APIError{Type: ErrPromptTooLong, StatusCode: 400, Message: "prompt is too long: 137500 tokens > 135000 maximum"},
+			PromptTooLongErrorMessage,
+		},
+		{
+			"credit_balance_low",
+			&APIError{Type: ErrCreditBalanceLow, StatusCode: 400},
+			CreditBalanceTooLowErrorMessage,
+		},
+		{
+			"invalid_api_key",
+			&APIError{Type: ErrInvalidAPIKey, StatusCode: 401},
+			InvalidAPIKeyErrorMessage,
+		},
+		{
+			"token_revoked",
+			&APIError{Type: ErrTokenRevoked, StatusCode: 403},
+			TokenRevokedErrorMessage,
+		},
+		{
+			"repeated_529",
+			&APIError{Type: ErrRepeated529},
+			Repeated529ErrorMessage,
+		},
+		{
+			"api_timeout",
+			&APIError{Type: ErrAPITimeout},
+			APITimeoutErrorMessage,
+		},
+		{
+			"unknown_uses_prefix",
+			&APIError{Type: ErrUnknown, StatusCode: 418, Message: "teapot"},
+			APIErrorMessagePrefix,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.err.UserFacingMessage()
+			if !strings.HasPrefix(got, tt.want) {
+				t.Errorf("UserFacingMessage() = %q, want prefix %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetPdfTooLargeErrorMessage(t *testing.T) {
+	// Source: errors.ts:170-175
+	interactive := GetPDFTooLargeErrorMessage(false)
+	if !strings.Contains(interactive, "PDF too large") {
+		t.Errorf("interactive message missing 'PDF too large': %q", interactive)
+	}
+	if !strings.Contains(interactive, "esc") {
+		t.Errorf("interactive message should mention esc: %q", interactive)
+	}
+	nonInteractive := GetPDFTooLargeErrorMessage(true)
+	if !strings.Contains(nonInteractive, "PDF too large") {
+		t.Errorf("non-interactive message missing 'PDF too large': %q", nonInteractive)
+	}
+	if !strings.Contains(nonInteractive, "pdftotext") {
+		t.Errorf("non-interactive message should mention pdftotext: %q", nonInteractive)
+	}
+}
+
+func TestGetPdfPasswordProtectedErrorMessage(t *testing.T) {
+	// Source: errors.ts:176-179
+	interactive := GetPDFPasswordProtectedErrorMessage(false)
+	if !strings.Contains(interactive, "password protected") {
+		t.Errorf("missing 'password protected': %q", interactive)
+	}
+	nonInteractive := GetPDFPasswordProtectedErrorMessage(true)
+	if !strings.Contains(nonInteractive, "password protected") {
+		t.Errorf("missing 'password protected': %q", nonInteractive)
+	}
+}
+
+func TestGetPdfInvalidErrorMessage(t *testing.T) {
+	// Source: errors.ts:181-184
+	interactive := GetPDFInvalidErrorMessage(false)
+	if !strings.Contains(interactive, "not valid") {
+		t.Errorf("missing 'not valid': %q", interactive)
+	}
+	nonInteractive := GetPDFInvalidErrorMessage(true)
+	if !strings.Contains(nonInteractive, "not valid") {
+		t.Errorf("missing 'not valid': %q", nonInteractive)
+	}
+}
+
+func TestGetImageTooLargeErrorMessage(t *testing.T) {
+	// Source: errors.ts:186-189
+	interactive := GetImageTooLargeErrorMessage(false)
+	if !strings.Contains(interactive, "too large") {
+		t.Errorf("missing 'too large': %q", interactive)
+	}
+	nonInteractive := GetImageTooLargeErrorMessage(true)
+	if !strings.Contains(nonInteractive, "too large") {
+		t.Errorf("missing 'too large': %q", nonInteractive)
+	}
+}
+
+func TestGetRequestTooLargeErrorMessage(t *testing.T) {
+	// Source: errors.ts:191-195
+	interactive := GetRequestTooLargeErrorMessage(false)
+	if !strings.Contains(interactive, "Request too large") {
+		t.Errorf("missing 'Request too large': %q", interactive)
+	}
+	nonInteractive := GetRequestTooLargeErrorMessage(true)
+	if !strings.Contains(nonInteractive, "Request too large") {
+		t.Errorf("missing 'Request too large': %q", nonInteractive)
 	}
 }
