@@ -37,6 +37,9 @@ type CompactMsg struct{}
 // ThinkingToggleMsg requests toggling thinking mode.
 type ThinkingToggleMsg struct{}
 
+// ShowDoctorMsg requests showing the /doctor screen.
+type ShowDoctorMsg struct{}
+
 // Handler is a function that processes a slash command.
 type Handler func(args string) tea.Cmd
 
@@ -139,5 +142,9 @@ func (d *Dispatcher) registerDefaults() {
 
 	d.Register("/thinking", func(args string) tea.Cmd {
 		return func() tea.Msg { return ThinkingToggleMsg{} }
+	})
+
+	d.Register("/doctor", func(args string) tea.Cmd {
+		return func() tea.Msg { return ShowDoctorMsg{} }
 	})
 }

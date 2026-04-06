@@ -484,10 +484,10 @@ func TestParity_DispatcherDefaultCommands(t *testing.T) {
 		t.Error("HasHandler should be false for unknown command")
 	}
 
-	// Commands() returns all 7
+	// Commands() returns all 8 (including /doctor)
 	cmds := d.Commands()
-	if len(cmds) != 7 {
-		t.Errorf("Commands() should return 7 default commands, got %d: %v", len(cmds), cmds)
+	if len(cmds) != 8 {
+		t.Errorf("Commands() should return 8 default commands, got %d: %v", len(cmds), cmds)
 	}
 }
 

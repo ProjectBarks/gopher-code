@@ -13,6 +13,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/ui/commands"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
 	"github.com/projectbarks/gopher-code/pkg/ui/core"
+	"github.com/projectbarks/gopher-code/pkg/ui/screens"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
 
@@ -117,6 +118,10 @@ type AppModel struct {
 	showWelcome bool
 	welcome     *components.WelcomeScreen
 
+	// Doctor screen (modal overlay)
+	showDoctor bool
+	doctorModel *screens.DoctorModel
+
 	// Ctrl+C double-press tracking
 	// Claude requires two Ctrl+C presses on empty idle input to quit.
 	// First press shows "Press Ctrl-C again to exit" hint.
@@ -190,6 +195,24 @@ func (a *AppModel) Init() tea.Cmd {
 
 // Update handles messages and routes them to the appropriate handler.
 func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// When doctor screen is active, delegate all messages to it.
+	if a.showDoctor && a.doctorModel != nil {
+		switch msg := msg.(type) {
+		case tea.WindowSizeMsg:
+			a.width = msg.Width
+			a.height = msg.Height
+			a.doctorModel.Update(msg)
+			return a, nil
+		case screens.DoctorDoneMsg:
+			a.showDoctor = false
+			a.doctorModel = nil
+			return a, nil
+		default:
+			a.doctorModel.Update(msg)
+			return a, nil
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		return a.handleResize(msg)
@@ -257,6 +280,14 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case commands.QuitMsg:
 		return a, tea.Quit
 
+	case commands.ShowDoctorMsg:
+		return a.handleShowDoctor()
+
+	case screens.DoctorDoneMsg:
+		a.showDoctor = false
+		a.doctorModel = nil
+		return a, nil
+
 	case commands.ShowHelpMsg:
 		helpText := "Commands: /help /clear /model <name> /session /quit /compact /thinking"
 		helpMsg := message.Message{
@@ -292,6 +323,11 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (a *AppModel) View() tea.View {
 	if a.width == 0 || a.height == 0 {
 		return tea.NewView("Initializing...")
+	}
+
+	// Doctor screen overlay
+	if a.showDoctor && a.doctorModel != nil {
+		return a.doctorModel.View()
 	}
 
 	t := theme.Current()
@@ -335,6 +371,30 @@ func (a *AppModel) View() tea.View {
 }
 
 // --- Message handlers ---
+
+func (a *AppModel) handleShowDoctor() (*AppModel, tea.Cmd) {
+	// Build doctor config with current session info.
+	// Source: Doctor.tsx — gathers diagnostic data on mount.
+	cfg := screens.DoctorConfig{
+		Diagnostic: &screens.DoctorDiagnostic{
+			Version:            "0.2.0",
+			InstallationType:   "go-binary",
+			InstallationPath:   "gopher-code",
+			InvokedBinary:      "gopher-code",
+			ConfigInstallMethod: "direct",
+			AutoUpdates:        "enabled",
+		},
+		AutoUpdates:   "enabled",
+		UpdateChannel: "latest",
+	}
+	a.doctorModel = screens.NewDoctorModel(cfg)
+	a.showDoctor = true
+	// Send a resize so doctor knows terminal dimensions.
+	if a.width > 0 && a.height > 0 {
+		a.doctorModel.Update(tea.WindowSizeMsg{Width: a.width, Height: a.height})
+	}
+	return a, nil
+}
 
 func (a *AppModel) handleResize(msg tea.WindowSizeMsg) (*AppModel, tea.Cmd) {
 	a.width = msg.Width
