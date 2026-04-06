@@ -121,6 +121,38 @@ type DeferrableTool interface {
 	ShouldDefer() bool
 }
 
+// ToolPrompter is an optional interface tools implement to provide a
+// system-prompt section that guides the model on how to use the tool.
+// Source: Tool.ts:408 — prompt(): Promise<string>
+type ToolPrompter interface {
+	Prompt() string
+}
+
+// GetToolPrompt returns the tool's prompt if it implements ToolPrompter.
+// Returns empty string otherwise.
+func GetToolPrompt(tool Tool) string {
+	if p, ok := tool.(ToolPrompter); ok {
+		return p.Prompt()
+	}
+	return ""
+}
+
+// SearchHinter is an optional interface tools implement to provide a search
+// hint for tool discovery via ToolSearch.
+// Source: Tool.ts:436 — searchHint
+type SearchHinter interface {
+	SearchHint() string
+}
+
+// GetSearchHint returns the tool's search hint if it implements SearchHinter.
+// Returns empty string otherwise.
+func GetSearchHint(tool Tool) string {
+	if h, ok := tool.(SearchHinter); ok {
+		return h.SearchHint()
+	}
+	return ""
+}
+
 // Tool result size constants.
 // Source: constants/toolLimits.ts:1-56
 const (
