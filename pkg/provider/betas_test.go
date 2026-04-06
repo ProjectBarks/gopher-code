@@ -270,6 +270,83 @@ func TestGetMergedBetas_AgenticQuery(t *testing.T) {
 	})
 }
 
+func TestFeatureGatedBetaHeaders(t *testing.T) {
+	// Source: constants/betas.ts:23-30
+
+	t.Run("summarize_connector_text_enabled", func(t *testing.T) {
+		// Source: betas.ts:23-25 — feature('CONNECTOR_TEXT') ? 'summarize-...' : ''
+		orig := FeatureConnectorText
+		FeatureConnectorText = true
+		defer func() { FeatureConnectorText = orig }()
+		if got := BetaSummarizeConnectorText(); got != "summarize-connector-text-2026-03-13" {
+			t.Errorf("BetaSummarizeConnectorText() = %q, want %q", got, "summarize-connector-text-2026-03-13")
+		}
+	})
+
+	t.Run("summarize_connector_text_disabled", func(t *testing.T) {
+		orig := FeatureConnectorText
+		FeatureConnectorText = false
+		defer func() { FeatureConnectorText = orig }()
+		if got := BetaSummarizeConnectorText(); got != "" {
+			t.Errorf("BetaSummarizeConnectorText() = %q, want empty", got)
+		}
+	})
+
+	t.Run("afk_mode_enabled", func(t *testing.T) {
+		// Source: betas.ts:26-28 — feature('TRANSCRIPT_CLASSIFIER') ? 'afk-...' : ''
+		orig := FeatureTranscriptClassifier
+		FeatureTranscriptClassifier = true
+		defer func() { FeatureTranscriptClassifier = orig }()
+		if got := BetaAfkMode(); got != "afk-mode-2026-01-31" {
+			t.Errorf("BetaAfkMode() = %q, want %q", got, "afk-mode-2026-01-31")
+		}
+	})
+
+	t.Run("afk_mode_disabled", func(t *testing.T) {
+		orig := FeatureTranscriptClassifier
+		FeatureTranscriptClassifier = false
+		defer func() { FeatureTranscriptClassifier = orig }()
+		if got := BetaAfkMode(); got != "" {
+			t.Errorf("BetaAfkMode() = %q, want empty", got)
+		}
+	})
+
+	t.Run("cli_internal_ant_user", func(t *testing.T) {
+		// Source: betas.ts:29-30 — process.env.USER_TYPE === 'ant'
+		t.Setenv("USER_TYPE", "ant")
+		if got := BetaCliInternal(); got != "cli-internal-2026-02-09" {
+			t.Errorf("BetaCliInternal() = %q, want %q", got, "cli-internal-2026-02-09")
+		}
+	})
+
+	t.Run("cli_internal_non_ant_user", func(t *testing.T) {
+		t.Setenv("USER_TYPE", "external")
+		if got := BetaCliInternal(); got != "" {
+			t.Errorf("BetaCliInternal() = %q, want empty", got)
+		}
+	})
+
+	t.Run("cli_internal_no_user_type", func(t *testing.T) {
+		t.Setenv("USER_TYPE", "")
+		if got := BetaCliInternal(); got != "" {
+			t.Errorf("BetaCliInternal() = %q, want empty", got)
+		}
+	})
+}
+
+func TestVertexCountTokensAllowedBetas(t *testing.T) {
+	// Source: constants/betas.ts:48-52
+	if len(VertexCountTokensAllowedBetas) != 3 {
+		t.Errorf("expected 3 Vertex countTokens allowed betas, got %d", len(VertexCountTokensAllowedBetas))
+	}
+	expected := []string{BetaClaudeCode, BetaInterleavedThinking, BetaContextManagement}
+	for _, e := range expected {
+		if !VertexCountTokensAllowedBetas[e] {
+			t.Errorf("expected %q in Vertex countTokens allowed betas", e)
+		}
+	}
+}
+
 func TestModelSupportsISP(t *testing.T) {
 	// Source: utils/betas.ts:92-112
 	os.Unsetenv("CLAUDE_CODE_USE_BEDROCK")

@@ -5,6 +5,41 @@ import (
 	"strings"
 )
 
+// Feature gates — build-time flags matching TS feature('...') from bun:bundle.
+// Set via -ldflags at build time; override in tests.
+// Source: constants/betas.ts:23-28
+var (
+	FeatureConnectorText        = false // feature('CONNECTOR_TEXT')
+	FeatureTranscriptClassifier = false // feature('TRANSCRIPT_CLASSIFIER')
+)
+
+// BetaSummarizeConnectorText returns the beta header when CONNECTOR_TEXT is enabled.
+// Source: constants/betas.ts:23-25
+func BetaSummarizeConnectorText() string {
+	if FeatureConnectorText {
+		return "summarize-connector-text-2026-03-13"
+	}
+	return ""
+}
+
+// BetaAfkMode returns the beta header when TRANSCRIPT_CLASSIFIER is enabled.
+// Source: constants/betas.ts:26-28
+func BetaAfkMode() string {
+	if FeatureTranscriptClassifier {
+		return "afk-mode-2026-01-31"
+	}
+	return ""
+}
+
+// BetaCliInternal returns the beta header when USER_TYPE is "ant".
+// Source: constants/betas.ts:29-30
+func BetaCliInternal() string {
+	if os.Getenv("USER_TYPE") == "ant" {
+		return "cli-internal-2026-02-09"
+	}
+	return ""
+}
+
 // Beta header constants — Source: constants/betas.ts
 const (
 	BetaClaudeCode          = "claude-code-20250219"              // Source: betas.ts:3
@@ -30,6 +65,15 @@ var BedrockExtraParamsHeaders = map[string]bool{
 	BetaInterleavedThinking: true,
 	BetaContext1M:           true,
 	BetaToolSearch3P:        true,
+}
+
+// VertexCountTokensAllowedBetas are the only betas allowed on Vertex countTokens API.
+// Other betas will cause 400 errors.
+// Source: constants/betas.ts:48-52
+var VertexCountTokensAllowedBetas = map[string]bool{
+	BetaClaudeCode:          true,
+	BetaInterleavedThinking: true,
+	BetaContextManagement:   true,
 }
 
 // GetToolSearchBetaHeader returns the provider-appropriate tool search beta.
