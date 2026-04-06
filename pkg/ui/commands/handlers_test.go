@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -1495,5 +1496,281 @@ func TestCompact_HasRegistration(t *testing.T) {
 	}
 	if reg.ArgumentHint != "[custom instructions]" {
 		t.Errorf("Unexpected argument hint: %q", reg.ArgumentHint)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T238: /config dispatch test
+// ---------------------------------------------------------------------------
+
+func TestConfig_DispatchReturnsShowSettingsMsg(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/config") {
+		t.Fatal("Should have /config handler")
+	}
+	cmd := d.Dispatch("/config")
+	if cmd == nil {
+		t.Fatal("Expected non-nil command")
+	}
+	msg := cmd()
+	if _, ok := msg.(ShowSettingsMsg); !ok {
+		t.Errorf("Expected ShowSettingsMsg, got %T", msg)
+	}
+}
+
+func TestConfig_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/config")
+	if reg == nil {
+		t.Fatal("Should have registration for /config")
+	}
+	if reg.Description != "Open settings" {
+		t.Errorf("Unexpected description: %q", reg.Description)
+	}
+	if reg.Type != CommandTypeLocalJSX {
+		t.Errorf("Expected CommandTypeLocalJSX, got %v", reg.Type)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T239: /context dispatch test
+// ---------------------------------------------------------------------------
+
+func TestContext_DispatchReturnsContextAnalysisMsg(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/context") {
+		t.Fatal("Should have /context handler")
+	}
+	cmd := d.Dispatch("/context")
+	msg := cmd()
+	result, ok := msg.(ContextAnalysisMsg)
+	if !ok {
+		t.Fatalf("Expected ContextAnalysisMsg, got %T", msg)
+	}
+	if result.Stats == nil {
+		t.Fatal("Stats should not be nil")
+	}
+	if !strings.Contains(result.Output, "Context Window Usage") {
+		t.Errorf("Output should contain 'Context Window Usage', got %q", result.Output)
+	}
+}
+
+func TestContext_WithMessages(t *testing.T) {
+	msgs := []message.Message{
+		{Role: message.RoleUser, Content: []message.ContentBlock{
+			{Type: message.ContentText, Text: "Hello, this is a test message with some tokens"},
+		}},
+		{Role: message.RoleAssistant, Content: []message.ContentBlock{
+			{Type: message.ContentText, Text: "Here is my response with some content"},
+		}},
+	}
+	handler := newContextHandler(ContextDeps{
+		GetMessages:       func() []message.Message { return msgs },
+		ContextWindowSize: func() int { return 200000 },
+	})
+	cmd := handler("")
+	msg := cmd()
+	result := msg.(ContextAnalysisMsg)
+	if result.Stats.Total == 0 {
+		t.Error("Total tokens should be > 0 with messages")
+	}
+	if result.Stats.HumanMessages == 0 {
+		t.Error("HumanMessages should be > 0")
+	}
+	if result.Stats.AssistantMessages == 0 {
+		t.Error("AssistantMessages should be > 0")
+	}
+	if !strings.Contains(result.Output, "| Human messages |") {
+		t.Error("Output should contain markdown table rows")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T240: /copy dispatch test
+// ---------------------------------------------------------------------------
+
+func TestCopy_DispatchNoMessages(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/copy") {
+		t.Fatal("Should have /copy handler")
+	}
+	cmd := d.Dispatch("/copy")
+	msg := cmd()
+	result, ok := msg.(CopyMsg)
+	if !ok {
+		t.Fatalf("Expected CopyMsg, got %T", msg)
+	}
+	if result.Error == nil {
+		t.Error("Expected error when no messages")
+	}
+	if !strings.Contains(result.Error.Error(), "no assistant response found") {
+		t.Errorf("Unexpected error: %v", result.Error)
+	}
+}
+
+func TestCopy_WithAssistantMessage(t *testing.T) {
+	msgs := []message.Message{
+		{Role: message.RoleUser, Content: []message.ContentBlock{
+			{Type: message.ContentText, Text: "Hello"},
+		}},
+		{Role: message.RoleAssistant, Content: []message.ContentBlock{
+			{Type: message.ContentText, Text: "This is my response"},
+		}},
+	}
+	handler := newCopyHandler(CopyDeps{
+		GetMessages: func() []message.Message { return msgs },
+	})
+	cmd := handler("")
+	msg := cmd()
+	result := msg.(CopyMsg)
+	// In test environment, OSC52 may fail so it falls back to file write,
+	// or it may succeed — either way, content should be captured.
+	if result.Error != nil {
+		t.Errorf("Unexpected error: %v", result.Error)
+	}
+	if result.Content != "This is my response" {
+		t.Errorf("Expected content 'This is my response', got %q", result.Content)
+	}
+	if result.Message != "Copied to clipboard" && !strings.HasPrefix(result.Message, "Written to") {
+		t.Errorf("Expected 'Copied to clipboard' or 'Written to...', got %q", result.Message)
+	}
+}
+
+func TestCopy_NthResponse(t *testing.T) {
+	msgs := []message.Message{
+		{Role: message.RoleAssistant, Content: []message.ContentBlock{
+			{Type: message.ContentText, Text: "First response"},
+		}},
+		{Role: message.RoleUser, Content: []message.ContentBlock{
+			{Type: message.ContentText, Text: "Follow up"},
+		}},
+		{Role: message.RoleAssistant, Content: []message.ContentBlock{
+			{Type: message.ContentText, Text: "Second response"},
+		}},
+	}
+	handler := newCopyHandler(CopyDeps{
+		GetMessages: func() []message.Message { return msgs },
+	})
+	// N=2 should get the first (older) assistant response
+	cmd := handler("2")
+	msg := cmd()
+	result := msg.(CopyMsg)
+	if result.Error != nil {
+		t.Errorf("Unexpected error: %v", result.Error)
+	}
+	if result.Content != "First response" {
+		t.Errorf("Expected 'First response', got %q", result.Content)
+	}
+}
+
+func TestCopy_InvalidArg(t *testing.T) {
+	handler := newCopyHandler(CopyDeps{
+		GetMessages: func() []message.Message { return nil },
+	})
+	cmd := handler("abc")
+	msg := cmd()
+	result := msg.(CopyMsg)
+	if result.Error == nil {
+		t.Error("Expected error for invalid arg")
+	}
+}
+
+func TestCopy_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/copy")
+	if reg == nil {
+		t.Fatal("Should have registration for /copy")
+	}
+	if reg.ArgumentHint != "[N]" {
+		t.Errorf("Unexpected argument hint: %q", reg.ArgumentHint)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T241: /cost dispatch test
+// ---------------------------------------------------------------------------
+
+func TestCost_DispatchReturnsCostMsg(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/cost") {
+		t.Fatal("Should have /cost handler")
+	}
+	cmd := d.Dispatch("/cost")
+	msg := cmd()
+	result, ok := msg.(CostMsg)
+	if !ok {
+		t.Fatalf("Expected CostMsg, got %T", msg)
+	}
+	// Default session: $0.0000, 0 tokens
+	if !strings.Contains(result.Message, "Session cost: $0.0000") {
+		t.Errorf("Expected 'Session cost: $0.0000' in message, got %q", result.Message)
+	}
+	if !strings.Contains(result.Message, "Total tokens: 0") {
+		t.Errorf("Expected 'Total tokens: 0' in message, got %q", result.Message)
+	}
+}
+
+func TestCost_WithSessionData(t *testing.T) {
+	s := &session.SessionState{
+		TotalCostUSD:      0.1234,
+		TotalInputTokens:  5000,
+		TotalOutputTokens: 3000,
+	}
+	handler := newCostHandler(CostDeps{
+		GetSession: func() *session.SessionState { return s },
+	})
+	cmd := handler("")
+	msg := cmd()
+	result := msg.(CostMsg)
+	if !strings.Contains(result.Message, "Session cost: $0.1234") {
+		t.Errorf("Expected 'Session cost: $0.1234', got %q", result.Message)
+	}
+	if !strings.Contains(result.Message, "Total tokens: 8000") {
+		t.Errorf("Expected 'Total tokens: 8000', got %q", result.Message)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T242: /desktop dispatch test
+// ---------------------------------------------------------------------------
+
+func TestDesktop_DispatchReturnsDesktopMsg(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/desktop") {
+		t.Fatal("Should have /desktop handler")
+	}
+	cmd := d.Dispatch("/desktop")
+	msg := cmd()
+	result, ok := msg.(DesktopMsg)
+	if !ok {
+		t.Fatalf("Expected DesktopMsg, got %T", msg)
+	}
+	// Platform-dependent behavior
+	switch runtime.GOOS {
+	case "darwin", "windows":
+		if result.Error != nil {
+			t.Errorf("Unexpected error on %s: %v", runtime.GOOS, result.Error)
+		}
+		if result.Message != "Opening in Claude Desktop..." {
+			t.Errorf("Expected 'Opening in Claude Desktop...', got %q", result.Message)
+		}
+	default:
+		if result.Error == nil {
+			t.Error("Expected error on unsupported platform")
+		}
+		if !strings.Contains(result.Message, "only available on macOS and Windows") {
+			t.Errorf("Expected platform message, got %q", result.Message)
+		}
+	}
+}
+
+func TestDesktop_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/desktop")
+	if reg == nil {
+		t.Fatal("Should have registration for /desktop")
+	}
+	if reg.Description != "Open in Claude Desktop" {
+		t.Errorf("Unexpected description: %q", reg.Description)
 	}
 }

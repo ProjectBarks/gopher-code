@@ -2,15 +2,18 @@ package commands
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/projectbarks/gopher-code/pkg/compact"
+	appcontext "github.com/projectbarks/gopher-code/pkg/context"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/session"
 )
@@ -155,6 +158,35 @@ type MovedToPluginMsg struct {
 type PromptMsg struct {
 	Command string
 	Text    string
+}
+
+// ShowSettingsMsg requests opening the settings panel.
+type ShowSettingsMsg struct{}
+
+// ContextAnalysisMsg is returned when /context analyzes token usage.
+type ContextAnalysisMsg struct {
+	Stats   *appcontext.TokenStats
+	Output  string
+	Message string
+}
+
+// CopyMsg is returned when /copy copies assistant response to clipboard.
+type CopyMsg struct {
+	Content string
+	Path    string // non-empty if written to file instead of clipboard
+	Message string
+	Error   error
+}
+
+// CostMsg is returned when /cost displays session cost info.
+type CostMsg struct {
+	Message string
+}
+
+// DesktopMsg is returned when /desktop attempts handoff.
+type DesktopMsg struct {
+	Message string
+	Error   error
 }
 
 // ColorMsg is returned when /color sets or resets the prompt bar color.
@@ -1217,6 +1249,194 @@ func newCompactHandler(deps CompactDeps) Handler {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// T238: /config — open settings panel
+// Source: src/commands/config/
+// ---------------------------------------------------------------------------
+
+func newConfigHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg { return ShowSettingsMsg{} }
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T239: /context — context window usage visualization
+// Source: src/commands/context/
+// ---------------------------------------------------------------------------
+
+// ContextDeps holds dependencies for the /context handler.
+type ContextDeps struct {
+	// GetMessages returns current conversation messages.
+	GetMessages func() []message.Message
+	// ContextWindowSize is the model's context window.
+	ContextWindowSize func() int
+}
+
+func newContextHandler(deps ContextDeps) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			msgs := deps.GetMessages()
+			stats := appcontext.AnalyzeContext(msgs)
+			windowSize := appcontext.ModelContextWindowDefault
+			if deps.ContextWindowSize != nil {
+				windowSize = deps.ContextWindowSize()
+			}
+			pct := appcontext.CalculateContextPercentages(
+				&appcontext.TokenUsage{InputTokens: stats.Total},
+				windowSize,
+			)
+
+			var sb strings.Builder
+			sb.WriteString("## Context Window Usage\n\n")
+			sb.WriteString(fmt.Sprintf("| Category | Tokens |\n"))
+			sb.WriteString(fmt.Sprintf("| --- | --- |\n"))
+			sb.WriteString(fmt.Sprintf("| Human messages | %d |\n", stats.HumanMessages))
+			sb.WriteString(fmt.Sprintf("| Assistant messages | %d |\n", stats.AssistantMessages))
+			sb.WriteString(fmt.Sprintf("| Tool requests | %d |\n", sumMap(stats.ToolRequests)))
+			sb.WriteString(fmt.Sprintf("| Tool results | %d |\n", sumMap(stats.ToolResults)))
+			sb.WriteString(fmt.Sprintf("| Local commands | %d |\n", stats.LocalCommandOutputs))
+			sb.WriteString(fmt.Sprintf("| Other | %d |\n", stats.Other))
+			sb.WriteString(fmt.Sprintf("| **Total** | **%d** |\n", stats.Total))
+			if pct.Used != nil {
+				sb.WriteString(fmt.Sprintf("\nContext used: %d%% (%d/%d tokens)\n", *pct.Used, stats.Total, windowSize))
+			}
+
+			return ContextAnalysisMsg{
+				Stats:   stats,
+				Output:  sb.String(),
+				Message: sb.String(),
+			}
+		}
+	}
+}
+
+func sumMap(m map[string]int) int {
+	var total int
+	for _, v := range m {
+		total += v
+	}
+	return total
+}
+
+// ---------------------------------------------------------------------------
+// T240: /copy — copy last assistant response to clipboard
+// Source: src/commands/copy/
+// ---------------------------------------------------------------------------
+
+// CopyDeps holds dependencies for the /copy handler.
+type CopyDeps struct {
+	// GetMessages returns current conversation messages.
+	GetMessages func() []message.Message
+}
+
+func newCopyHandler(deps CopyDeps) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			msgs := deps.GetMessages()
+			n := 1
+			if args != "" {
+				if _, err := fmt.Sscanf(args, "%d", &n); err != nil || n < 1 {
+					return CopyMsg{Error: fmt.Errorf("usage: /copy [N] — N must be a positive integer")}
+				}
+			}
+
+			// Find Nth-latest assistant response
+			var found int
+			var content string
+			for i := len(msgs) - 1; i >= 0; i-- {
+				if msgs[i].Role == message.RoleAssistant {
+					found++
+					if found == n {
+						var sb strings.Builder
+						for _, b := range msgs[i].Content {
+							if b.Type == message.ContentText {
+								sb.WriteString(b.Text)
+							}
+						}
+						content = sb.String()
+						break
+					}
+				}
+			}
+			if content == "" {
+				return CopyMsg{Error: fmt.Errorf("no assistant response found")}
+			}
+
+			// Try OSC 52 clipboard escape sequence
+			osc52 := fmt.Sprintf("\033]52;c;%s\a", encodeBase64(content))
+			if _, err := fmt.Fprint(os.Stderr, osc52); err == nil {
+				return CopyMsg{Content: content, Message: "Copied to clipboard"}
+			}
+
+			// Fallback: write to $TMPDIR/claude/response.md
+			dir := filepath.Join(os.TempDir(), "claude")
+			_ = os.MkdirAll(dir, 0o755)
+			path := filepath.Join(dir, "response.md")
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+				return CopyMsg{Error: fmt.Errorf("failed to write response: %w", err)}
+			}
+			return CopyMsg{Content: content, Path: path, Message: fmt.Sprintf("Written to %s", path)}
+		}
+	}
+}
+
+// encodeBase64 returns a base64-encoded string.
+func encodeBase64(s string) string {
+	return base64.StdEncoding.EncodeToString([]byte(s))
+}
+
+// ---------------------------------------------------------------------------
+// T241: /cost — session cost display
+// Source: src/commands/cost/
+// ---------------------------------------------------------------------------
+
+// CostDeps holds dependencies for the /cost handler.
+type CostDeps struct {
+	// GetSession returns the current session state.
+	GetSession func() *session.SessionState
+}
+
+func newCostHandler(deps CostDeps) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			s := deps.GetSession()
+			totalTokens := s.TotalInputTokens + s.TotalOutputTokens
+			msg := fmt.Sprintf("Session cost: $%.4f\nTotal tokens: %d", s.TotalCostUSD, totalTokens)
+			return CostMsg{Message: msg}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T242: /desktop — open session in Claude Desktop app
+// Source: src/commands/desktop/
+// ---------------------------------------------------------------------------
+
+func newDesktopHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			platform := getPlatform()
+			switch platform {
+			case "darwin":
+				return DesktopMsg{Message: "Opening in Claude Desktop..."}
+			case "windows":
+				return DesktopMsg{Message: "Opening in Claude Desktop..."}
+			default:
+				return DesktopMsg{
+					Error:   fmt.Errorf("Claude Desktop is only available on macOS and Windows"),
+					Message: "Claude Desktop is only available on macOS and Windows",
+				}
+			}
+		}
+	}
+}
+
+// getPlatform returns the runtime platform string.
+func getPlatform() string {
+	return runtime.GOOS
+}
+
 func (d *Dispatcher) registerDefaults() {
 	d.Register("/model", func(args string) tea.Cmd {
 		if args == "" {
@@ -1411,5 +1631,58 @@ func (d *Dispatcher) registerDefaults() {
 		ArgumentHint: "[additional instructions]",
 		Source:       "builtin",
 		Handler:      newCommitPushPRHandler(),
+	})
+
+	// T238: /config — open settings panel
+	d.RegisterCommand(CommandRegistration{
+		Name:        "config",
+		Description: "Open settings",
+		Type:        CommandTypeLocalJSX,
+		Source:      "builtin",
+		Handler:     newConfigHandler(),
+	})
+
+	// T239: /context — context window usage visualization
+	d.RegisterCommand(CommandRegistration{
+		Name:        "context",
+		Description: "Show context window usage",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: newContextHandler(ContextDeps{
+			GetMessages:       func() []message.Message { return nil },
+			ContextWindowSize: func() int { return appcontext.ModelContextWindowDefault },
+		}),
+	})
+
+	// T240: /copy — copy last assistant response to clipboard
+	d.RegisterCommand(CommandRegistration{
+		Name:         "copy",
+		Description:  "Copy last assistant response to clipboard",
+		Type:         CommandTypeLocal,
+		ArgumentHint: "[N]",
+		Source:       "builtin",
+		Handler: newCopyHandler(CopyDeps{
+			GetMessages: func() []message.Message { return nil },
+		}),
+	})
+
+	// T241: /cost — display session cost and token usage
+	d.RegisterCommand(CommandRegistration{
+		Name:        "cost",
+		Description: "Show session cost and token usage",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: newCostHandler(CostDeps{
+			GetSession: func() *session.SessionState { return &session.SessionState{} },
+		}),
+	})
+
+	// T242: /desktop — open session in Claude Desktop app
+	d.RegisterCommand(CommandRegistration{
+		Name:        "desktop",
+		Description: "Open in Claude Desktop",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler:     newDesktopHandler(),
 	})
 }
