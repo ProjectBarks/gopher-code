@@ -227,6 +227,26 @@ type SessionState struct {
 	// T145: Cache for plan slugs: sessionId -> wordSlug.
 	// Source: bootstrap/state.ts — planSlugCache
 	PlanSlugCache map[string]string `json:"-"`
+
+	// T146: Info about a teleported (remote) session origin.
+	// Source: bootstrap/state.ts — teleportedSessionInfo
+	TeleportedSessionInfo interface{} `json:"-"`
+
+	// T147: Tracks which skills have been invoked. Composite key "agentId:skillName".
+	// Source: bootstrap/state.ts — invokedSkills
+	InvokedSkills map[string]bool `json:"-"`
+
+	// T148: Tracks slow operations for diagnostics.
+	// Source: bootstrap/state.ts — slowOperations
+	SlowOperations map[string]time.Duration `json:"-"`
+
+	// T149: List of beta headers from SDK.
+	// Source: bootstrap/state.ts — sdkBetas
+	SdkBetas []string `json:"-"`
+
+	// T150: The agent type for the main conversation thread.
+	// Source: bootstrap/state.ts — mainThreadAgentType
+	MainThreadAgentType string `json:"-"`
 }
 
 // New creates a new SessionState with the given config and working directory.
@@ -248,6 +268,8 @@ func New(config SessionConfig, cwd string) *SessionState {
 		SessionCronTasks:    make([]SessionCronTask, 0),
 		SessionCreatedTeams: make(map[string]struct{}),
 		PlanSlugCache:       make(map[string]string),
+		InvokedSkills:       make(map[string]bool),
+		SlowOperations:      make(map[string]time.Duration),
 	}
 }
 
@@ -709,6 +731,73 @@ func (s *SessionState) SetPlanSlug(sessionID, slug string) {
 // DeletePlanSlug removes a plan slug entry.
 func (s *SessionState) DeletePlanSlug(sessionID string) {
 	delete(s.PlanSlugCache, sessionID)
+}
+
+// ---------------------------------------------------------------------------
+// T147: Invoked skills — Source: bootstrap/state.ts — invokedSkills
+// ---------------------------------------------------------------------------
+
+// MarkSkillInvoked records that a skill has been invoked for a given agent.
+// The composite key is "agentId:skillName".
+func (s *SessionState) MarkSkillInvoked(agentID, skillName string) {
+	if s.InvokedSkills == nil {
+		s.InvokedSkills = make(map[string]bool)
+	}
+	s.InvokedSkills[agentID+":"+skillName] = true
+}
+
+// HasInvokedSkill returns whether a skill has been invoked for a given agent.
+func (s *SessionState) HasInvokedSkill(agentID, skillName string) bool {
+	return s.InvokedSkills[agentID+":"+skillName]
+}
+
+// ClearInvokedSkills removes all invoked skill entries except those belonging
+// to the preserved agent IDs.
+func (s *SessionState) ClearInvokedSkills(preservedAgentIDs []string) {
+	if len(preservedAgentIDs) == 0 {
+		s.InvokedSkills = make(map[string]bool)
+		return
+	}
+	preserved := make(map[string]struct{}, len(preservedAgentIDs))
+	for _, id := range preservedAgentIDs {
+		preserved[id+":"] = struct{}{}
+	}
+	for key := range s.InvokedSkills {
+		keep := false
+		for prefix := range preserved {
+			if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
+				keep = true
+				break
+			}
+		}
+		if !keep {
+			delete(s.InvokedSkills, key)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T148: Slow operations — Source: bootstrap/state.ts — slowOperations
+// ---------------------------------------------------------------------------
+
+// RecordSlowOperation records a slow operation with the given name and duration.
+func (s *SessionState) RecordSlowOperation(name string, duration time.Duration) {
+	if s.SlowOperations == nil {
+		s.SlowOperations = make(map[string]time.Duration)
+	}
+	s.SlowOperations[name] = duration
+}
+
+// GetSlowOperations returns a copy of the slow operations map.
+func (s *SessionState) GetSlowOperations() map[string]time.Duration {
+	if s.SlowOperations == nil {
+		return nil
+	}
+	out := make(map[string]time.Duration, len(s.SlowOperations))
+	for k, v := range s.SlowOperations {
+		out[k] = v
+	}
+	return out
 }
 
 // RegenerateSessionID creates a new session ID, optionally setting the current as parent.

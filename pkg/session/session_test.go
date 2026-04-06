@@ -1021,3 +1021,215 @@ func TestPlanSlugCache(t *testing.T) {
 	// Delete non-existent is safe
 	s.DeletePlanSlug("no-such-session")
 }
+
+// T146: teleportedSessionInfo
+func TestTeleportedSessionInfo(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.TeleportedSessionInfo != nil {
+		t.Error("TeleportedSessionInfo should default to nil")
+	}
+
+	info := map[string]string{"origin": "remote-host", "session_id": "abc-123"}
+	s.TeleportedSessionInfo = info
+
+	got, ok := s.TeleportedSessionInfo.(map[string]string)
+	if !ok {
+		t.Fatal("TeleportedSessionInfo should be a map[string]string")
+	}
+	if got["origin"] != "remote-host" {
+		t.Errorf("TeleportedSessionInfo[origin] = %q, want remote-host", got["origin"])
+	}
+	if got["session_id"] != "abc-123" {
+		t.Errorf("TeleportedSessionInfo[session_id] = %q, want abc-123", got["session_id"])
+	}
+
+	// Can be cleared
+	s.TeleportedSessionInfo = nil
+	if s.TeleportedSessionInfo != nil {
+		t.Error("TeleportedSessionInfo should be nil after clear")
+	}
+}
+
+// T147: invokedSkills
+func TestInvokedSkills(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	// Default: initialized empty map
+	if s.InvokedSkills == nil {
+		t.Fatal("InvokedSkills should be initialized")
+	}
+	if len(s.InvokedSkills) != 0 {
+		t.Errorf("InvokedSkills len = %d, want 0", len(s.InvokedSkills))
+	}
+
+	// Mark and check
+	s.MarkSkillInvoked("agent-1", "commit")
+	if !s.HasInvokedSkill("agent-1", "commit") {
+		t.Error("HasInvokedSkill(agent-1, commit) should be true")
+	}
+	if s.HasInvokedSkill("agent-1", "review") {
+		t.Error("HasInvokedSkill(agent-1, review) should be false")
+	}
+	if s.HasInvokedSkill("agent-2", "commit") {
+		t.Error("HasInvokedSkill(agent-2, commit) should be false (different agent)")
+	}
+
+	// Mark multiple skills
+	s.MarkSkillInvoked("agent-1", "review")
+	s.MarkSkillInvoked("agent-2", "commit")
+
+	if !s.HasInvokedSkill("agent-1", "review") {
+		t.Error("HasInvokedSkill(agent-1, review) should be true after mark")
+	}
+	if !s.HasInvokedSkill("agent-2", "commit") {
+		t.Error("HasInvokedSkill(agent-2, commit) should be true after mark")
+	}
+
+	// ClearInvokedSkills with preserved agent IDs
+	s.ClearInvokedSkills([]string{"agent-1"})
+	if !s.HasInvokedSkill("agent-1", "commit") {
+		t.Error("agent-1:commit should be preserved")
+	}
+	if !s.HasInvokedSkill("agent-1", "review") {
+		t.Error("agent-1:review should be preserved")
+	}
+	if s.HasInvokedSkill("agent-2", "commit") {
+		t.Error("agent-2:commit should be cleared")
+	}
+
+	// ClearInvokedSkills with no preserved IDs clears all
+	s.ClearInvokedSkills(nil)
+	if len(s.InvokedSkills) != 0 {
+		t.Errorf("InvokedSkills should be empty after clear-all, got %d", len(s.InvokedSkills))
+	}
+
+	// Duplicate mark is idempotent
+	s.MarkSkillInvoked("agent-1", "commit")
+	s.MarkSkillInvoked("agent-1", "commit")
+	if len(s.InvokedSkills) != 1 {
+		t.Errorf("duplicate mark should be idempotent, got %d entries", len(s.InvokedSkills))
+	}
+}
+
+// T148: slowOperations
+func TestSlowOperations(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	// Default: initialized empty map
+	if s.SlowOperations == nil {
+		t.Fatal("SlowOperations should be initialized")
+	}
+	if len(s.SlowOperations) != 0 {
+		t.Errorf("SlowOperations len = %d, want 0", len(s.SlowOperations))
+	}
+
+	// Record and get
+	s.RecordSlowOperation("mcp-connect", 2500*time.Millisecond)
+	s.RecordSlowOperation("tool-execute", 1200*time.Millisecond)
+
+	ops := s.GetSlowOperations()
+	if len(ops) != 2 {
+		t.Fatalf("GetSlowOperations len = %d, want 2", len(ops))
+	}
+	if ops["mcp-connect"] != 2500*time.Millisecond {
+		t.Errorf("mcp-connect duration = %v, want 2500ms", ops["mcp-connect"])
+	}
+	if ops["tool-execute"] != 1200*time.Millisecond {
+		t.Errorf("tool-execute duration = %v, want 1200ms", ops["tool-execute"])
+	}
+
+	// GetSlowOperations returns a copy
+	ops["mcp-connect"] = 0
+	if s.SlowOperations["mcp-connect"] != 2500*time.Millisecond {
+		t.Error("GetSlowOperations should return a copy, not a reference")
+	}
+
+	// Overwrite existing operation
+	s.RecordSlowOperation("mcp-connect", 5000*time.Millisecond)
+	if s.SlowOperations["mcp-connect"] != 5000*time.Millisecond {
+		t.Errorf("mcp-connect after overwrite = %v, want 5000ms", s.SlowOperations["mcp-connect"])
+	}
+
+	// GetSlowOperations on nil returns nil
+	s2 := New(DefaultConfig(), "/tmp/test")
+	s2.SlowOperations = nil
+	if got := s2.GetSlowOperations(); got != nil {
+		t.Errorf("GetSlowOperations on nil = %v, want nil", got)
+	}
+
+	// RecordSlowOperation on nil map initializes it
+	s2.RecordSlowOperation("late-init", time.Second)
+	if s2.SlowOperations == nil {
+		t.Error("RecordSlowOperation should initialize nil map")
+	}
+	if s2.SlowOperations["late-init"] != time.Second {
+		t.Errorf("late-init = %v, want 1s", s2.SlowOperations["late-init"])
+	}
+}
+
+// T149: sdkBetas
+func TestSdkBetas(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.SdkBetas != nil {
+		t.Error("SdkBetas should default to nil")
+	}
+
+	s.SdkBetas = []string{"prompt-caching-2024-07-31", "max-tokens-3-5-sonnet-2024-07-15"}
+	if len(s.SdkBetas) != 2 {
+		t.Fatalf("SdkBetas len = %d, want 2", len(s.SdkBetas))
+	}
+	if s.SdkBetas[0] != "prompt-caching-2024-07-31" {
+		t.Errorf("SdkBetas[0] = %q, want prompt-caching-2024-07-31", s.SdkBetas[0])
+	}
+	if s.SdkBetas[1] != "max-tokens-3-5-sonnet-2024-07-15" {
+		t.Errorf("SdkBetas[1] = %q, want max-tokens-3-5-sonnet-2024-07-15", s.SdkBetas[1])
+	}
+
+	// Can be cleared
+	s.SdkBetas = nil
+	if s.SdkBetas != nil {
+		t.Error("SdkBetas should be nil after clear")
+	}
+}
+
+// T150: mainThreadAgentType
+func TestMainThreadAgentType(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.MainThreadAgentType != "" {
+		t.Errorf("MainThreadAgentType = %q, want empty", s.MainThreadAgentType)
+	}
+
+	s.MainThreadAgentType = "coordinator"
+	if s.MainThreadAgentType != "coordinator" {
+		t.Errorf("MainThreadAgentType = %q, want coordinator", s.MainThreadAgentType)
+	}
+
+	s.MainThreadAgentType = "normal"
+	if s.MainThreadAgentType != "normal" {
+		t.Errorf("MainThreadAgentType = %q, want normal", s.MainThreadAgentType)
+	}
+}
+
+// T146-T150: New() initializes maps for new fields
+func TestNew_InitializesT146_T150Fields(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.TeleportedSessionInfo != nil {
+		t.Error("TeleportedSessionInfo should default to nil")
+	}
+	if s.InvokedSkills == nil {
+		t.Error("InvokedSkills should be initialized (non-nil)")
+	}
+	if s.SlowOperations == nil {
+		t.Error("SlowOperations should be initialized (non-nil)")
+	}
+	if s.SdkBetas != nil {
+		t.Error("SdkBetas should default to nil")
+	}
+	if s.MainThreadAgentType != "" {
+		t.Errorf("MainThreadAgentType = %q, want empty", s.MainThreadAgentType)
+	}
+}
