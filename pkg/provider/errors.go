@@ -13,12 +13,13 @@ import (
 // Source: services/api/withRetry.ts, services/api/errors.ts
 
 // Retry constants matching TS exactly.
-// Source: withRetry.ts:52-55
+// Source: withRetry.ts:52-55, 96
 const (
-	DefaultMaxRetries = 10   // Source: withRetry.ts:52
-	Max529Retries     = 3    // Source: withRetry.ts:54
-	BaseDelayMs       = 500  // Source: withRetry.ts:55
-	DefaultMaxDelayMs = 32000 // Source: withRetry.ts:533
+	DefaultMaxRetries      = 10          // Source: withRetry.ts:52
+	Max529Retries          = 3           // Source: withRetry.ts:54
+	BaseDelayMs            = 500         // Source: withRetry.ts:55
+	DefaultMaxDelayMs      = 32000       // Source: withRetry.ts:533
+	PersistentMaxBackoffMs = 5 * 60 * 1000 // Source: withRetry.ts:96 — 5 min cap
 )
 
 // APIErrorType classifies the API error for display and retry logic.
@@ -51,11 +52,12 @@ const (
 // APIError represents a classified error from the Anthropic API.
 // Source: services/api/errors.ts
 type APIError struct {
-	StatusCode int
-	Message    string
-	Type       APIErrorType
-	RetryAfter string // Retry-After header value (seconds)
-	Retryable  bool
+	StatusCode        int
+	Message           string
+	Type              APIErrorType
+	RetryAfter        string // Retry-After header value (seconds)
+	ShouldRetryHeader string // x-should-retry header: "true", "false", or ""
+	Retryable         bool
 }
 
 func (e *APIError) Error() string {
