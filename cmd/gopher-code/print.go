@@ -143,7 +143,7 @@ func runHeadless(
 	// (resumeSessionAt and rewindFiles are not yet wired — pass empty for now)
 	if errMsg := ValidateHeadlessFlags(cfg, false, "", "", ""); errMsg != "" {
 		fmt.Fprint(cfg.Stderr, errMsg)
-		exitFunc(1)
+		cliError("")
 		return
 	}
 
@@ -164,7 +164,7 @@ func runHeadless(
 		prompt, errMsg := readPrompt(args, cfg.Stdin)
 		if errMsg != "" {
 			fmt.Fprint(cfg.Stderr, errMsg)
-			exitFunc(1)
+			cliError("")
 			return
 		}
 		sess.PushMessage(message.UserMessage(prompt))
@@ -179,7 +179,7 @@ func runHeadless(
 		collector.EmitTo(cfg.Stdout)
 		if err != nil {
 			emitError(cfg, err)
-			exitFunc(1)
+			cliError("")
 			return
 		}
 
@@ -188,7 +188,7 @@ func runHeadless(
 		err := query.Query(ctx, sess, prov, registry, orchestrator, cb)
 		if err != nil {
 			emitError(cfg, err)
-			exitFunc(1)
+			cliError("")
 			return
 		}
 
@@ -197,13 +197,13 @@ func runHeadless(
 		err := query.Query(ctx, sess, prov, registry, orchestrator, cb)
 		if err != nil {
 			emitError(cfg, err)
-			exitFunc(1)
+			cliError("")
 			return
 		}
 		fmt.Fprintln(cfg.Stdout) // trailing newline
 	}
 
-	exitFunc(0)
+	cliOk("")
 }
 
 // emitError writes an error to stderr (or as stream-json to stdout).
