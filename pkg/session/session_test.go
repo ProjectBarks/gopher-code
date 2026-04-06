@@ -350,6 +350,72 @@ func TestModelOverride(t *testing.T) {
 	}
 }
 
+// T116: kairosActive flag
+func TestKairosActive(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+	if s.KairosActive {
+		t.Error("KairosActive should default to false")
+	}
+	s.KairosActive = true
+	if !s.KairosActive {
+		t.Error("KairosActive should be settable to true")
+	}
+}
+
+// T117: strictToolResultPairing flag
+func TestStrictToolResultPairing(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+	if s.StrictToolResultPairing {
+		t.Error("StrictToolResultPairing should default to false")
+	}
+	s.StrictToolResultPairing = true
+	if !s.StrictToolResultPairing {
+		t.Error("StrictToolResultPairing should be settable to true")
+	}
+}
+
+// T118: sdkAgentProgressSummariesEnabled
+func TestSDKAgentProgressSummariesEnabled(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+	if s.SDKAgentProgressSummariesEnabled {
+		t.Error("SDKAgentProgressSummariesEnabled should default to false")
+	}
+	s.SDKAgentProgressSummariesEnabled = true
+	if !s.SDKAgentProgressSummariesEnabled {
+		t.Error("SDKAgentProgressSummariesEnabled should be settable to true")
+	}
+}
+
+// T119: userMsgOptIn
+func TestUserMsgOptIn(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+	if s.UserMsgOptIn {
+		t.Error("UserMsgOptIn should default to false")
+	}
+	s.UserMsgOptIn = true
+	if !s.UserMsgOptIn {
+		t.Error("UserMsgOptIn should be settable to true")
+	}
+}
+
+// T120: clientType
+func TestClientType(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+	if s.ClientType != "cli" {
+		t.Errorf("ClientType = %q, want %q", s.ClientType, "cli")
+	}
+
+	s.SetClientType("agent")
+	if s.ClientType != "agent" {
+		t.Errorf("ClientType = %q, want %q", s.ClientType, "agent")
+	}
+
+	s.SetClientType("sdk")
+	if s.ClientType != "sdk" {
+		t.Errorf("ClientType = %q, want %q", s.ClientType, "sdk")
+	}
+}
+
 // T115: modelStrings cache
 func TestModelStrings(t *testing.T) {
 	s := New(DefaultConfig(), "/tmp/test")

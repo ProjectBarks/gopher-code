@@ -113,6 +113,26 @@ type SessionState struct {
 	// Source: bootstrap/state.ts line 70
 	ModelStrings map[string]string `json:"model_strings,omitempty"`
 
+	// T116: Flag indicating Kairos (Brief) mode is active.
+	// Source: bootstrap/state.ts — kairosActive
+	KairosActive bool `json:"kairos_active,omitempty"`
+
+	// T117: When true, every tool_use must have a matching tool_result.
+	// Source: bootstrap/state.ts — strictToolResultPairing
+	StrictToolResultPairing bool `json:"strict_tool_result_pairing,omitempty"`
+
+	// T118: SDK agent progress summaries feature flag.
+	// Source: bootstrap/state.ts — sdkAgentProgressSummariesEnabled
+	SDKAgentProgressSummariesEnabled bool `json:"sdk_agent_progress_summaries_enabled,omitempty"`
+
+	// T119: User opted into message collection.
+	// Source: bootstrap/state.ts — userMsgOptIn
+	UserMsgOptIn bool `json:"user_msg_opt_in,omitempty"`
+
+	// T120: Client type, set from --agent flag or defaults to "cli".
+	// Source: bootstrap/state.ts — clientType
+	ClientType string `json:"client_type,omitempty"`
+
 	// Per-model usage tracking — Source: bootstrap/state.ts line 67
 	mu         sync.Mutex               `json:"-"`
 	ModelUsage map[string]*ModelUsageEntry `json:"model_usage,omitempty"`
@@ -155,6 +175,7 @@ func New(config SessionConfig, cwd string) *SessionState {
 		StartTime:           now,
 		LastInteractionTime: now,
 		ModelUsage:          make(map[string]*ModelUsageEntry),
+		ClientType:          "cli",
 	}
 }
 
@@ -270,6 +291,12 @@ func (s *SessionState) SetModelStrings(m map[string]string) {
 // Source: bootstrap/state.ts — clearModelStrings()
 func (s *SessionState) ClearModelStrings() {
 	s.ModelStrings = nil
+}
+
+// SetClientType updates the client type (e.g. from --agent flag).
+// Source: bootstrap/state.ts — clientType setter
+func (s *SessionState) SetClientType(ct string) {
+	s.ClientType = ct
 }
 
 // RegenerateSessionID creates a new session ID, optionally setting the current as parent.
