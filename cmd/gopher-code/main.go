@@ -19,6 +19,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/mcp"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
+	pluginsBundled "github.com/projectbarks/gopher-code/pkg/plugins/bundled"
 	"github.com/projectbarks/gopher-code/pkg/prompt"
 	"github.com/projectbarks/gopher-code/pkg/provider"
 	"github.com/projectbarks/gopher-code/pkg/query"
@@ -184,6 +185,10 @@ func main() {
 			slog.SetDefault(slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug})))
 		}
 	}
+
+	// Initialize built-in plugins (before settings load so registrations are available).
+	// Source: src/plugins/bundled/index.ts — initBuiltinPlugins
+	pluginsBundled.InitBuiltinPlugins()
 
 	// Suppress unused variable warnings for flags reserved for future use
 	_ = addDirs
