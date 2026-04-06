@@ -2990,18 +2990,18 @@ func TestParity_ConversationScrollAutoScroll(t *testing.T) {
 }
 
 // TestParity_InputPaneHistorySaveRestore validates the history navigation
-// save/restore contract: current input is preserved when entering history
-// and restored when navigating past the newest entry.
+// save/restore contract with draft preservation (matching TS useArrowKeyHistory):
 //
 // Unique behaviors:
-// 1. Down arrow on empty history (historyIdx == -1) is a no-op
-// 2. Up arrow when historyIdx == -1 saves current buffer to savedInput
-// 3. Up arrow enters history from newest entry and decrements index
+// 1. Down arrow on empty history (cursor == 0) is a no-op
+// 2. Up arrow saves current buffer as draft before entering history
+// 3. Up arrow enters history from newest entry (cursor 1-based)
 // 4. Up arrow at oldest entry stops (no wrap)
-// 5. Down arrow past newest restores savedInput AND clears it
-// 6. After restore, buffer matches the saved input exactly
+// 5. Down arrow past newest restores draft
+// 6. After restore, buffer matches the saved draft exactly
+// 7. Up with non-empty input saves draft and navigates (draft preservation)
 //
-// Cross-ref: input.go:232-259 navigateHistoryUp/Down
+// Cross-ref: pkg/ui/hooks/input/history.go NavigateUp/NavigateDown
 func TestParity_InputPaneHistorySaveRestore(t *testing.T) {
 	inp := components.NewInputPane()
 	inp.SetSize(80, 3)
@@ -3018,18 +3018,24 @@ func TestParity_InputPaneHistorySaveRestore(t *testing.T) {
 	inp.AddToHistory("second")
 	inp.AddToHistory("third")
 
-	// Gopher's behavior: history navigation only triggers when input is empty
-	// OR already navigating. Verify this constraint: typing blocks history nav.
+	// 7. Draft preservation: Up with non-empty input saves draft and navigates.
 	for _, ch := range "draft" {
 		inp.Update(tea.KeyPressMsg{Code: rune(ch), Text: string(ch)})
 	}
 	inp.Update(tea.KeyPressMsg{Code: tea.KeyUp})
-	if inp.Value() != "draft" {
-		t.Errorf("Up with non-empty input should NOT navigate history, got %q", inp.Value())
+	if inp.Value() != "third" {
+		t.Errorf("Up with input should save draft and show newest 'third', got %q", inp.Value())
 	}
 
-	// Clear input to enable history nav
+	// Down restores draft "draft"
+	inp.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if inp.Value() != "draft" {
+		t.Errorf("Down should restore draft 'draft', got %q", inp.Value())
+	}
+
+	// Clear and reset for the remaining tests.
 	inp.Clear()
+	inp.History.Reset()
 
 	// 2-3. Up on empty → saves empty, shows newest ("third")
 	inp.Update(tea.KeyPressMsg{Code: tea.KeyUp})
@@ -3067,13 +3073,13 @@ func TestParity_InputPaneHistorySaveRestore(t *testing.T) {
 		t.Errorf("Down should show 'third', got %q", inp.Value())
 	}
 
-	// 5-6. Down past newest → restores saved input (was empty) AND clears savedInput
+	// 5-6. Down past newest → restores saved input (was empty)
 	inp.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	if inp.Value() != "" {
 		t.Errorf("Down past newest should restore empty saved input, got %q", inp.Value())
 	}
 
-	// Another Down → no-op (historyIdx back to -1)
+	// Another Down → no-op (cursor back to 0)
 	inp.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	if inp.Value() != "" {
 		t.Errorf("Down after restore should be no-op, got %q", inp.Value())

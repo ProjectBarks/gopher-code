@@ -68,18 +68,18 @@ func (iwh *InputWithHistory) Init() tea.Cmd {
 
 // Update handles input and navigation.
 func (iwh *InputWithHistory) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Capture text before the inner Update clears it on Enter.
+	var preSubmitText string
+	if km, ok := msg.(tea.KeyPressMsg); ok && km.Code == tea.KeyEnter && !iwh.input.multiline {
+		preSubmitText = iwh.input.Value()
+	}
+
 	_, cmd := iwh.input.Update(msg)
 
-	// When a command is submitted, add it to history
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		if msg.Code == tea.KeyEnter && !iwh.input.multiline {
-			// Add to history before clearing
-			value := iwh.input.Value()
-			if value != "" {
-				iwh.input.AddToHistory(value)
-			}
-		}
+	// When a command is submitted, add it to history.
+	if preSubmitText != "" {
+		iwh.input.AddToHistory(preSubmitText)
+		iwh.saveHistoryToSession()
 	}
 
 	return iwh, cmd
@@ -131,14 +131,17 @@ func (iwh *InputWithHistory) AddToHistory(cmd string) {
 	iwh.saveHistoryToSession()
 }
 
-// GetHistory returns a copy of the command history.
+// GetHistory returns a copy of the command history display strings.
 func (iwh *InputWithHistory) GetHistory() []string {
-	if iwh.input == nil || iwh.input.history == nil {
+	if iwh.input == nil || iwh.input.History == nil {
 		return []string{}
 	}
 
-	result := make([]string, len(iwh.input.history))
-	copy(result, iwh.input.history)
+	items := iwh.input.History.Items
+	result := make([]string, len(items))
+	for i, e := range items {
+		result[i] = e.Display
+	}
 	return result
 }
 

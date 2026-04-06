@@ -263,15 +263,21 @@ func TestInputPaneHistorySavesInput(t *testing.T) {
 	}
 }
 
-func TestInputPaneHistoryIgnoredWhenTyping(t *testing.T) {
+func TestInputPaneHistoryWithDraftPreservation(t *testing.T) {
 	ip := NewInputPane()
 	ip.AddToHistory("old")
 	ip.SetValue("new text")
 
-	// Up with non-empty input should NOT navigate history
+	// Up with text should save draft and navigate to history
 	ip.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if ip.Value() != "old" {
+		t.Errorf("Up should navigate to history entry, got %q", ip.Value())
+	}
+
+	// Down should restore draft
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	if ip.Value() != "new text" {
-		t.Errorf("Up with text should not navigate history, got %q", ip.Value())
+		t.Errorf("Down should restore draft 'new text', got %q", ip.Value())
 	}
 }
 
@@ -341,5 +347,86 @@ func TestInputPaneInit(t *testing.T) {
 	cmd := ip.Init()
 	if cmd == nil {
 		t.Error("Init should return cursor blink command")
+	}
+}
+
+// TestInputPaneDraftPreservationEndToEnd is an integration test verifying the
+// full draft-preservation cycle: type partial text, press Up to enter history,
+// then press Down to return -- the partial text must be restored exactly.
+func TestInputPaneDraftPreservationEndToEnd(t *testing.T) {
+	ip := NewInputPane()
+	ip.AddToHistory("previous command")
+	ip.AddToHistory("another command")
+
+	// Simulate typing "partial" character by character.
+	for _, ch := range "partial" {
+		ip.Update(tea.KeyPressMsg{Text: string(ch)})
+	}
+	if ip.Value() != "partial" {
+		t.Fatalf("Setup: expected 'partial', got %q", ip.Value())
+	}
+
+	// Press Up -- should save "partial" as draft and show newest history entry.
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if ip.Value() != "another command" {
+		t.Errorf("After Up: expected 'another command', got %q", ip.Value())
+	}
+
+	// Press Up again -- should show older entry.
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if ip.Value() != "previous command" {
+		t.Errorf("After second Up: expected 'previous command', got %q", ip.Value())
+	}
+
+	// Press Down -- back to newest entry.
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if ip.Value() != "another command" {
+		t.Errorf("After Down: expected 'another command', got %q", ip.Value())
+	}
+
+	// Press Down again -- should restore draft "partial".
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if ip.Value() != "partial" {
+		t.Errorf("After second Down: expected draft 'partial' restored, got %q", ip.Value())
+	}
+
+	// Cursor should be at end of restored text.
+	if ip.cursor != len([]rune("partial")) {
+		t.Errorf("Cursor should be at end of restored draft, got %d", ip.cursor)
+	}
+}
+
+// TestInputPaneModeFilterHistory verifies that history navigation respects
+// the ModeFilter on the underlying InputHistory (e.g. bash-only entries).
+func TestInputPaneModeFilterHistory(t *testing.T) {
+	ip := NewInputPane()
+	ip.History.ModeFilter = "!"
+
+	ip.AddToHistory("!ls -la")
+	ip.AddToHistory("regular prompt")
+	ip.AddToHistory("!git status")
+
+	// Up should skip "regular prompt" and show "!git status" (newest matching).
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if ip.Value() != "!git status" {
+		t.Errorf("Expected '!git status', got %q", ip.Value())
+	}
+
+	// Up again should show "!ls -la" (next matching, skipping "regular prompt").
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if ip.Value() != "!ls -la" {
+		t.Errorf("Expected '!ls -la', got %q", ip.Value())
+	}
+
+	// Down back to "!git status".
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if ip.Value() != "!git status" {
+		t.Errorf("Expected '!git status', got %q", ip.Value())
+	}
+
+	// Down restores draft (empty).
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if ip.Value() != "" {
+		t.Errorf("Expected empty draft, got %q", ip.Value())
 	}
 }
