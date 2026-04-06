@@ -2,6 +2,11 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -80,5 +85,57 @@ func TestCLIOk_EmptyMsg(t *testing.T) {
 	}
 	if stdoutOut != "" {
 		t.Fatalf("expected empty stdout for empty msg, got %q", stdoutOut)
+	}
+}
+
+func TestCLIErrorf(t *testing.T) {
+	code, stderrOut, _ := withExitCapture(func() {
+		cliErrorf("bad value: %d", 42)
+	})
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+	if stderrOut != "bad value: 42\n" {
+		t.Fatalf("expected stderr %q, got %q", "bad value: 42\n", stderrOut)
+	}
+}
+
+// TestMainGo_NoDirectOsExit scans main.go for raw os.Exit calls.
+// All exit paths must use cliError / cliErrorf / cliOk instead.
+// The only allowed file for os.Exit is exit.go (which defines exitFunc).
+func TestMainGo_NoDirectOsExit(t *testing.T) {
+	// Locate the package directory from this test file.
+	_, thisFile, _, _ := runtime.Caller(0)
+	pkgDir := filepath.Dir(thisFile)
+
+	// Pattern matches os.Exit( but not inside comments or the exitFunc var declaration.
+	osExitRe := regexp.MustCompile(`\bos\.Exit\(`)
+
+	entries, err := os.ReadDir(pkgDir)
+	if err != nil {
+		t.Fatalf("reading package dir: %v", err)
+	}
+
+	for _, e := range entries {
+		name := e.Name()
+		// Skip test files, exit.go (defines exitFunc = os.Exit), and non-Go files.
+		if strings.HasSuffix(name, "_test.go") || name == "exit.go" || !strings.HasSuffix(name, ".go") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(pkgDir, name))
+		if err != nil {
+			t.Fatalf("reading %s: %v", name, err)
+		}
+		lines := strings.Split(string(data), "\n")
+		for i, line := range lines {
+			// Skip comment-only lines.
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "//") {
+				continue
+			}
+			if osExitRe.MatchString(line) {
+				t.Errorf("%s:%d: found direct os.Exit call — use cliError/cliErrorf/cliOk instead:\n  %s", name, i+1, trimmed)
+			}
+		}
 	}
 }

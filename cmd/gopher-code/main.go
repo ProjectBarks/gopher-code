@@ -160,18 +160,16 @@ func main() {
 		case "fish":
 			fmt.Println(cli.GenerateFishCompletion())
 		default:
-			fmt.Fprintf(os.Stderr, "Unknown shell: %s (use bash, zsh, fish)\n", shell)
-			os.Exit(1)
+			cliErrorf("Unknown shell: %s (use bash, zsh, fish)", shell)
 		}
-		os.Exit(0)
+		cliOk("")
 	}
 
 	flag.Parse()
 
 	// Handle --version
 	if *showVersion {
-		fmt.Printf("gopher-code v%s\n", Version)
-		os.Exit(0)
+		cliOk(fmt.Sprintf("gopher-code v%s", Version))
 	}
 
 	// Debug mode
@@ -180,8 +178,7 @@ func main() {
 		if *debugFile != "" {
 			f, err := os.OpenFile(*debugFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error opening debug file: %v\n", err)
-				os.Exit(1)
+				cliErrorf("Error opening debug file: %v", err)
 			}
 			defer f.Close()
 			slog.SetDefault(slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug})))
@@ -199,8 +196,7 @@ func main() {
 		var err error
 		*cwd, err = os.Getwd()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: cannot determine working directory: %v\n", err)
-			os.Exit(1)
+			cliErrorf("Error: cannot determine working directory: %v", err)
 		}
 	}
 
@@ -218,8 +214,7 @@ func main() {
 			os.WriteFile(settingsPath, []byte("{\n}\n"), 0644)
 			fmt.Printf("Created %s\n", settingsPath)
 		}
-		fmt.Println("Project initialized.")
-		os.Exit(0)
+		cliOk("Project initialized.")
 	}
 
 	// Load settings from global and project config files
@@ -250,8 +245,7 @@ func main() {
 		case "deny":
 			permMode = permissions.Deny
 		default:
-			fmt.Fprintf(os.Stderr, "Unknown permission mode: %s (use auto, interactive, deny)\n", *permModeFlag)
-			os.Exit(1)
+			cliErrorf("Unknown permission mode: %s (use auto, interactive, deny)", *permModeFlag)
 		}
 	}
 	if *skipPerms {
@@ -301,8 +295,7 @@ func main() {
 	if *systemPromptFile != "" {
 		data, err := os.ReadFile(*systemPromptFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading system prompt file: %v\n", err)
-			os.Exit(1)
+			cliErrorf("Error reading system prompt file: %v", err)
 		}
 		sysPrompt = string(data)
 	}
@@ -320,16 +313,15 @@ func main() {
 	if *appendSystemPromptFile != "" {
 		data, err := os.ReadFile(*appendSystemPromptFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading append prompt file: %v\n", err)
-			os.Exit(1)
+			cliErrorf("Error reading append prompt file: %v", err)
 		}
 		sysPrompt += "\n\n" + string(data)
 	}
 
 	if *verbose {
-		fmt.Fprintf(os.Stderr, "Model: %s\n", *model)
-		fmt.Fprintf(os.Stderr, "CWD: %s\n", *cwd)
-		fmt.Fprintf(os.Stderr, "Max turns: %d\n", *maxTurns)
+		fmt.Fprintf(stderr, "Model: %s\n", *model)
+		fmt.Fprintf(stderr, "CWD: %s\n", *cwd)
+		fmt.Fprintf(stderr, "Max turns: %d\n", *maxTurns)
 	}
 
 	// Create provider based on --provider flag
@@ -338,8 +330,7 @@ func main() {
 	case "anthropic", "":
 		apiKey, err := auth.GetAPIKey()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cliError(err.Error())
 		}
 		p := provider.NewAnthropicProvider(apiKey, resolvedModel)
 		if *apiURL != "" {
@@ -358,8 +349,7 @@ func main() {
 		}
 		prov = provider.NewOpenAICompatProvider(url, apiKey, resolvedModel)
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown provider: %s\n", *providerFlag)
-		os.Exit(1)
+		cliErrorf("Unknown provider: %s", *providerFlag)
 	}
 	registry := tools.NewRegistry()
 	planState := tools.RegisterDefaults(registry)
@@ -377,7 +367,7 @@ func main() {
 		mcpCfg, _ := mcp.LoadConfig()
 		for name, serverCfg := range mcpCfg.Servers {
 			if err := mcpMgr.Connect(context.Background(), name, serverCfg); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: MCP server %s failed: %v\n", name, err)
+				fmt.Fprintf(stderr, "Warning: MCP server %s failed: %v\n", name, err)
 			}
 		}
 		mcpMgr.RegisterTools(context.Background(), registry)
@@ -413,7 +403,7 @@ func main() {
 	if *continueSession {
 		loaded, err := session.LoadLatest(*cwd)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "No session to continue: %v\n", err)
+			fmt.Fprintf(stderr, "No session to continue: %v\n", err)
 			// Fall through to create new session
 		} else {
 			sess = loaded
@@ -421,7 +411,7 @@ func main() {
 			// Rebuild system prompt for resumed session
 			sess.Config.SystemPrompt = sysPrompt
 			if *verbose {
-				fmt.Fprintf(os.Stderr, "Resuming session %s (%d turns)\n", sess.ID, sess.TurnCount)
+				fmt.Fprintf(stderr, "Resuming session %s (%d turns)\n", sess.ID, sess.TurnCount)
 			}
 		}
 	}
@@ -429,14 +419,13 @@ func main() {
 	if sess == nil && *resume != "" {
 		loaded, err := session.Load(*resume)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Cannot resume session %s: %v\n", *resume, err)
-			os.Exit(1)
+			cliErrorf("Cannot resume session %s: %v", *resume, err)
 		}
 		sess = loaded
 		sess.CWD = *cwd
 		sess.Config.SystemPrompt = sysPrompt
 		if *verbose {
-			fmt.Fprintf(os.Stderr, "Resuming session %s (%d turns)\n", sess.ID, sess.TurnCount)
+			fmt.Fprintf(stderr, "Resuming session %s (%d turns)\n", sess.ID, sess.TurnCount)
 		}
 	}
 
@@ -490,8 +479,7 @@ func main() {
 		}
 		outFmt, err := ParseOutputFormat(*outputFormat)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cliError(err.Error())
 		}
 		runHeadless(ctx, sess, prov, registry, orchestrator, HeadlessConfig{
 			OutputFormat: outFmt,
@@ -518,23 +506,20 @@ func main() {
 			err := query.Query(ctx, sess, prov, registry, orchestrator, collector.Callback)
 			collector.Emit()
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
+				cliError(err.Error())
 			}
 		} else if *outputFormat == "stream-json" {
 			err := query.Query(ctx, sess, prov, registry, orchestrator, cli.StreamJSONCallback)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
+				cliError(err.Error())
 			}
 		} else {
 			err := query.Query(ctx, sess, prov, registry, orchestrator, cli.PrintEvent)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
+				cliError(err.Error())
 			}
 		}
-		os.Exit(0)
+		cliOk("")
 	}
 
 	// Interactive mode: mark session as interactive.
@@ -542,8 +527,7 @@ func main() {
 	sess.IsInteractive = true
 	if cli.UseNewUI() {
 		if err := cli.RunTUIV2(ctx, sess, prov, registry); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			cliError(err.Error())
 		}
 	} else {
 		cli.RunREPL(ctx, sess, prov, registry, *verbose, hookRunner, *noSessionPersist, *prefill, planState)

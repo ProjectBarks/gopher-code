@@ -24,6 +24,11 @@ func cliError(msg string) {
 	exitFunc(1)
 }
 
+// cliErrorf formats a message, writes it to stderr, and exits with code 1.
+func cliErrorf(format string, args ...any) {
+	cliError(fmt.Sprintf(format, args...))
+}
+
 // cliOk writes msg to stdout (if non-empty) and exits with code 0.
 func cliOk(msg string) {
 	if msg != "" {
