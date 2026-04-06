@@ -73,11 +73,22 @@ type SessionState struct {
 	CreatedAt                time.Time         `json:"created_at"`
 
 	// Cost & duration tracking — Source: bootstrap/state.ts lines 51-64
-	TotalCostUSD     float64 `json:"total_cost_usd"`
-	TotalAPIDuration float64 `json:"total_api_duration_ms"` // cumulative API call time in ms
-	TotalToolDuration float64 `json:"total_tool_duration_ms"` // cumulative tool execution time in ms
-	TotalLinesAdded  int     `json:"total_lines_added"`
-	TotalLinesRemoved int    `json:"total_lines_removed"`
+	TotalCostUSD                  float64 `json:"total_cost_usd"`
+	TotalAPIDuration              float64 `json:"total_api_duration_ms"`                // cumulative API call time in ms
+	TotalAPIDurationWithoutRetries float64 `json:"total_api_duration_without_retries_ms"` // T108: API duration excluding retries
+	TotalToolDuration             float64 `json:"total_tool_duration_ms"`                // cumulative tool execution time in ms
+	TotalLinesAdded               int     `json:"total_lines_added"`
+	TotalLinesRemoved             int     `json:"total_lines_removed"`
+
+	// Per-turn duration tracking — Source: bootstrap/state.ts lines 55-57 (T109)
+	TurnHookDurationMs       float64 `json:"turn_hook_duration_ms"`
+	TurnToolDurationMs       float64 `json:"turn_tool_duration_ms"`
+	TurnClassifierDurationMs float64 `json:"turn_classifier_duration_ms"`
+
+	// Per-turn count tracking — Source: bootstrap/state.ts lines 58-60 (T110)
+	TurnToolCount       int `json:"turn_tool_count"`
+	TurnHookCount       int `json:"turn_hook_count"`
+	TurnClassifierCount int `json:"turn_classifier_count"`
 
 	// Per-model usage tracking — Source: bootstrap/state.ts line 67
 	mu         sync.Mutex               `json:"-"`
@@ -137,6 +148,60 @@ func (s *SessionState) AddCost(model string, costUSD float64, usage provider.Tok
 	entry.CacheCreationInputTokens += usage.CacheCreationInputTokens
 	entry.CacheReadInputTokens += usage.CacheReadInputTokens
 	entry.CostUSD += costUSD
+}
+
+// AddAPIDurationWithoutRetries accumulates API call time excluding retries.
+// Source: bootstrap/state.ts — addToTotalAPIDurationWithoutRetries()
+func (s *SessionState) AddAPIDurationWithoutRetries(durationMs float64) {
+	s.TotalAPIDurationWithoutRetries += durationMs
+}
+
+// ResetAPIDurationWithoutRetries zeros the running total.
+// Source: bootstrap/state.ts — resetTotalAPIDurationWithoutRetries()
+func (s *SessionState) ResetAPIDurationWithoutRetries() {
+	s.TotalAPIDurationWithoutRetries = 0
+}
+
+// AddTurnToolDuration records tool execution time and increments the tool count.
+// Source: bootstrap/state.ts — addToTurnToolDuration()
+func (s *SessionState) AddTurnToolDuration(durationMs float64) {
+	s.TurnToolDurationMs += durationMs
+	s.TurnToolCount++
+}
+
+// ResetTurnToolMetrics zeros the per-turn tool duration and count.
+// Source: bootstrap/state.ts — resetTurnToolDuration()
+func (s *SessionState) ResetTurnToolMetrics() {
+	s.TurnToolDurationMs = 0
+	s.TurnToolCount = 0
+}
+
+// AddTurnHookDuration records hook execution time and increments the hook count.
+// Source: bootstrap/state.ts — addToTurnHookDuration()
+func (s *SessionState) AddTurnHookDuration(durationMs float64) {
+	s.TurnHookDurationMs += durationMs
+	s.TurnHookCount++
+}
+
+// ResetTurnHookMetrics zeros the per-turn hook duration and count.
+// Source: bootstrap/state.ts — resetTurnHookDuration()
+func (s *SessionState) ResetTurnHookMetrics() {
+	s.TurnHookDurationMs = 0
+	s.TurnHookCount = 0
+}
+
+// AddTurnClassifierDuration records classifier execution time and increments the count.
+// Source: bootstrap/state.ts — addToTurnClassifierDuration()
+func (s *SessionState) AddTurnClassifierDuration(durationMs float64) {
+	s.TurnClassifierDurationMs += durationMs
+	s.TurnClassifierCount++
+}
+
+// ResetTurnClassifierMetrics zeros the per-turn classifier duration and count.
+// Source: bootstrap/state.ts — resetTurnClassifierDuration()
+func (s *SessionState) ResetTurnClassifierMetrics() {
+	s.TurnClassifierDurationMs = 0
+	s.TurnClassifierCount = 0
 }
 
 // AddLinesChanged records lines added/removed by code edits.
