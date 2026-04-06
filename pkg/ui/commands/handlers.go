@@ -40,6 +40,9 @@ type ThinkingToggleMsg struct{}
 // ShowDoctorMsg requests showing the /doctor screen.
 type ShowDoctorMsg struct{}
 
+// ShowResumeMsg requests showing the /resume screen.
+type ShowResumeMsg struct{}
+
 // Handler is a function that processes a slash command.
 type Handler func(args string) tea.Cmd
 
@@ -146,5 +149,9 @@ func (d *Dispatcher) registerDefaults() {
 
 	d.Register("/doctor", func(args string) tea.Cmd {
 		return func() tea.Msg { return ShowDoctorMsg{} }
+	})
+
+	d.Register("/resume", func(args string) tea.Cmd {
+		return func() tea.Msg { return ShowResumeMsg{} }
 	})
 }

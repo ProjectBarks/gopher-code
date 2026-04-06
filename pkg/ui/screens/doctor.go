@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	pkgdoctor "github.com/projectbarks/gopher-code/pkg/doctor"
 	"github.com/projectbarks/gopher-code/pkg/ui/doctor"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
@@ -53,6 +54,46 @@ type DoctorConfig struct {
 	ContextWarnings *doctor.ContextWarnings
 	VersionLocks    *doctor.VersionLockInfo
 	AgentInfo       *doctor.AgentInfo
+
+	// T66: Env-var validation results
+	EnvValidation []doctor.EnvValidationResult
+
+	// T67: Settings/keybinding/MCP warnings
+	SettingsErrors     []doctor.SettingsError
+	KeybindingWarnings []doctor.KeybindingWarning
+	MCPWarnings        []doctor.MCPParsingWarning
+
+	// T68: Sandbox status
+	Sandbox *doctor.SandboxStatus
+}
+
+// NewDoctorConfigFromDiagnostic builds a DoctorConfig from an aggregated DiagnosticData.
+// Source: Doctor.tsx — wiring getDoctorDiagnostic into the UI
+func NewDoctorConfigFromDiagnostic(d *pkgdoctor.DiagnosticData) DoctorConfig {
+	cfg := DoctorConfig{
+		Diagnostic: &DoctorDiagnostic{
+			Version:            d.Version,
+			InstallationType:   d.InstallationType,
+			InstallationPath:   d.InstallationPath,
+			InvokedBinary:      d.InvokedBinary,
+			ConfigInstallMethod: d.ConfigInstallMethod,
+			PackageManager:     d.PackageManager,
+			AutoUpdates:        d.AutoUpdates,
+		},
+		DistTags:           d.DistTags,
+		DistTagsErr:        d.DistTagsErr,
+		AutoUpdates:        d.AutoUpdates,
+		UpdateChannel:      d.UpdateChannel,
+		ContextWarnings:    d.ContextWarnings,
+		VersionLocks:       d.VersionLocks,
+		AgentInfo:          d.AgentInfo,
+		EnvValidation:      d.EnvValidation,
+		SettingsErrors:     d.SettingsErrors,
+		KeybindingWarnings: d.KeybindingWarnings,
+		MCPWarnings:        d.MCPWarnings,
+		Sandbox:            &d.Sandbox,
+	}
+	return cfg
 }
 
 // DoctorModel is the Bubbletea model for the /doctor health-check screen.
@@ -236,6 +277,38 @@ func (m *DoctorModel) renderContent() string {
 	ctxSection := doctor.RenderContextWarnings(m.config.ContextWarnings)
 	if ctxSection != "" {
 		sections = append(sections, ctxSection)
+	}
+
+	// === T66: Env-var validation section ===
+	envSection := doctor.RenderEnvValidation(m.config.EnvValidation)
+	if envSection != "" {
+		sections = append(sections, envSection)
+	}
+
+	// === T67: Settings errors section ===
+	settingsSection := doctor.RenderSettingsErrors(m.config.SettingsErrors)
+	if settingsSection != "" {
+		sections = append(sections, settingsSection)
+	}
+
+	// === T67: Keybinding warnings section ===
+	kbSection := doctor.RenderKeybindingWarnings(m.config.KeybindingWarnings)
+	if kbSection != "" {
+		sections = append(sections, kbSection)
+	}
+
+	// === T67: MCP warnings section ===
+	mcpSection := doctor.RenderMCPWarnings(m.config.MCPWarnings)
+	if mcpSection != "" {
+		sections = append(sections, mcpSection)
+	}
+
+	// === T68: Sandbox section ===
+	if m.config.Sandbox != nil {
+		sandboxSection := doctor.RenderSandbox(*m.config.Sandbox)
+		if sandboxSection != "" {
+			sections = append(sections, sandboxSection)
+		}
 	}
 
 	m.rendered = strings.Join(sections, "\n\n")
