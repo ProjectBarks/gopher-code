@@ -2,9 +2,13 @@ package prompt
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/projectbarks/gopher-code/pkg/output_styles"
 )
 
 // ---------------------------------------------------------------------------
@@ -370,6 +374,52 @@ func TestEnhanceSystemPromptWithEnvDetails_AppendsNotesAndEnv(t *testing.T) {
 	}
 	if !strings.Contains(got[2], "<env>") {
 		t.Error("third element should be env info")
+	}
+}
+
+// ── T26-T30: Output styles wired through prompt ──────────────────
+
+func TestGetOutputStyleSection_ReturnsStylePrompt(t *testing.T) {
+	dir := t.TempDir()
+	stylesDir := filepath.Join(dir, ".claude", "output-styles")
+	os.MkdirAll(stylesDir, 0755)
+	os.WriteFile(filepath.Join(stylesDir, "concise.md"), []byte(`---
+name: Concise
+description: Short replies
+---
+Be extremely brief in all responses.
+`), 0644)
+
+	output_styles.ClearOutputStyleCaches()
+	got := GetOutputStyleSection(dir, "Concise")
+	if !strings.Contains(got, "# Output Style: Concise") {
+		t.Errorf("expected heading, got %q", got)
+	}
+	if !strings.Contains(got, "Be extremely brief in all responses.") {
+		t.Errorf("expected prompt content, got %q", got)
+	}
+}
+
+func TestGetOutputStyleSection_DefaultReturnsEmpty(t *testing.T) {
+	got := GetOutputStyleSection("/tmp", "default")
+	if got != "" {
+		t.Errorf("expected empty for default style, got %q", got)
+	}
+}
+
+func TestGetOutputStyleSection_EmptyNameReturnsEmpty(t *testing.T) {
+	got := GetOutputStyleSection("/tmp", "")
+	if got != "" {
+		t.Errorf("expected empty for empty style name, got %q", got)
+	}
+}
+
+func TestGetOutputStyleSection_UnknownStyleReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	output_styles.ClearOutputStyleCaches()
+	got := GetOutputStyleSection(dir, "nonexistent")
+	if got != "" {
+		t.Errorf("expected empty for unknown style, got %q", got)
 	}
 }
 
