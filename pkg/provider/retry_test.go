@@ -106,37 +106,6 @@ func TestShouldRetryHeader(t *testing.T) {
 	})
 }
 
-func TestShouldRetry529(t *testing.T) {
-	// Source: withRetry.ts:62-89
-	t.Run("foreground_sources_retry", func(t *testing.T) {
-		for _, qs := range []QuerySource{
-			QSReplMainThread, QSCompact, QSSDK, QSAutoMode,
-		} {
-			if !ShouldRetry529(qs) {
-				t.Errorf("foreground source %q should retry on 529", qs)
-			}
-		}
-	})
-
-	t.Run("background_sources_do_not_retry", func(t *testing.T) {
-		for _, qs := range []QuerySource{
-			QuerySource("title_gen"),
-			QuerySource("suggestion"),
-			QuerySource("summary"),
-		} {
-			if ShouldRetry529(qs) {
-				t.Errorf("background source %q should NOT retry on 529", qs)
-			}
-		}
-	})
-
-	t.Run("empty_string_retries_conservatively", func(t *testing.T) {
-		// Source: withRetry.ts:86 — undefined → retry (conservative)
-		if !ShouldRetry529("") {
-			t.Error("empty QuerySource should retry (conservative default)")
-		}
-	})
-}
 
 func TestWithRetry_SuccessOnFirstAttempt(t *testing.T) {
 	result, err := WithRetry(context.Background(), func(attempt int, ctx RetryContext) (*http.Response, error) {
@@ -181,7 +150,7 @@ func TestWithRetry_RetriesOn529(t *testing.T) {
 	}, RetryOptions{
 		MaxRetries:  5,
 		Model:       "claude-sonnet-4-20250514",
-		QuerySource: QSReplMainThread,
+		QuerySource: QuerySourceREPLMainThread,
 		BaseDelay:   10 * time.Millisecond, // fast for tests
 	})
 
@@ -335,7 +304,7 @@ func TestWithRetry_FallbackTriggeredAfter529(t *testing.T) {
 		MaxRetries:    10,
 		Model:         "claude-opus-4-20250514",
 		FallbackModel: "claude-sonnet-4-20250514",
-		QuerySource:   QSReplMainThread,
+		QuerySource:   QuerySourceREPLMainThread,
 		BaseDelay:     1 * time.Millisecond,
 	})
 

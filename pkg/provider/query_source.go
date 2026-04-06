@@ -44,7 +44,7 @@ func IsAgenticQuerySource(qs QuerySource) bool {
 		return true
 	}
 	// Agent sub-queries start with "agent:"
-	if len(qs) > 6 && qs[:6] == "agent:" {
+	if len(qs) >= 6 && qs[:6] == "agent:" {
 		return true
 	}
 	return false

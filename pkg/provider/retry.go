@@ -12,56 +12,6 @@ import (
 
 // Source: services/api/withRetry.ts
 
-// QuerySource identifies the origin of an API query for retry policy decisions.
-// Source: constants/querySource.ts
-type QuerySource string
-
-// Foreground query sources where the user IS blocking on the result.
-// These retry on 529. Background sources bail immediately.
-// Source: withRetry.ts:62-89
-const (
-	QSReplMainThread    QuerySource = "repl_main_thread"
-	QSSDK               QuerySource = "sdk"
-	QSAgentCustom       QuerySource = "agent:custom"
-	QSAgentDefault      QuerySource = "agent:default"
-	QSAgentBuiltin      QuerySource = "agent:builtin"
-	QSCompact           QuerySource = "compact"
-	QSHookAgent         QuerySource = "hook_agent"
-	QSHookPrompt        QuerySource = "hook_prompt"
-	QSVerificationAgent QuerySource = "verification_agent"
-	QSSideQuestion      QuerySource = "side_question"
-	QSAutoMode          QuerySource = "auto_mode"
-)
-
-// foreground529Sources is the set of QuerySources that retry on 529.
-// Source: withRetry.ts:62-89
-var foreground529Sources = map[QuerySource]bool{
-	QSReplMainThread:                                    true,
-	QuerySource("repl_main_thread:outputStyle:custom"):  true,
-	QuerySource("repl_main_thread:outputStyle:Explanatory"): true,
-	QuerySource("repl_main_thread:outputStyle:Learning"):    true,
-	QSSDK:               true,
-	QSAgentCustom:       true,
-	QSAgentDefault:      true,
-	QSAgentBuiltin:      true,
-	QSCompact:           true,
-	QSHookAgent:         true,
-	QSHookPrompt:        true,
-	QSVerificationAgent: true,
-	QSSideQuestion:      true,
-	QSAutoMode:          true,
-}
-
-// ShouldRetry529 returns whether 529 errors should be retried for the given source.
-// Empty string → retry (conservative for untagged call paths).
-// Source: withRetry.ts:84-89
-func ShouldRetry529(qs QuerySource) bool {
-	if qs == "" {
-		return true // conservative default
-	}
-	return foreground529Sources[qs]
-}
-
 // RetryHeaderResult represents the x-should-retry header check outcome.
 type RetryHeaderResult int
 
