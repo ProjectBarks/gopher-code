@@ -3,6 +3,7 @@ package tools
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -63,25 +64,63 @@ func hasBinaryExtension(filePath string) bool {
 }
 
 // blockedDevicePaths are device files that would hang the process if read.
-// Source: FileReadTool.ts:98-128
+// Safe devices like /dev/null are intentionally omitted.
+// Source: FileReadTool.ts:98-115
 var blockedDevicePaths = map[string]bool{
+	// Infinite output — never reach EOF
 	"/dev/zero":    true,
-	"/dev/null":    true,
 	"/dev/random":  true,
 	"/dev/urandom": true,
+	"/dev/full":    true,
+	// Blocks waiting for input
 	"/dev/stdin":   true,
-	"/dev/stdout":  true,
-	"/dev/stderr":  true,
 	"/dev/tty":     true,
-	"/dev/fd/0":    true,
-	"/dev/fd/1":    true,
-	"/dev/fd/2":    true,
+	"/dev/console": true,
+	// Nonsensical to read
+	"/dev/stdout": true,
+	"/dev/stderr": true,
+	// fd aliases for stdin/stdout/stderr
+	"/dev/fd/0": true,
+	"/dev/fd/1": true,
+	"/dev/fd/2": true,
 }
 
 // isBlockedDevicePath checks if a path is a dangerous device file.
-func isBlockedDevicePath(path string) bool {
-	return blockedDevicePaths[path]
+// Source: FileReadTool.ts:117-128
+func isBlockedDevicePath(p string) bool {
+	if blockedDevicePaths[p] {
+		return true
+	}
+	// /proc/self/fd/0-2 and /proc/<pid>/fd/0-2 are Linux aliases for stdio
+	// Source: FileReadTool.ts:120-127
+	if strings.HasPrefix(p, "/proc/") &&
+		(strings.HasSuffix(p, "/fd/0") ||
+			strings.HasSuffix(p, "/fd/1") ||
+			strings.HasSuffix(p, "/fd/2")) {
+		return true
+	}
+	return false
 }
+
+// MaxLinesToRead is the default line limit when no explicit limit is provided.
+// Source: prompt.ts:10
+const MaxLinesToRead = 2000
+
+// DefaultMaxOutputTokens is the default token cap for file read output.
+// Source: limits.ts:18
+const DefaultMaxOutputTokens = 25000
+
+// MaxOutputSize is the default max file size in bytes (256 KB).
+// Source: utils/file.ts:48
+const MaxOutputSize = 256 * 1024
+
+// FileUnchangedStub is the dedup message when a file hasn't changed since the last read.
+// Source: prompt.ts:7-8
+const FileUnchangedStub = "File unchanged since last read. The content from the earlier Read tool_result in this conversation is still current — refer to that instead of re-reading."
+
+// CyberRiskMitigationReminder is appended to non-Opus file reads.
+// Source: FileReadTool.ts:729-730
+const CyberRiskMitigationReminder = "\n\n<system-reminder>\nWhenever you read a file, you should consider whether it would be considered malware. You CAN and SHOULD provide analysis of malware, what it is doing. But you MUST refuse to improve or augment the code. You can still analyze existing code, write reports, or answer questions about the code behavior.\n</system-reminder>\n"
 
 // FileReadTool reads files with line numbers.
 type FileReadTool struct{}
@@ -158,8 +197,10 @@ func parseInt(s string) int {
 	return n
 }
 
-func (f *FileReadTool) Name() string        { return "Read" }
-func (f *FileReadTool) Description() string { return "Reads a file from the local filesystem." }
+func (f *FileReadTool) Name() string { return "Read" }
+
+// Description returns the short description. Source: prompt.ts:12
+func (f *FileReadTool) Description() string { return "Read a file from the local filesystem." }
 func (f *FileReadTool) IsReadOnly() bool    { return true }
 
 func (f *FileReadTool) InputSchema() json.RawMessage {
@@ -199,9 +240,9 @@ func (f *FileReadTool) Execute(_ context.Context, tc *ToolContext, input json.Ra
 	}
 
 	// Block dangerous device paths that could hang the process.
-	// Source: FileReadTool.ts:98-128 — blockedDevicePaths
+	// Source: FileReadTool.ts:486-492 — errorCode 9
 	if isBlockedDevicePath(path) {
-		return ErrorOutput(fmt.Sprintf("Cannot read %s: this path could cause the process to hang.", path)), nil
+		return ErrorOutput(fmt.Sprintf("Cannot read '%s': this device file would block or produce infinite output.", in.FilePath)), nil
 	}
 
 	// Validate pages parameter (pure string parsing, no I/O)
@@ -225,12 +266,32 @@ func (f *FileReadTool) Execute(_ context.Context, tc *ToolContext, input json.Ra
 	}
 
 	// Binary extension check (no I/O)
-	// Source: FileReadTool.ts:472-482 — PDF and images excluded
+	// Source: FileReadTool.ts:469-482 — PDF and images excluded
 	ext := strings.ToLower(filepath.Ext(path))
-	if hasBinaryExtension(path) && ext != ".pdf" && !imageExtensions[ext] {
+	isImage := imageExtensions[ext]
+	if hasBinaryExtension(path) && ext != ".pdf" && !isImage {
 		return ErrorOutput(fmt.Sprintf(
 			"This tool cannot read binary files. The file appears to be a binary %s file. Please use appropriate tools for binary file analysis.", ext,
 		)), nil
+	}
+
+	// Image files: read and return as base64.
+	// Source: FileReadTool.ts:866-891
+	if isImage {
+		return f.readImage(path)
+	}
+
+	// Stat-based max file size guard (before reading).
+	// Source: limits.ts — maxSizeBytes gates on TOTAL file size
+	// Only applied when no explicit limit is provided (full-file reads).
+	if in.Limit == 0 {
+		info, statErr := os.Stat(path)
+		if statErr == nil && info.Size() > MaxOutputSize {
+			return ErrorOutput(fmt.Sprintf(
+				"File size (%d bytes) exceeds maximum allowed size (%d bytes). Use offset and limit parameters to read specific portions of the file, or search for specific content instead of reading the whole file.",
+				info.Size(), MaxOutputSize,
+			)), nil
+		}
 	}
 
 	file, err := os.Open(path)
@@ -242,7 +303,7 @@ func (f *FileReadTool) Execute(_ context.Context, tc *ToolContext, input json.Ra
 	}
 	defer file.Close()
 
-	limit := 2000
+	limit := MaxLinesToRead
 	if in.Limit > 0 {
 		limit = in.Limit
 	}
@@ -303,4 +364,90 @@ func (f *FileReadTool) Execute(_ context.Context, tc *ToolContext, input json.Ra
 	}
 
 	return SuccessOutput(strings.Join(lines, "\n") + "\n"), nil
+}
+
+// readImage reads an image file and returns it as base64-encoded content.
+// Source: FileReadTool.ts:866-891, 1097-1183
+func (f *FileReadTool) readImage(path string) (*ToolOutput, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ErrorOutput(fmt.Sprintf("File does not exist at path: %s", path)), nil
+		}
+		return ErrorOutput(fmt.Sprintf("failed to read image: %s", err)), nil
+	}
+	if len(data) == 0 {
+		return ErrorOutput(fmt.Sprintf("Image file is empty: %s", path)), nil
+	}
+
+	mediaType := detectImageMediaType(data, filepath.Ext(path))
+	encoded := base64.StdEncoding.EncodeToString(data)
+
+	// Return structured image result as JSON content for the API.
+	// Source: FileReadTool.ts:654-668 — mapToolResultToToolResultBlockParam for images
+	result := map[string]any{
+		"type": "image",
+		"file": map[string]any{
+			"base64":       encoded,
+			"type":         mediaType,
+			"originalSize": len(data),
+		},
+	}
+	jsonBytes, _ := json.Marshal(result)
+	out := SuccessOutput(string(jsonBytes))
+	out.Display = result // attach structured data for UI rendering
+	return out, nil
+}
+
+// detectImageMediaType detects the MIME type from magic bytes, falling back to extension.
+// Source: utils/imageResizer.ts — detectImageFormatFromBuffer
+func detectImageMediaType(data []byte, ext string) string {
+	if len(data) >= 8 {
+		// PNG: 89 50 4E 47
+		if data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 {
+			return "image/png"
+		}
+		// JPEG: FF D8 FF
+		if data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF {
+			return "image/jpeg"
+		}
+		// GIF: 47 49 46 38
+		if data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x38 {
+			return "image/gif"
+		}
+		// WebP: RIFF....WEBP
+		if data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
+			len(data) >= 12 && data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50 {
+			return "image/webp"
+		}
+		// BMP: 42 4D
+		if data[0] == 0x42 && data[1] == 0x4D {
+			return "image/bmp"
+		}
+		// TIFF: 49 49 or 4D 4D
+		if (data[0] == 0x49 && data[1] == 0x49) || (data[0] == 0x4D && data[1] == 0x4D) {
+			return "image/tiff"
+		}
+	}
+	// Fallback to extension
+	switch strings.ToLower(ext) {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".bmp":
+		return "image/bmp"
+	case ".tiff", ".tif":
+		return "image/tiff"
+	case ".ico":
+		return "image/x-icon"
+	case ".svg":
+		return "image/svg+xml"
+	default:
+		return "application/octet-stream"
+	}
 }
