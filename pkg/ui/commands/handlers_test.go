@@ -294,7 +294,7 @@ func TestRegistrations(t *testing.T) {
 	for _, r := range regs {
 		found[r.Name] = true
 	}
-	for _, name := range []string{"add-dir", "advisor", "agents"} {
+	for _, name := range []string{"add-dir", "advisor", "agents", "branch", "remote-control", "bridge-kick", "brief", "btw", "chrome"} {
 		if !found[name] {
 			t.Errorf("Expected registration for %q in Registrations()", name)
 		}
@@ -618,5 +618,378 @@ func TestAgents_HasRegistration(t *testing.T) {
 	}
 	if reg.Description != "Manage agent configurations" {
 		t.Errorf("Expected 'Manage agent configurations', got %q", reg.Description)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T228: /branch tests
+// ---------------------------------------------------------------------------
+
+func TestBranch_ForksConversation(t *testing.T) {
+	dir := t.TempDir()
+	srcID := "sess-abc123"
+	os.WriteFile(filepath.Join(dir, srcID+".jsonl"), []byte("{\"role\":\"user\"}\n"), 0644)
+
+	var switchedTo string
+	d := NewDispatcher()
+	d.Register("/branch", newBranchHandler(BranchOptions{
+		SessionID:     func() string { return srcID },
+		SessionName:   func() string { return "My Chat" },
+		TranscriptDir: func() string { return dir },
+		SwitchSession: func(id string) { switchedTo = id },
+	}))
+
+	cmd := d.Dispatch("/branch")
+	msg := cmd()
+	bm, ok := msg.(BranchMsg)
+	if !ok {
+		t.Fatalf("Expected BranchMsg, got %T", msg)
+	}
+	if bm.Error != nil {
+		t.Fatalf("Unexpected error: %v", bm.Error)
+	}
+	if !strings.Contains(bm.ForkName, " (Branch)") {
+		t.Errorf("Fork name should contain ' (Branch)' suffix, got %q", bm.ForkName)
+	}
+	if !strings.Contains(bm.Message, "Forked conversation") {
+		t.Errorf("Message should contain 'Forked conversation', got %q", bm.Message)
+	}
+	if switchedTo == "" {
+		t.Error("SwitchSession should have been called")
+	}
+
+	// Verify the fork file was created
+	forkPath := filepath.Join(dir, switchedTo+".jsonl")
+	data, err := os.ReadFile(forkPath)
+	if err != nil {
+		t.Fatalf("Fork file should exist: %v", err)
+	}
+	if string(data) != "{\"role\":\"user\"}\n" {
+		t.Errorf("Fork should be a copy of original, got %q", string(data))
+	}
+}
+
+func TestBranch_MissingTranscript(t *testing.T) {
+	dir := t.TempDir()
+	d := NewDispatcher()
+	d.Register("/branch", newBranchHandler(BranchOptions{
+		SessionID:     func() string { return "nonexistent" },
+		SessionName:   func() string { return "Gone" },
+		TranscriptDir: func() string { return dir },
+		SwitchSession: func(id string) {},
+	}))
+
+	cmd := d.Dispatch("/branch")
+	msg := cmd()
+	bm := msg.(BranchMsg)
+	if bm.Error == nil {
+		t.Error("Expected error for missing transcript")
+	}
+	if !strings.Contains(bm.Error.Error(), "cannot read transcript") {
+		t.Errorf("Error should mention 'cannot read transcript', got: %v", bm.Error)
+	}
+}
+
+func TestBranch_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/branch") {
+		t.Fatal("Should have /branch handler")
+	}
+	reg := d.GetRegistration("/branch")
+	if reg == nil {
+		t.Fatal("Should have registration for /branch")
+	}
+	if reg.Description != "Fork the current conversation" {
+		t.Errorf("Unexpected description: %q", reg.Description)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T229: /remote-control + /bridge-kick tests
+// ---------------------------------------------------------------------------
+
+func TestRemoteControl_StartsBridge(t *testing.T) {
+	started := false
+	d := NewDispatcher()
+	d.Register("/remote-control", newRemoteControlHandler(
+		func() bool { return false },
+		func() error { started = true; return nil },
+	))
+
+	cmd := d.Dispatch("/remote-control")
+	msg := cmd()
+	rc, ok := msg.(RemoteControlMsg)
+	if !ok {
+		t.Fatalf("Expected RemoteControlMsg, got %T", msg)
+	}
+	if rc.Error != nil {
+		t.Fatalf("Unexpected error: %v", rc.Error)
+	}
+	if !started {
+		t.Error("Bridge should have been started")
+	}
+	if !strings.Contains(rc.Message, "Bridge started") {
+		t.Errorf("Expected 'Bridge started' message, got %q", rc.Message)
+	}
+}
+
+func TestRemoteControl_AlreadyConnected(t *testing.T) {
+	d := NewDispatcher()
+	d.Register("/remote-control", newRemoteControlHandler(
+		func() bool { return true },
+		func() error { return nil },
+	))
+
+	cmd := d.Dispatch("/remote-control")
+	msg := cmd()
+	rc := msg.(RemoteControlMsg)
+	if !strings.Contains(rc.Message, "already connected") {
+		t.Errorf("Expected 'already connected' message, got %q", rc.Message)
+	}
+}
+
+func TestBridgeKick_NonAnt(t *testing.T) {
+	d := NewDispatcher()
+	d.Register("/bridge-kick", newBridgeKickHandler(func() bool { return false }))
+
+	cmd := d.Dispatch("/bridge-kick")
+	msg := cmd()
+	bk, ok := msg.(BridgeKickMsg)
+	if !ok {
+		t.Fatalf("Expected BridgeKickMsg, got %T", msg)
+	}
+	if bk.Error == nil {
+		t.Error("Expected error for non-ant user")
+	}
+	if !strings.Contains(bk.Error.Error(), "internal-only") {
+		t.Errorf("Error should mention 'internal-only', got: %v", bk.Error)
+	}
+}
+
+func TestBridgeKick_AntUser(t *testing.T) {
+	d := NewDispatcher()
+	d.Register("/bridge-kick", newBridgeKickHandler(func() bool { return true }))
+
+	cmd := d.Dispatch("/bridge-kick")
+	msg := cmd()
+	bk := msg.(BridgeKickMsg)
+	if bk.Error != nil {
+		t.Fatalf("Unexpected error: %v", bk.Error)
+	}
+	if !strings.Contains(bk.Message, "diagnostics stub") {
+		t.Errorf("Expected diagnostics stub message, got %q", bk.Message)
+	}
+}
+
+func TestRemoteControl_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/remote-control") {
+		t.Fatal("Should have /remote-control handler")
+	}
+	if !d.HasHandler("/bridge-kick") {
+		t.Fatal("Should have /bridge-kick handler")
+	}
+	reg := d.GetRegistration("/bridge-kick")
+	if reg == nil {
+		t.Fatal("Should have registration for /bridge-kick")
+	}
+	if !reg.IsHidden {
+		t.Error("/bridge-kick should be hidden")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T230: /brief tests
+// ---------------------------------------------------------------------------
+
+func TestBrief_Toggle(t *testing.T) {
+	active := false
+	d := NewDispatcher()
+	d.Register("/brief", newBriefHandler(
+		func() bool { return active },
+		func(b bool) { active = b },
+	))
+
+	// Enable
+	cmd := d.Dispatch("/brief")
+	msg := cmd()
+	bm, ok := msg.(BriefMsg)
+	if !ok {
+		t.Fatalf("Expected BriefMsg, got %T", msg)
+	}
+	if !bm.Active {
+		t.Error("Expected Active=true after first toggle")
+	}
+	if bm.Message != "Brief mode enabled" {
+		t.Errorf("Expected 'Brief mode enabled', got %q", bm.Message)
+	}
+	if !active {
+		t.Error("Callback should have set active=true")
+	}
+
+	// Disable
+	cmd = d.Dispatch("/brief")
+	msg = cmd()
+	bm = msg.(BriefMsg)
+	if bm.Active {
+		t.Error("Expected Active=false after second toggle")
+	}
+	if bm.Message != "Brief mode disabled" {
+		t.Errorf("Expected 'Brief mode disabled', got %q", bm.Message)
+	}
+	if active {
+		t.Error("Callback should have set active=false")
+	}
+}
+
+func TestBrief_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/brief") {
+		t.Fatal("Should have /brief handler")
+	}
+	reg := d.GetRegistration("/brief")
+	if reg == nil {
+		t.Fatal("Should have registration for /brief")
+	}
+	if reg.Description != "Toggle brief response mode" {
+		t.Errorf("Unexpected description: %q", reg.Description)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T231: /btw tests
+// ---------------------------------------------------------------------------
+
+func TestBtw_SideQuestion(t *testing.T) {
+	d := NewDispatcher()
+	d.Register("/btw", newBtwHandler(func(q string) (string, error) {
+		return "The answer is 42 for: " + q, nil
+	}))
+
+	cmd := d.Dispatch("/btw what is the meaning of life")
+	msg := cmd()
+	bm, ok := msg.(BtwMsg)
+	if !ok {
+		t.Fatalf("Expected BtwMsg, got %T", msg)
+	}
+	if bm.Error != nil {
+		t.Fatalf("Unexpected error: %v", bm.Error)
+	}
+	if bm.Question != "what is the meaning of life" {
+		t.Errorf("Expected question preserved, got %q", bm.Question)
+	}
+	if !strings.Contains(bm.Answer, "The answer is 42") {
+		t.Errorf("Expected answer content, got %q", bm.Answer)
+	}
+}
+
+func TestBtw_NoQuestion(t *testing.T) {
+	d := NewDispatcher()
+	d.Register("/btw", newBtwHandler(func(q string) (string, error) {
+		return "", nil
+	}))
+
+	cmd := d.Dispatch("/btw")
+	msg := cmd()
+	bm := msg.(BtwMsg)
+	if bm.Error == nil {
+		t.Error("Expected error for empty question")
+	}
+	if !strings.Contains(bm.Error.Error(), "usage:") {
+		t.Errorf("Error should contain usage hint, got: %v", bm.Error)
+	}
+}
+
+func TestBtw_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/btw") {
+		t.Fatal("Should have /btw handler")
+	}
+	reg := d.GetRegistration("/btw")
+	if reg == nil {
+		t.Fatal("Should have registration for /btw")
+	}
+	if reg.ArgumentHint != "<question>" {
+		t.Errorf("Expected argument hint '<question>', got %q", reg.ArgumentHint)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T232: /chrome tests
+// ---------------------------------------------------------------------------
+
+func TestChrome_NoArgs_ShowsMenu(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/chrome")
+	msg := cmd()
+	cm, ok := msg.(ChromeMsg)
+	if !ok {
+		t.Fatalf("Expected ChromeMsg, got %T", msg)
+	}
+	if cm.Error != nil {
+		t.Fatalf("Unexpected error: %v", cm.Error)
+	}
+	for _, action := range []string{"install", "reconnect", "manage-permissions", "toggle-default"} {
+		if !strings.Contains(cm.Message, action) {
+			t.Errorf("Menu should contain %q, got: %s", action, cm.Message)
+		}
+	}
+}
+
+func TestChrome_ValidAction(t *testing.T) {
+	d := NewDispatcher()
+	for _, action := range []string{"install", "reconnect", "manage-permissions", "toggle-default"} {
+		cmd := d.Dispatch("/chrome " + action)
+		msg := cmd()
+		cm := msg.(ChromeMsg)
+		if cm.Error != nil {
+			t.Errorf("Unexpected error for %s: %v", action, cm.Error)
+		}
+		if cm.Action != ChromeAction(action) {
+			t.Errorf("Expected action %q, got %q", action, cm.Action)
+		}
+		if !strings.Contains(cm.Message, "not yet implemented") {
+			t.Errorf("Stub should say 'not yet implemented', got %q", cm.Message)
+		}
+	}
+}
+
+func TestChrome_UnknownAction(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/chrome bogus")
+	msg := cmd()
+	cm := msg.(ChromeMsg)
+	if cm.Error == nil {
+		t.Error("Expected error for unknown action")
+	}
+	if !strings.Contains(cm.Error.Error(), "unknown chrome action") {
+		t.Errorf("Error should mention 'unknown chrome action', got: %v", cm.Error)
+	}
+}
+
+func TestChrome_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/chrome") {
+		t.Fatal("Should have /chrome handler")
+	}
+	reg := d.GetRegistration("/chrome")
+	if reg == nil {
+		t.Fatal("Should have registration for /chrome")
+	}
+	if reg.Description != "Chrome browser integration" {
+		t.Errorf("Unexpected description: %q", reg.Description)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T228-T232: All new commands appear in registerDefaults
+// ---------------------------------------------------------------------------
+
+func TestNewCommandsRegisteredInDefaults(t *testing.T) {
+	d := NewDispatcher()
+	for _, name := range []string{"/branch", "/remote-control", "/bridge-kick", "/brief", "/btw", "/chrome"} {
+		if !d.HasHandler(name) {
+			t.Errorf("Default dispatcher should have handler for %s", name)
+		}
 	}
 }

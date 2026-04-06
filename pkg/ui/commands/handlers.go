@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -577,6 +578,228 @@ func newAgentsHandler(getAgents func() []AgentConfig) Handler {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// T228: /branch conversation fork
+// Source: src/commands/branch/
+// ---------------------------------------------------------------------------
+
+// BranchMsg is returned when /branch forks the conversation.
+type BranchMsg struct {
+	ForkName string
+	Message  string
+	Error    error
+}
+
+// BranchOptions provides dependencies for the branch handler.
+type BranchOptions struct {
+	// SessionID returns the current session ID.
+	SessionID func() string
+	// SessionName returns the current session name.
+	SessionName func() string
+	// TranscriptDir returns the directory containing transcript JSONL files.
+	TranscriptDir func() string
+	// SwitchSession switches to a new session by ID.
+	SwitchSession func(id string)
+}
+
+// newBranchHandler creates the /branch command handler.
+// Source: src/commands/branch/branch.tsx — forks the current conversation
+func newBranchHandler(opts BranchOptions) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			srcID := opts.SessionID()
+			srcName := opts.SessionName()
+			dir := opts.TranscriptDir()
+
+			// Build source and destination paths
+			srcPath := filepath.Join(dir, srcID+".jsonl")
+			forkID := srcID + "-fork-" + fmt.Sprintf("%d", time.Now().UnixMilli())
+			dstPath := filepath.Join(dir, forkID+".jsonl")
+
+			// Copy the transcript
+			data, err := os.ReadFile(srcPath)
+			if err != nil {
+				return BranchMsg{Error: fmt.Errorf("cannot read transcript: %w", err)}
+			}
+			if err := os.WriteFile(dstPath, data, 0644); err != nil {
+				return BranchMsg{Error: fmt.Errorf("cannot write fork: %w", err)}
+			}
+
+			forkName := srcName + " (Branch)"
+			opts.SwitchSession(forkID)
+
+			return BranchMsg{
+				ForkName: forkName,
+				Message:  "Forked conversation as \"" + forkName + "\"",
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T229: /remote-control + /bridge-kick
+// Source: src/commands/bridge/ + src/commands/bridge-kick.ts
+// ---------------------------------------------------------------------------
+
+// RemoteControlMsg is returned when /remote-control starts the bridge.
+type RemoteControlMsg struct {
+	Message string
+	Error   error
+}
+
+// BridgeKickMsg is returned when /bridge-kick runs diagnostics.
+type BridgeKickMsg struct {
+	Message string
+	Error   error
+}
+
+// newRemoteControlHandler creates the /remote-control command handler.
+// Source: src/commands/bridge/index.ts — starts the bridge for remote control
+func newRemoteControlHandler(isConnected func() bool, startBridge func() error) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			if isConnected() {
+				return RemoteControlMsg{Message: "Bridge is already connected."}
+			}
+			if err := startBridge(); err != nil {
+				return RemoteControlMsg{Error: fmt.Errorf("failed to start bridge: %w", err)}
+			}
+			return RemoteControlMsg{Message: "Bridge started. Remote control is now active."}
+		}
+	}
+}
+
+// newBridgeKickHandler creates the /bridge-kick command handler (ant-only stub).
+// Source: src/commands/bridge-kick.ts — ant-only debug command
+func newBridgeKickHandler(isAnt func() bool) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			if !isAnt() {
+				return BridgeKickMsg{Error: fmt.Errorf("bridge-kick is an internal-only command")}
+			}
+			return BridgeKickMsg{Message: "Bridge kick: diagnostics stub (ant-only)."}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T230: /brief Kairos mode toggle
+// Source: src/commands/brief.ts
+// ---------------------------------------------------------------------------
+
+// BriefMsg is returned when /brief toggles Kairos (brief) mode.
+type BriefMsg struct {
+	Active  bool
+	Message string
+}
+
+// newBriefHandler creates the /brief command handler.
+// Source: src/commands/brief.ts — toggles brief/concise response mode
+func newBriefHandler(getKairos func() bool, setKairos func(bool)) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			current := getKairos()
+			next := !current
+			setKairos(next)
+			if next {
+				return BriefMsg{Active: true, Message: "Brief mode enabled"}
+			}
+			return BriefMsg{Active: false, Message: "Brief mode disabled"}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T231: /btw side-question with scroll modal
+// Source: src/commands/btw/
+// ---------------------------------------------------------------------------
+
+// BtwMsg is returned when /btw runs a side question.
+type BtwMsg struct {
+	Question string
+	Answer   string
+	Message  string
+	Error    error
+}
+
+// newBtwHandler creates the /btw command handler.
+// Source: src/commands/btw/btw.tsx — side question without disrupting main conversation
+func newBtwHandler(sideQuery func(question string) (string, error)) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			question := strings.TrimSpace(args)
+			if question == "" {
+				return BtwMsg{Error: fmt.Errorf("usage: /btw <question>")}
+			}
+			answer, err := sideQuery(question)
+			if err != nil {
+				return BtwMsg{Question: question, Error: fmt.Errorf("side query failed: %w", err)}
+			}
+			return BtwMsg{
+				Question: question,
+				Answer:   answer,
+				Message:  answer,
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T232: /chrome browser integration (stub)
+// Source: src/commands/chrome/
+// ---------------------------------------------------------------------------
+
+// ChromeAction identifies a chrome menu action.
+type ChromeAction string
+
+const (
+	ChromeActionInstall           ChromeAction = "install"
+	ChromeActionReconnect         ChromeAction = "reconnect"
+	ChromeActionManagePermissions ChromeAction = "manage-permissions"
+	ChromeActionToggleDefault     ChromeAction = "toggle-default"
+)
+
+// ChromeMsg is returned when /chrome runs a browser integration action.
+type ChromeMsg struct {
+	Action  ChromeAction
+	Message string
+	Error   error
+}
+
+// newChromeHandler creates the /chrome command handler (stub with menu structure).
+// Source: src/commands/chrome/ — 4 menu actions
+func newChromeHandler() Handler {
+	actions := map[string]ChromeAction{
+		"install":            ChromeActionInstall,
+		"reconnect":          ChromeActionReconnect,
+		"manage-permissions": ChromeActionManagePermissions,
+		"toggle-default":     ChromeActionToggleDefault,
+	}
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			arg := strings.TrimSpace(strings.ToLower(args))
+			if arg == "" {
+				return ChromeMsg{
+					Message: "Chrome integration:\n" +
+						"  /chrome install            — Install the Chrome extension\n" +
+						"  /chrome reconnect          — Reconnect to Chrome\n" +
+						"  /chrome manage-permissions — Manage extension permissions\n" +
+						"  /chrome toggle-default     — Toggle as default browser action",
+				}
+			}
+			action, ok := actions[arg]
+			if !ok {
+				return ChromeMsg{Error: fmt.Errorf("unknown chrome action: %s", arg)}
+			}
+			// Stub: Chrome extension integration is complex and deferred
+			return ChromeMsg{
+				Action:  action,
+				Message: fmt.Sprintf("Chrome %s: not yet implemented (extension integration required).", arg),
+			}
+		}
+	}
+}
+
 func (d *Dispatcher) registerDefaults() {
 	d.Register("/model", func(args string) tea.Cmd {
 		if args == "" {
@@ -649,5 +872,75 @@ func (d *Dispatcher) registerDefaults() {
 		Type:        CommandTypeLocalJSX,
 		Source:      "builtin",
 		Handler:     newAgentsHandler(nil),
+	})
+
+	// T228: /branch — fork the current conversation
+	d.RegisterCommand(CommandRegistration{
+		Name:        "branch",
+		Description: "Fork the current conversation",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: newBranchHandler(BranchOptions{
+			SessionID:     func() string { return "default" },
+			SessionName:   func() string { return "Conversation" },
+			TranscriptDir: func() string { return os.TempDir() },
+			SwitchSession: func(id string) {},
+		}),
+	})
+
+	// T229: /remote-control — start the bridge for remote control
+	d.RegisterCommand(CommandRegistration{
+		Name:        "remote-control",
+		Description: "Start remote control bridge",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: newRemoteControlHandler(
+			func() bool { return false },
+			func() error { return nil },
+		),
+	})
+
+	// T229: /bridge-kick — ant-only bridge diagnostics
+	d.RegisterCommand(CommandRegistration{
+		Name:        "bridge-kick",
+		Description: "Bridge diagnostics (internal)",
+		Type:        CommandTypeLocal,
+		IsHidden:    true,
+		Source:      "builtin",
+		Handler:     newBridgeKickHandler(func() bool { return false }),
+	})
+
+	// T230: /brief — toggle brief/concise response mode
+	d.RegisterCommand(CommandRegistration{
+		Name:        "brief",
+		Description: "Toggle brief response mode",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: newBriefHandler(
+			func() bool { return false },
+			func(b bool) {},
+		),
+	})
+
+	// T231: /btw — ask a side question
+	d.RegisterCommand(CommandRegistration{
+		Name:         "btw",
+		Description:  "Ask a side question without disrupting the main conversation",
+		Type:         CommandTypeLocalJSX,
+		ArgumentHint: "<question>",
+		Source:       "builtin",
+		Handler: newBtwHandler(func(q string) (string, error) {
+			return "Side query not configured.", nil
+		}),
+	})
+
+	// T232: /chrome — browser integration (stub)
+	d.RegisterCommand(CommandRegistration{
+		Name:         "chrome",
+		Description:  "Chrome browser integration",
+		Type:         CommandTypeLocalJSX,
+		ArgumentHint: "[install|reconnect|manage-permissions|toggle-default]",
+		Source:       "builtin",
+		Handler:      newChromeHandler(),
 	})
 }
