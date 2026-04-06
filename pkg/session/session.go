@@ -209,6 +209,24 @@ type SessionState struct {
 	// Source: bootstrap/state.ts — hasExitedPlanMode, needsPlanModeExitAttachment
 	HasExitedPlanMode            bool `json:"-"`
 	NeedsPlanModeExitAttachment  bool `json:"-"`
+
+	// T141: Auto mode transition tracking.
+	// Source: bootstrap/state.ts — needsAutoModeExitAttachment
+	NeedsAutoModeExitAttachment bool `json:"-"`
+
+	// T142: LSP recommendation shown once per session.
+	// Source: bootstrap/state.ts — lspRecommendationShownThisSession
+	LspRecommendationShownThisSession bool `json:"-"`
+
+	// T143: SDK initialization state — JSON schema for structured output.
+	// Source: bootstrap/state.ts — initJsonSchema
+	InitJsonSchema interface{} `json:"-"`
+	// T143: Whether the SDK has been initialized this session.
+	SdkInitialized bool `json:"-"`
+
+	// T145: Cache for plan slugs: sessionId -> wordSlug.
+	// Source: bootstrap/state.ts — planSlugCache
+	PlanSlugCache map[string]string `json:"-"`
 }
 
 // New creates a new SessionState with the given config and working directory.
@@ -229,6 +247,7 @@ func New(config SessionConfig, cwd string) *SessionState {
 		ClientType:          "cli",
 		SessionCronTasks:    make([]SessionCronTask, 0),
 		SessionCreatedTeams: make(map[string]struct{}),
+		PlanSlugCache:       make(map[string]string),
 	}
 }
 
@@ -583,6 +602,113 @@ func (s *SessionState) HandlePlanModeTransition(fromMode, toMode string) {
 	if fromMode == "plan" && toMode != "plan" {
 		s.NeedsPlanModeExitAttachment = true
 	}
+}
+
+// ---------------------------------------------------------------------------
+// T141: Auto mode transitions — Source: bootstrap/state.ts
+// ---------------------------------------------------------------------------
+
+// GetNeedsAutoModeExitAttachment returns whether the auto mode exit attachment is pending.
+// Source: bootstrap/state.ts — needsAutoModeExitAttachment
+func (s *SessionState) GetNeedsAutoModeExitAttachment() bool {
+	return s.NeedsAutoModeExitAttachment
+}
+
+// SetNeedsAutoModeExitAttachment sets the auto mode exit attachment flag.
+// Source: bootstrap/state.ts — setNeedsAutoModeExitAttachment
+func (s *SessionState) SetNeedsAutoModeExitAttachment(value bool) {
+	s.NeedsAutoModeExitAttachment = value
+}
+
+// HandleAutoModeTransition processes a mode switch and updates auto mode flags.
+// Auto<->plan transitions are skipped (handled by plan mode logic). Only direct
+// auto transitions trigger the exit attachment.
+// Source: bootstrap/state.ts — handleAutoModeTransition
+func (s *SessionState) HandleAutoModeTransition(fromMode, toMode string) {
+	// Skip auto<->plan transitions — these are handled by plan mode logic.
+	if (fromMode == "auto" && toMode == "plan") ||
+		(fromMode == "plan" && toMode == "auto") {
+		return
+	}
+
+	fromIsAuto := fromMode == "auto"
+	toIsAuto := toMode == "auto"
+
+	// Entering auto mode: clear pending exit attachment to avoid sending both
+	// auto_mode and auto_mode_exit when the user toggles quickly.
+	if toIsAuto && !fromIsAuto {
+		s.NeedsAutoModeExitAttachment = false
+	}
+
+	// Leaving auto mode: trigger the one-time exit attachment.
+	if fromIsAuto && !toIsAuto {
+		s.NeedsAutoModeExitAttachment = true
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T142: LSP recommendation — Source: bootstrap/state.ts
+// ---------------------------------------------------------------------------
+
+// HasShownLspRecommendationThisSession returns whether the LSP recommendation
+// has been shown this session.
+// Source: bootstrap/state.ts — hasShownLspRecommendationThisSession
+func (s *SessionState) HasShownLspRecommendationThisSession() bool {
+	return s.LspRecommendationShownThisSession
+}
+
+// SetLspRecommendationShownThisSession marks the LSP recommendation as shown.
+// Source: bootstrap/state.ts — setLspRecommendationShownThisSession
+func (s *SessionState) SetLspRecommendationShownThisSession(value bool) {
+	s.LspRecommendationShownThisSession = value
+}
+
+// ---------------------------------------------------------------------------
+// T143: SDK init state — Source: bootstrap/state.ts
+// ---------------------------------------------------------------------------
+
+// SetInitJsonSchema stores the JSON schema for SDK structured output.
+// Source: bootstrap/state.ts — setInitJsonSchema
+func (s *SessionState) SetInitJsonSchema(schema interface{}) {
+	s.InitJsonSchema = schema
+	s.SdkInitialized = true
+}
+
+// GetInitJsonSchema returns the SDK init JSON schema (may be nil).
+// Source: bootstrap/state.ts — getInitJsonSchema
+func (s *SessionState) GetInitJsonSchema() interface{} {
+	return s.InitJsonSchema
+}
+
+// ResetSdkInitState clears the SDK initialization state.
+// Source: bootstrap/state.ts — resetSdkInitState
+func (s *SessionState) ResetSdkInitState() {
+	s.InitJsonSchema = nil
+	s.SdkInitialized = false
+}
+
+// ---------------------------------------------------------------------------
+// T145: Plan slug cache — Source: bootstrap/state.ts
+// ---------------------------------------------------------------------------
+
+// GetPlanSlug returns the cached plan slug for a session ID.
+// Source: bootstrap/state.ts — getPlanSlugCache
+func (s *SessionState) GetPlanSlug(sessionID string) (string, bool) {
+	slug, ok := s.PlanSlugCache[sessionID]
+	return slug, ok
+}
+
+// SetPlanSlug caches a plan slug for a session ID.
+func (s *SessionState) SetPlanSlug(sessionID, slug string) {
+	if s.PlanSlugCache == nil {
+		s.PlanSlugCache = make(map[string]string)
+	}
+	s.PlanSlugCache[sessionID] = slug
+}
+
+// DeletePlanSlug removes a plan slug entry.
+func (s *SessionState) DeletePlanSlug(sessionID string) {
+	delete(s.PlanSlugCache, sessionID)
 }
 
 // RegenerateSessionID creates a new session ID, optionally setting the current as parent.

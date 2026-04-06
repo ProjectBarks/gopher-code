@@ -858,3 +858,166 @@ func TestPlanModeTransitions(t *testing.T) {
 		t.Error("HasExitedPlanMode should be true after set")
 	}
 }
+
+// T141: auto mode transitions
+func TestAutoModeTransitions(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	// Default: no exit attachment pending
+	if s.GetNeedsAutoModeExitAttachment() {
+		t.Error("NeedsAutoModeExitAttachment should default to false")
+	}
+
+	// Entering auto mode from normal: clears exit attachment
+	s.SetNeedsAutoModeExitAttachment(true) // simulate stale flag
+	s.HandleAutoModeTransition("normal", "auto")
+	if s.GetNeedsAutoModeExitAttachment() {
+		t.Error("entering auto mode should clear NeedsAutoModeExitAttachment")
+	}
+
+	// Exiting auto mode to normal: triggers exit attachment
+	s.HandleAutoModeTransition("auto", "normal")
+	if !s.GetNeedsAutoModeExitAttachment() {
+		t.Error("exiting auto mode should set NeedsAutoModeExitAttachment")
+	}
+
+	// auto -> plan: skipped (handled by plan mode logic)
+	s.SetNeedsAutoModeExitAttachment(false)
+	s.HandleAutoModeTransition("auto", "plan")
+	if s.GetNeedsAutoModeExitAttachment() {
+		t.Error("auto->plan should be skipped (no-op)")
+	}
+
+	// plan -> auto: skipped
+	s.HandleAutoModeTransition("plan", "auto")
+	if s.GetNeedsAutoModeExitAttachment() {
+		t.Error("plan->auto should be skipped (no-op)")
+	}
+
+	// auto -> auto: no-op (both fromIsAuto and toIsAuto, enter branch is false)
+	s.HandleAutoModeTransition("auto", "auto")
+	if s.GetNeedsAutoModeExitAttachment() {
+		t.Error("auto->auto should not set NeedsAutoModeExitAttachment")
+	}
+
+	// normal -> normal: no-op
+	s.HandleAutoModeTransition("normal", "normal")
+	if s.GetNeedsAutoModeExitAttachment() {
+		t.Error("normal->normal should not set NeedsAutoModeExitAttachment")
+	}
+
+	// Quick toggle: enter then exit auto mode
+	s.HandleAutoModeTransition("normal", "auto")
+	s.HandleAutoModeTransition("auto", "normal")
+	if !s.GetNeedsAutoModeExitAttachment() {
+		t.Error("auto->normal should set NeedsAutoModeExitAttachment")
+	}
+}
+
+// T142: lspRecommendationShownThisSession
+func TestLspRecommendationShownThisSession(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.HasShownLspRecommendationThisSession() {
+		t.Error("LspRecommendationShownThisSession should default to false")
+	}
+
+	s.SetLspRecommendationShownThisSession(true)
+	if !s.HasShownLspRecommendationThisSession() {
+		t.Error("LspRecommendationShownThisSession should be true after set")
+	}
+
+	s.SetLspRecommendationShownThisSession(false)
+	if s.HasShownLspRecommendationThisSession() {
+		t.Error("LspRecommendationShownThisSession should be false after unset")
+	}
+}
+
+// T143: SDK init state (initJsonSchema / resetSdkInitState)
+func TestSdkInitState(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	// Defaults
+	if s.GetInitJsonSchema() != nil {
+		t.Error("InitJsonSchema should default to nil")
+	}
+	if s.SdkInitialized {
+		t.Error("SdkInitialized should default to false")
+	}
+
+	// Set schema
+	schema := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"name": map[string]string{"type": "string"},
+		},
+	}
+	s.SetInitJsonSchema(schema)
+	if s.GetInitJsonSchema() == nil {
+		t.Error("InitJsonSchema should be non-nil after set")
+	}
+	if !s.SdkInitialized {
+		t.Error("SdkInitialized should be true after SetInitJsonSchema")
+	}
+
+	// Verify schema content
+	got, ok := s.GetInitJsonSchema().(map[string]interface{})
+	if !ok {
+		t.Fatal("InitJsonSchema should be a map")
+	}
+	if got["type"] != "object" {
+		t.Errorf("schema type = %v, want object", got["type"])
+	}
+
+	// Reset
+	s.ResetSdkInitState()
+	if s.GetInitJsonSchema() != nil {
+		t.Error("InitJsonSchema should be nil after reset")
+	}
+	if s.SdkInitialized {
+		t.Error("SdkInitialized should be false after reset")
+	}
+}
+
+// T145: planSlugCache
+func TestPlanSlugCache(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	// Default: empty map
+	if s.PlanSlugCache == nil {
+		t.Fatal("PlanSlugCache should be initialized")
+	}
+	if len(s.PlanSlugCache) != 0 {
+		t.Errorf("PlanSlugCache len = %d, want 0", len(s.PlanSlugCache))
+	}
+
+	// Set and get
+	s.SetPlanSlug("session-1", "fluffy-cat")
+	slug, ok := s.GetPlanSlug("session-1")
+	if !ok || slug != "fluffy-cat" {
+		t.Errorf("GetPlanSlug(session-1) = (%q, %v), want (fluffy-cat, true)", slug, ok)
+	}
+
+	// Missing key
+	_, ok = s.GetPlanSlug("no-such-session")
+	if ok {
+		t.Error("GetPlanSlug should return false for missing key")
+	}
+
+	// Overwrite
+	s.SetPlanSlug("session-1", "happy-dog")
+	slug, _ = s.GetPlanSlug("session-1")
+	if slug != "happy-dog" {
+		t.Errorf("GetPlanSlug after overwrite = %q, want happy-dog", slug)
+	}
+
+	// Delete
+	s.DeletePlanSlug("session-1")
+	_, ok = s.GetPlanSlug("session-1")
+	if ok {
+		t.Error("GetPlanSlug should return false after delete")
+	}
+
+	// Delete non-existent is safe
+	s.DeletePlanSlug("no-such-session")
+}
