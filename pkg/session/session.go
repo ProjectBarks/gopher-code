@@ -263,6 +263,32 @@ type SessionState struct {
 	// T155: Extra directories to scan for CLAUDE.md files (beyond project root).
 	// Source: bootstrap/state.ts — additionalDirectoriesForClaudeMd
 	AdditionalDirectoriesForClaudeMd []string `json:"-"`
+
+	// T156: Directory containing the session's .jsonl transcript. Nil/empty
+	// means derive from OriginalCWD (common case). Set by SwitchSession when
+	// resuming a session from a different project directory.
+	// Source: bootstrap/state.ts — sessionProjectDir
+	SessionProjectDir string `json:"-"`
+
+	// T157: Cached prompt cache 1h TTL allowlist from GrowthBook (session-stable).
+	// Source: bootstrap/state.ts — promptCache1hAllowlist
+	PromptCache1hAllowlist []string `json:"-"`
+	// T157: Cached 1h TTL user eligibility (session-stable). Latched on first
+	// evaluation so mid-session changes don't bust the server-side prompt cache.
+	// nil = not yet evaluated, non-nil = latched value.
+	// Source: bootstrap/state.ts — promptCache1hEligible
+	PromptCache1hEligible *bool `json:"-"`
+
+	// T159: Current prompt ID (UUID) correlating a user prompt with subsequent
+	// OTel events. Set per-turn, cleared on resetCostAndUsageCounters.
+	// Source: bootstrap/state.ts — promptId
+	PromptId string `json:"-"`
+
+	// T160: ID of the last main API request for the main conversation chain
+	// (not subagents). Updated after each successful API response. Read at
+	// shutdown to send cache eviction hints to inference.
+	// Source: bootstrap/state.ts — lastMainRequestId
+	LastMainRequestId string `json:"-"`
 }
 
 // New creates a new SessionState with the given config and working directory.
@@ -947,4 +973,98 @@ func (s *SessionState) SetAdditionalDirectoriesForClaudeMd(dirs []string) {
 // GetAdditionalDirectoriesForClaudeMd returns the extra CLAUDE.md directories.
 func (s *SessionState) GetAdditionalDirectoriesForClaudeMd() []string {
 	return s.AdditionalDirectoriesForClaudeMd
+}
+
+// ---------------------------------------------------------------------------
+// T156: Session project dir + SwitchSession — Source: bootstrap/state.ts
+// ---------------------------------------------------------------------------
+
+// GetSessionProjectDir returns the directory containing the session transcript,
+// or "" if the session lives in the current project (derive from OriginalCWD).
+// Source: bootstrap/state.ts — getSessionProjectDir
+func (s *SessionState) GetSessionProjectDir() string {
+	return s.SessionProjectDir
+}
+
+// SwitchSession atomically switches the active session. sessionId and
+// projectDir always change together so they cannot drift out of sync.
+// projectDir may be "" for sessions in the current project (derived from
+// OriginalCWD at read time). Every call resets caches that are per-session.
+// Source: bootstrap/state.ts — switchSession()
+func (s *SessionState) SwitchSession(sessionID string, projectDir string) {
+	// Drop the outgoing session's plan-slug entry so the map stays bounded
+	// across repeated /resume.
+	s.DeletePlanSlug(s.ID)
+
+	s.ID = sessionID
+	s.SessionProjectDir = projectDir
+
+	// Reset per-session caches that must not carry over.
+	s.CachedClaudeMdContent = ""
+	s.ModelStrings = nil
+	s.PromptId = ""
+	s.LastMainRequestId = ""
+}
+
+// ---------------------------------------------------------------------------
+// T157: Prompt cache 1h allowlist — Source: bootstrap/state.ts
+// ---------------------------------------------------------------------------
+
+// GetPromptCache1hAllowlist returns the cached prompt cache 1h allowlist.
+// nil means not yet fetched from GrowthBook.
+// Source: bootstrap/state.ts — getPromptCache1hAllowlist
+func (s *SessionState) GetPromptCache1hAllowlist() []string {
+	return s.PromptCache1hAllowlist
+}
+
+// SetPromptCache1hAllowlist stores the prompt cache 1h allowlist.
+// Source: bootstrap/state.ts — setPromptCache1hAllowlist
+func (s *SessionState) SetPromptCache1hAllowlist(allowlist []string) {
+	s.PromptCache1hAllowlist = allowlist
+}
+
+// GetPromptCache1hEligible returns the latched 1h prompt cache eligibility.
+// nil means not yet evaluated.
+// Source: bootstrap/state.ts — getPromptCache1hEligible
+func (s *SessionState) GetPromptCache1hEligible() *bool {
+	return s.PromptCache1hEligible
+}
+
+// SetPromptCache1hEligible latches the 1h prompt cache eligibility.
+// Source: bootstrap/state.ts — setPromptCache1hEligible
+func (s *SessionState) SetPromptCache1hEligible(eligible *bool) {
+	s.PromptCache1hEligible = eligible
+}
+
+// ---------------------------------------------------------------------------
+// T159: Prompt ID — Source: bootstrap/state.ts — promptId
+// ---------------------------------------------------------------------------
+
+// GetPromptId returns the current prompt ID (UUID correlating OTel events).
+// Empty string means no prompt is active.
+// Source: bootstrap/state.ts — getPromptId
+func (s *SessionState) GetPromptId() string {
+	return s.PromptId
+}
+
+// SetPromptId sets the current prompt ID.
+// Source: bootstrap/state.ts — setPromptId
+func (s *SessionState) SetPromptId(id string) {
+	s.PromptId = id
+}
+
+// ---------------------------------------------------------------------------
+// T160: Last main request ID — Source: bootstrap/state.ts — lastMainRequestId
+// ---------------------------------------------------------------------------
+
+// GetLastMainRequestId returns the ID of the last main API request.
+// Source: bootstrap/state.ts — getLastMainRequestId
+func (s *SessionState) GetLastMainRequestId() string {
+	return s.LastMainRequestId
+}
+
+// SetLastMainRequestId stores the ID of the last main API request.
+// Source: bootstrap/state.ts — setLastMainRequestId
+func (s *SessionState) SetLastMainRequestId(requestID string) {
+	s.LastMainRequestId = requestID
 }

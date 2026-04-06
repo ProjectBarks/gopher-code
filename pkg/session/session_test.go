@@ -1348,3 +1348,149 @@ func TestAdditionalDirectoriesForClaudeMd(t *testing.T) {
 		t.Error("GetAdditionalDirectoriesForClaudeMd should be nil after clearing")
 	}
 }
+
+// T156: sessionProjectDir + SwitchSession
+func TestSwitchSession(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+	originalID := s.ID
+
+	// Default: empty project dir
+	if s.GetSessionProjectDir() != "" {
+		t.Errorf("SessionProjectDir should default to empty, got %q", s.GetSessionProjectDir())
+	}
+
+	// Set up some per-session state that SwitchSession should reset
+	s.SetCachedClaudeMdContent("old content")
+	s.SetModelStrings(map[string]string{"model": "display"})
+	s.SetPromptId("old-prompt-id")
+	s.SetLastMainRequestId("old-request-id")
+	s.SetPlanSlug(originalID, "fluffy-cat")
+
+	// Switch to a new session with a project dir
+	s.SwitchSession("new-session-id", "/home/user/other-project")
+
+	if s.ID != "new-session-id" {
+		t.Errorf("ID = %q, want %q", s.ID, "new-session-id")
+	}
+	if s.GetSessionProjectDir() != "/home/user/other-project" {
+		t.Errorf("SessionProjectDir = %q, want %q", s.GetSessionProjectDir(), "/home/user/other-project")
+	}
+
+	// Per-session caches should be reset
+	if s.GetCachedClaudeMdContent() != "" {
+		t.Errorf("CachedClaudeMdContent should be empty after switch, got %q", s.GetCachedClaudeMdContent())
+	}
+	if s.ModelStrings != nil {
+		t.Error("ModelStrings should be nil after switch")
+	}
+	if s.GetPromptId() != "" {
+		t.Errorf("PromptId should be empty after switch, got %q", s.GetPromptId())
+	}
+	if s.GetLastMainRequestId() != "" {
+		t.Errorf("LastMainRequestId should be empty after switch, got %q", s.GetLastMainRequestId())
+	}
+
+	// Old session's plan slug should be removed
+	if _, ok := s.GetPlanSlug(originalID); ok {
+		t.Error("old session's plan slug should be removed on switch")
+	}
+
+	// Switch to a session in the current project (empty project dir)
+	s.SwitchSession("another-session", "")
+	if s.GetSessionProjectDir() != "" {
+		t.Errorf("SessionProjectDir should be empty for current-project sessions, got %q", s.GetSessionProjectDir())
+	}
+}
+
+// T157: promptCache1hAllowlist / promptCache1hEligible
+func TestPromptCache1h(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	// Defaults: nil
+	if s.GetPromptCache1hAllowlist() != nil {
+		t.Error("PromptCache1hAllowlist should default to nil")
+	}
+	if s.GetPromptCache1hEligible() != nil {
+		t.Error("PromptCache1hEligible should default to nil")
+	}
+
+	// Set allowlist
+	allowlist := []string{"claude-sonnet-4-6", "claude-opus-4-6"}
+	s.SetPromptCache1hAllowlist(allowlist)
+	got := s.GetPromptCache1hAllowlist()
+	if len(got) != 2 {
+		t.Fatalf("GetPromptCache1hAllowlist len = %d, want 2", len(got))
+	}
+	if got[0] != "claude-sonnet-4-6" {
+		t.Errorf("allowlist[0] = %q, want %q", got[0], "claude-sonnet-4-6")
+	}
+
+	// Set eligible (true)
+	eligible := true
+	s.SetPromptCache1hEligible(&eligible)
+	if s.GetPromptCache1hEligible() == nil {
+		t.Fatal("PromptCache1hEligible should be non-nil after set")
+	}
+	if *s.GetPromptCache1hEligible() != true {
+		t.Error("PromptCache1hEligible should be true")
+	}
+
+	// Set eligible (false) — should latch
+	notEligible := false
+	s.SetPromptCache1hEligible(&notEligible)
+	if *s.GetPromptCache1hEligible() != false {
+		t.Error("PromptCache1hEligible should be false")
+	}
+
+	// Clear eligible back to nil
+	s.SetPromptCache1hEligible(nil)
+	if s.GetPromptCache1hEligible() != nil {
+		t.Error("PromptCache1hEligible should be nil after clearing")
+	}
+
+	// Clear allowlist
+	s.SetPromptCache1hAllowlist(nil)
+	if s.GetPromptCache1hAllowlist() != nil {
+		t.Error("PromptCache1hAllowlist should be nil after clearing")
+	}
+}
+
+// T159: promptId
+func TestPromptId(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.GetPromptId() != "" {
+		t.Errorf("PromptId should default to empty, got %q", s.GetPromptId())
+	}
+
+	s.SetPromptId("550e8400-e29b-41d4-a716-446655440000")
+	if s.GetPromptId() != "550e8400-e29b-41d4-a716-446655440000" {
+		t.Errorf("PromptId = %q, want UUID", s.GetPromptId())
+	}
+
+	// Clear
+	s.SetPromptId("")
+	if s.GetPromptId() != "" {
+		t.Error("PromptId should be empty after clearing")
+	}
+}
+
+// T160: lastMainRequestId
+func TestLastMainRequestId(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.GetLastMainRequestId() != "" {
+		t.Errorf("LastMainRequestId should default to empty, got %q", s.GetLastMainRequestId())
+	}
+
+	s.SetLastMainRequestId("req_abc123")
+	if s.GetLastMainRequestId() != "req_abc123" {
+		t.Errorf("LastMainRequestId = %q, want %q", s.GetLastMainRequestId(), "req_abc123")
+	}
+
+	// Update
+	s.SetLastMainRequestId("req_def456")
+	if s.GetLastMainRequestId() != "req_def456" {
+		t.Errorf("LastMainRequestId = %q, want %q", s.GetLastMainRequestId(), "req_def456")
+	}
+}
