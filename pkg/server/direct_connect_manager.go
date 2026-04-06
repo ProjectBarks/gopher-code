@@ -158,7 +158,13 @@ func (m *DirectConnectSessionManager) dial(ctx context.Context) error {
 func (m *DirectConnectSessionManager) readLoop(ctx context.Context) {
 	backoff := m.reconnectBackoff
 	for {
-		_, data, err := m.conn.Read(ctx)
+		m.mu.Lock()
+		conn := m.conn
+		m.mu.Unlock()
+		if conn == nil {
+			return
+		}
+		_, data, err := conn.Read(ctx)
 		if err != nil {
 			// Connection closed or error
 			if m.callbacks.OnDisconnected != nil {
