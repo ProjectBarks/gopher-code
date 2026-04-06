@@ -1774,3 +1774,367 @@ func TestDesktop_HasRegistration(t *testing.T) {
 		t.Errorf("Unexpected description: %q", reg.Description)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T243: /diff tests
+// ---------------------------------------------------------------------------
+
+func TestDiff_Registered(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/diff") {
+		t.Fatal("Should have /diff handler")
+	}
+	reg := d.GetRegistration("/diff")
+	if reg == nil {
+		t.Fatal("Should have registration for /diff")
+	}
+	if reg.Description != "Show uncommitted changes" {
+		t.Errorf("Unexpected description: %q", reg.Description)
+	}
+}
+
+func TestDiff_ReturnsShowDiffMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/diff")
+	if cmd == nil {
+		t.Fatal("Expected non-nil command")
+	}
+	msg := cmd()
+	result, ok := msg.(ShowDiffMsg)
+	if !ok {
+		t.Fatalf("Expected ShowDiffMsg, got %T", msg)
+	}
+	// In a git repo, output should be non-empty (either diff or "No uncommitted changes.")
+	if result.Output == "" {
+		t.Error("Expected non-empty diff output")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T244: /doctor tests (verify existing registration)
+// ---------------------------------------------------------------------------
+
+func TestDoctor_Registered(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/doctor") {
+		t.Fatal("Should have /doctor handler")
+	}
+	cmd := d.Dispatch("/doctor")
+	msg := cmd()
+	if _, ok := msg.(ShowDoctorMsg); !ok {
+		t.Fatalf("Expected ShowDoctorMsg, got %T", msg)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T245: /effort tests
+// ---------------------------------------------------------------------------
+
+func TestEffort_Registered(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/effort") {
+		t.Fatal("Should have /effort handler")
+	}
+	reg := d.GetRegistration("/effort")
+	if reg == nil {
+		t.Fatal("Should have registration for /effort")
+	}
+	if reg.ArgumentHint != "[low|medium|high|max|auto]" {
+		t.Errorf("Unexpected argument hint: %q", reg.ArgumentHint)
+	}
+}
+
+func TestEffort_ShowCurrent(t *testing.T) {
+	h := newEffortHandler(EffortDeps{
+		GetLevel: func() string { return "high" },
+		SetLevel: func(level string) error { return nil },
+	})
+	msg := h("")()
+	result, ok := msg.(EffortMsg)
+	if !ok {
+		t.Fatalf("Expected EffortMsg, got %T", msg)
+	}
+	if result.Level != "high" {
+		t.Errorf("Expected level 'high', got %q", result.Level)
+	}
+	if !strings.Contains(result.Message, "high") {
+		t.Errorf("Message should mention 'high': %q", result.Message)
+	}
+}
+
+func TestEffort_ShowCurrentAuto(t *testing.T) {
+	h := newEffortHandler(EffortDeps{
+		GetLevel: func() string { return "auto" },
+		SetLevel: func(level string) error { return nil },
+	})
+	msg := h("")()
+	result := msg.(EffortMsg)
+	if result.Level != "auto" {
+		t.Errorf("Expected level 'auto', got %q", result.Level)
+	}
+	if result.Message != "Effort level: auto" {
+		t.Errorf("Unexpected message: %q", result.Message)
+	}
+}
+
+func TestEffort_SetLevel(t *testing.T) {
+	var saved string
+	h := newEffortHandler(EffortDeps{
+		GetLevel: func() string { return "auto" },
+		SetLevel: func(level string) error { saved = level; return nil },
+	})
+	msg := h("medium")()
+	result := msg.(EffortMsg)
+	if result.Level != "medium" {
+		t.Errorf("Expected level 'medium', got %q", result.Level)
+	}
+	if saved != "medium" {
+		t.Errorf("Expected SetLevel called with 'medium', got %q", saved)
+	}
+	if !strings.Contains(result.Message, "Balanced approach") {
+		t.Errorf("Message should contain description: %q", result.Message)
+	}
+}
+
+func TestEffort_InvalidArg(t *testing.T) {
+	h := newEffortHandler(EffortDeps{
+		GetLevel: func() string { return "auto" },
+		SetLevel: func(level string) error { return nil },
+	})
+	msg := h("banana")()
+	result := msg.(EffortMsg)
+	if result.Error == nil {
+		t.Fatal("Expected error for invalid effort level")
+	}
+	if !strings.Contains(result.Error.Error(), "Invalid argument: banana") {
+		t.Errorf("Unexpected error: %v", result.Error)
+	}
+}
+
+func TestEffort_Help(t *testing.T) {
+	h := newEffortHandler(EffortDeps{
+		GetLevel: func() string { return "auto" },
+		SetLevel: func(level string) error { return nil },
+	})
+	for _, arg := range []string{"help", "-h", "--help"} {
+		msg := h(arg)()
+		result := msg.(EffortMsg)
+		if !strings.Contains(result.Message, "Usage: /effort") {
+			t.Errorf("help arg %q: expected usage text, got %q", arg, result.Message)
+		}
+	}
+}
+
+func TestEffort_EnvOverride(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_EFFORT_LEVEL", "high")
+	h := newEffortHandler(EffortDeps{
+		GetLevel: func() string { return "auto" },
+		SetLevel: func(level string) error { return nil },
+	})
+	msg := h("medium")()
+	result := msg.(EffortMsg)
+	if !strings.Contains(result.Message, "CLAUDE_CODE_EFFORT_LEVEL=high overrides") {
+		t.Errorf("Expected env override message, got %q", result.Message)
+	}
+}
+
+func TestEffort_AutoClearsWithEnvWarning(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_EFFORT_LEVEL", "max")
+	h := newEffortHandler(EffortDeps{
+		GetLevel: func() string { return "high" },
+		SetLevel: func(level string) error { return nil },
+	})
+	msg := h("auto")()
+	result := msg.(EffortMsg)
+	if !strings.Contains(result.Message, "CLAUDE_CODE_EFFORT_LEVEL=max still controls") {
+		t.Errorf("Expected env warning message, got %q", result.Message)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T246: /exit tests
+// ---------------------------------------------------------------------------
+
+func TestExit_Registered(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/exit") {
+		t.Fatal("Should have /exit handler")
+	}
+	if !d.HasHandler("/quit") {
+		t.Fatal("/quit should be aliased to /exit")
+	}
+}
+
+func TestExit_ReturnsGoodbyeMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/exit")
+	msg := cmd()
+	result, ok := msg.(ExitGoodbyeMsg)
+	if !ok {
+		t.Fatalf("Expected ExitGoodbyeMsg, got %T", msg)
+	}
+	valid := map[string]bool{
+		"Goodbye!":         true,
+		"See ya!":          true,
+		"Bye!":             true,
+		"Catch you later!": true,
+	}
+	if !valid[result.Message] {
+		t.Errorf("Unexpected goodbye message: %q", result.Message)
+	}
+}
+
+func TestExit_QuitAlias(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/quit")
+	msg := cmd()
+	if _, ok := msg.(ExitGoodbyeMsg); !ok {
+		t.Fatalf("Expected ExitGoodbyeMsg via /quit alias, got %T", msg)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T247: /export tests
+// ---------------------------------------------------------------------------
+
+func TestExport_Registered(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/export") {
+		t.Fatal("Should have /export handler")
+	}
+	reg := d.GetRegistration("/export")
+	if reg == nil {
+		t.Fatal("Should have registration for /export")
+	}
+	if reg.Description != "Export conversation to file" {
+		t.Errorf("Unexpected description: %q", reg.Description)
+	}
+}
+
+func TestExport_NoMessages(t *testing.T) {
+	h := newExportHandler(ExportDeps{
+		GetMessages: func() []message.Message { return nil },
+	})
+	msg := h("")()
+	result := msg.(ExportMsg)
+	if result.Error == nil {
+		t.Fatal("Expected error when no messages")
+	}
+	if !strings.Contains(result.Error.Error(), "no messages to export") {
+		t.Errorf("Unexpected error: %v", result.Error)
+	}
+}
+
+func TestExport_WritesFile(t *testing.T) {
+	dir := t.TempDir()
+	origDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(origDir)
+
+	msgs := []message.Message{
+		{Role: message.RoleUser, Content: []message.ContentBlock{{Type: message.ContentText, Text: "Hello world"}}},
+		{Role: message.RoleAssistant, Content: []message.ContentBlock{{Type: message.ContentText, Text: "Hi there"}}},
+	}
+	h := newExportHandler(ExportDeps{
+		GetMessages: func() []message.Message { return msgs },
+	})
+	msg := h("")()
+	result := msg.(ExportMsg)
+	if result.Error != nil {
+		t.Fatalf("Unexpected error: %v", result.Error)
+	}
+	if !strings.Contains(result.Message, "Conversation exported to:") {
+		t.Errorf("Unexpected message: %q", result.Message)
+	}
+	if !strings.HasSuffix(result.Path, ".txt") {
+		t.Errorf("Expected .txt file, got %q", result.Path)
+	}
+	// Verify file content
+	data, err := os.ReadFile(result.Path)
+	if err != nil {
+		t.Fatalf("Failed to read exported file: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "User:\nHello world") {
+		t.Errorf("Expected user message in export, got %q", content)
+	}
+	if !strings.Contains(content, "Assistant:\nHi there") {
+		t.Errorf("Expected assistant message in export, got %q", content)
+	}
+}
+
+func TestExport_CustomFilename(t *testing.T) {
+	dir := t.TempDir()
+	origDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(origDir)
+
+	msgs := []message.Message{
+		{Role: message.RoleUser, Content: []message.ContentBlock{{Type: message.ContentText, Text: "test"}}},
+	}
+	h := newExportHandler(ExportDeps{
+		GetMessages: func() []message.Message { return msgs },
+	})
+	msg := h("my-chat.md")()
+	result := msg.(ExportMsg)
+	if result.Error != nil {
+		t.Fatalf("Unexpected error: %v", result.Error)
+	}
+	// Should replace .md with .txt
+	if !strings.HasSuffix(result.Path, "my-chat.txt") {
+		t.Errorf("Expected my-chat.txt, got %q", result.Path)
+	}
+}
+
+func TestSanitizeFilename(t *testing.T) {
+	tests := []struct {
+		input, want string
+	}{
+		{"Hello World!", "hello-world"},
+		{"test---file", "test-file"},
+		{"-leading-trailing-", "leading-trailing"},
+		{"UPPER CASE", "upper-case"},
+		{"special@#$chars", "specialchars"},
+	}
+	for _, tt := range tests {
+		got := sanitizeFilename(tt.input)
+		if got != tt.want {
+			t.Errorf("sanitizeFilename(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestExtractFirstPrompt(t *testing.T) {
+	short := message.Message{
+		Role:    message.RoleUser,
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: "short"}},
+	}
+	long := message.Message{
+		Role:    message.RoleUser,
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: strings.Repeat("a", 100)}},
+	}
+
+	got := extractFirstPrompt([]message.Message{short})
+	if got != "short" {
+		t.Errorf("Expected 'short', got %q", got)
+	}
+
+	got = extractFirstPrompt([]message.Message{long})
+	if len(got) != 52 { // 49 chars + 3-byte ellipsis
+		t.Errorf("Expected 52 bytes (49 chars + ellipsis), got %d: %q", len(got), got)
+	}
+	if !strings.HasSuffix(got, "\u2026") {
+		t.Errorf("Expected ellipsis suffix, got %q", got)
+	}
+}
+
+func TestIsEffortLevel(t *testing.T) {
+	for _, level := range []string{"low", "medium", "high", "max", "auto"} {
+		if !isEffortLevel(level) {
+			t.Errorf("Expected %q to be a valid effort level", level)
+		}
+	}
+	if isEffortLevel("banana") {
+		t.Error("'banana' should not be a valid effort level")
+	}
+}

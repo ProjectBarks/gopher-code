@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"math/rand"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -185,6 +188,31 @@ type CostMsg struct {
 
 // DesktopMsg is returned when /desktop attempts handoff.
 type DesktopMsg struct {
+	Message string
+	Error   error
+}
+
+// ShowDiffMsg is returned when /diff requests showing uncommitted changes.
+type ShowDiffMsg struct {
+	Output string
+	Error  error
+}
+
+// EffortMsg is returned when /effort sets or displays the effort level.
+type EffortMsg struct {
+	Level   string
+	Message string
+	Error   error
+}
+
+// ExitGoodbyeMsg requests graceful shutdown with a goodbye message.
+type ExitGoodbyeMsg struct {
+	Message string
+}
+
+// ExportMsg is returned when /export writes the conversation to a file.
+type ExportMsg struct {
+	Path    string
 	Message string
 	Error   error
 }
@@ -1437,6 +1465,274 @@ func getPlatform() string {
 	return runtime.GOOS
 }
 
+// ---------------------------------------------------------------------------
+// T243: /diff — show uncommitted changes
+// Source: src/commands/diff/diff.tsx
+// ---------------------------------------------------------------------------
+
+// newDiffHandler creates the /diff command handler.
+// Runs `git diff --stat` and returns the output as ShowDiffMsg.
+func newDiffHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			out, err := exec.Command("git", "diff", "--stat").CombinedOutput()
+			text := strings.TrimSpace(string(out))
+			if err != nil {
+				if text == "" {
+					text = err.Error()
+				}
+				return ShowDiffMsg{Output: text, Error: err}
+			}
+			if text == "" {
+				text = "No uncommitted changes."
+			}
+			return ShowDiffMsg{Output: text}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T245: /effort — effort level configuration
+// Source: src/commands/effort/effort.tsx
+// ---------------------------------------------------------------------------
+
+// EffortDeps holds dependencies for the /effort handler.
+type EffortDeps struct {
+	GetLevel func() string
+	SetLevel func(level string) error
+}
+
+// effortLevels are the valid effort levels.
+var effortLevels = []string{"low", "medium", "high", "max", "auto"}
+
+// effortDescriptions maps levels to their human descriptions.
+var effortDescriptions = map[string]string{
+	"low":    "Quick, straightforward implementation",
+	"medium": "Balanced approach with standard testing",
+	"high":   "Comprehensive implementation with extensive testing",
+	"max":    "Maximum capability with deepest reasoning (Opus 4.6 only)",
+	"auto":   "Use the default effort level for your model",
+}
+
+// effortUsageText is the help text shown for /effort help.
+const effortUsageText = `Usage: /effort [low|medium|high|max|auto]
+
+Effort levels:
+- low: Quick, straightforward implementation
+- medium: Balanced approach with standard testing
+- high: Comprehensive implementation with extensive testing
+- max: Maximum capability with deepest reasoning (Opus 4.6 only)
+- auto: Use the default effort level for your model`
+
+// isEffortLevel returns true if s is a valid effort level.
+func isEffortLevel(s string) bool {
+	for _, l := range effortLevels {
+		if s == l {
+			return true
+		}
+	}
+	return false
+}
+
+// newEffortHandler creates the /effort command handler.
+func newEffortHandler(deps EffortDeps) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			arg := strings.TrimSpace(strings.ToLower(args))
+
+			// Help args
+			if arg == "help" || arg == "-h" || arg == "--help" {
+				return EffortMsg{Message: effortUsageText}
+			}
+
+			// No args or status: show current
+			if arg == "" || arg == "current" || arg == "status" {
+				cur := deps.GetLevel()
+				if cur == "" || cur == "auto" {
+					return EffortMsg{Level: "auto", Message: "Effort level: auto"}
+				}
+				desc := effortDescriptions[cur]
+				return EffortMsg{
+					Level:   cur,
+					Message: fmt.Sprintf("Current effort level: %s (%s)", cur, desc),
+				}
+			}
+
+			// Auto/unset: clear
+			if arg == "auto" || arg == "unset" {
+				envRaw := os.Getenv("CLAUDE_CODE_EFFORT_LEVEL")
+				if err := deps.SetLevel("auto"); err != nil {
+					return EffortMsg{Error: fmt.Errorf("Failed to set effort level: %s", err)}
+				}
+				msg := "Effort level set to auto"
+				if envRaw != "" {
+					msg = fmt.Sprintf("Cleared effort from settings, but CLAUDE_CODE_EFFORT_LEVEL=%s still controls this session", envRaw)
+				}
+				return EffortMsg{Level: "auto", Message: msg}
+			}
+
+			// Valid level
+			if isEffortLevel(arg) {
+				envRaw := os.Getenv("CLAUDE_CODE_EFFORT_LEVEL")
+				if err := deps.SetLevel(arg); err != nil {
+					return EffortMsg{Error: fmt.Errorf("Failed to set effort level: %s", err)}
+				}
+				desc := effortDescriptions[arg]
+				msg := fmt.Sprintf("Set effort level to %s: %s", arg, desc)
+				if envRaw != "" {
+					msg = fmt.Sprintf("CLAUDE_CODE_EFFORT_LEVEL=%s overrides this session \u2014 clear it and %s takes over", envRaw, arg)
+				}
+				return EffortMsg{Level: arg, Message: msg}
+			}
+
+			// Invalid
+			return EffortMsg{
+				Error: fmt.Errorf("Invalid argument: %s. Valid options are: low, medium, high, max, auto", arg),
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T246: /exit — graceful shutdown with goodbye message
+// Source: src/commands/exit/exit.tsx
+// ---------------------------------------------------------------------------
+
+// goodbyeMessages matches the TS GOODBYE_MESSAGES array.
+var goodbyeMessages = []string{"Goodbye!", "See ya!", "Bye!", "Catch you later!"}
+
+// newExitHandler creates the /exit command handler with random goodbye.
+func newExitHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			msg := goodbyeMessages[rand.Intn(len(goodbyeMessages))]
+			return ExitGoodbyeMsg{Message: msg}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T247: /export — export conversation to file
+// Source: src/commands/export/export.tsx
+// ---------------------------------------------------------------------------
+
+// ExportDeps holds dependencies for the /export handler.
+type ExportDeps struct {
+	GetMessages func() []message.Message
+}
+
+// sanitizeFilename normalizes text for use in a filename.
+// Source: src/commands/export/export.tsx — sanitizeFilename
+func sanitizeFilename(text string) string {
+	s := strings.ToLower(text)
+	s = regexp.MustCompile(`[^a-z0-9\s-]`).ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, " ", "-")
+	s = regexp.MustCompile(`-+`).ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	return s
+}
+
+// messageText extracts the concatenated text from a message's content blocks.
+func messageText(m message.Message) string {
+	var parts []string
+	for _, block := range m.Content {
+		if block.Text != "" {
+			parts = append(parts, block.Text)
+		}
+	}
+	return strings.Join(parts, "")
+}
+
+// extractFirstPrompt returns the first user message text, truncated to 49 chars + ellipsis.
+func extractFirstPrompt(msgs []message.Message) string {
+	for _, m := range msgs {
+		if m.Role == message.RoleUser {
+			text := strings.TrimSpace(messageText(m))
+			if text == "" {
+				continue
+			}
+			if len(text) > 49 {
+				return text[:49] + "\u2026"
+			}
+			return text
+		}
+	}
+	return ""
+}
+
+// renderMessagesToPlainText renders messages as a plain text transcript.
+func renderMessagesToPlainText(msgs []message.Message) string {
+	var b strings.Builder
+	for _, m := range msgs {
+		text := messageText(m)
+		if text == "" {
+			continue
+		}
+		switch m.Role {
+		case message.RoleUser:
+			b.WriteString("User:\n")
+		case message.RoleAssistant:
+			b.WriteString("Assistant:\n")
+		default:
+			b.WriteString(string(m.Role) + ":\n")
+		}
+		b.WriteString(text)
+		b.WriteString("\n\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// newExportHandler creates the /export command handler.
+func newExportHandler(deps ExportDeps) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			msgs := deps.GetMessages()
+
+			// Render transcript
+			content := renderMessagesToPlainText(msgs)
+			if content == "" {
+				return ExportMsg{Error: fmt.Errorf("no messages to export")}
+			}
+
+			// Build filename
+			ts := time.Now().Format("2006-01-02-15-04-05")
+			var filename string
+			arg := strings.TrimSpace(args)
+			if arg != "" {
+				// User-provided filename: enforce .txt
+				name := strings.TrimSuffix(arg, filepath.Ext(arg))
+				filename = sanitizeFilename(name) + ".txt"
+			} else {
+				// Auto-generate from first prompt
+				prompt := extractFirstPrompt(msgs)
+				if prompt != "" {
+					sanitized := sanitizeFilename(prompt)
+					if sanitized != "" {
+						filename = ts + "-" + sanitized + ".txt"
+					}
+				}
+				if filename == "" {
+					filename = "conversation-" + ts + ".txt"
+				}
+			}
+
+			// Write file
+			if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+				return ExportMsg{
+					Error:   err,
+					Message: fmt.Sprintf("Failed to export conversation: %s", err),
+				}
+			}
+
+			abs, _ := filepath.Abs(filename)
+			return ExportMsg{
+				Path:    abs,
+				Message: fmt.Sprintf("Conversation exported to: %s", abs),
+			}
+		}
+	}
+}
+
 func (d *Dispatcher) registerDefaults() {
 	d.Register("/model", func(args string) tea.Cmd {
 		if args == "" {
@@ -1468,9 +1764,7 @@ func (d *Dispatcher) registerDefaults() {
 		return func() tea.Msg { return ShowHelpMsg{} }
 	})
 
-	d.Register("/quit", func(args string) tea.Cmd {
-		return func() tea.Msg { return QuitMsg{} }
-	})
+	// NOTE: /quit is now an alias for /exit (T246), registered below.
 
 	// T237: /compact — model-driven compaction (expanded from stub)
 	d.RegisterCommand(CommandRegistration{
@@ -1684,5 +1978,50 @@ func (d *Dispatcher) registerDefaults() {
 		Type:        CommandTypeLocal,
 		Source:      "builtin",
 		Handler:     newDesktopHandler(),
+	})
+
+	// T243: /diff — show uncommitted changes
+	d.RegisterCommand(CommandRegistration{
+		Name:        "diff",
+		Description: "Show uncommitted changes",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler:     newDiffHandler(),
+	})
+
+	// T245: /effort — set or display effort level
+	d.RegisterCommand(CommandRegistration{
+		Name:         "effort",
+		Description:  "Set effort level",
+		Type:         CommandTypeLocal,
+		ArgumentHint: "[low|medium|high|max|auto]",
+		Source:       "builtin",
+		Handler: newEffortHandler(EffortDeps{
+			GetLevel: func() string { return "auto" },
+			SetLevel: func(level string) error { return nil },
+		}),
+	})
+
+	// T246: /exit — graceful shutdown with goodbye message
+	d.RegisterCommand(CommandRegistration{
+		Name:        "exit",
+		Description: "Exit Claude Code",
+		Type:        CommandTypeLocal,
+		Aliases:     []string{"quit"},
+		Immediate:   true,
+		Source:      "builtin",
+		Handler:     newExitHandler(),
+	})
+
+	// T247: /export — export conversation to file
+	d.RegisterCommand(CommandRegistration{
+		Name:         "export",
+		Description:  "Export conversation to file",
+		Type:         CommandTypeLocal,
+		ArgumentHint: "[filename]",
+		Source:       "builtin",
+		Handler: newExportHandler(ExportDeps{
+			GetMessages: func() []message.Message { return nil },
+		}),
 	})
 }
