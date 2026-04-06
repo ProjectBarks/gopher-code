@@ -447,6 +447,8 @@ func TestParity_DispatcherDefaultCommands(t *testing.T) {
 		{"/quit", "QuitMsg"},
 		{"/compact", "CompactMsg"},
 		{"/thinking", "ThinkingToggleMsg"},
+		{"/doctor", "ShowDoctorMsg"},
+		{"/resume", "ShowResumeMsg"},
 	}
 
 	for _, tc := range cases {
@@ -484,10 +486,10 @@ func TestParity_DispatcherDefaultCommands(t *testing.T) {
 		t.Error("HasHandler should be false for unknown command")
 	}
 
-	// Commands() returns all 8 (including /doctor)
+	// Commands() returns all 9 (including /doctor and /resume)
 	cmds := d.Commands()
-	if len(cmds) != 8 {
-		t.Errorf("Commands() should return 8 default commands, got %d: %v", len(cmds), cmds)
+	if len(cmds) != 9 {
+		t.Errorf("Commands() should return 9 default commands, got %d: %v", len(cmds), cmds)
 	}
 }
 

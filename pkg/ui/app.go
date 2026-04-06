@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	pkgdoctor "github.com/projectbarks/gopher-code/pkg/doctor"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/session"
@@ -122,6 +123,10 @@ type AppModel struct {
 	showDoctor bool
 	doctorModel *screens.DoctorModel
 
+	// Resume screen (modal overlay)
+	showResume bool
+	resumeModel *screens.ResumeModel
+
 	// Ctrl+C double-press tracking
 	// Claude requires two Ctrl+C presses on empty idle input to quit.
 	// First press shows "Press Ctrl-C again to exit" hint.
@@ -213,6 +218,28 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// When resume screen is active, delegate all messages to it.
+	if a.showResume && a.resumeModel != nil {
+		switch msg := msg.(type) {
+		case tea.WindowSizeMsg:
+			a.width = msg.Width
+			a.height = msg.Height
+			a.resumeModel.Update(msg)
+			return a, nil
+		case screens.ResumeDoneMsg:
+			a.showResume = false
+			a.resumeModel = nil
+			return a, nil
+		case screens.ResumeSelectMsg:
+			a.showResume = false
+			a.resumeModel = nil
+			return a.handleResumeSelect(msg.SessionID)
+		default:
+			a.resumeModel.Update(msg)
+			return a, nil
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		return a.handleResize(msg)
@@ -283,6 +310,19 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case commands.ShowDoctorMsg:
 		return a.handleShowDoctor()
 
+	case commands.ShowResumeMsg:
+		return a.handleShowResume()
+
+	case screens.ResumeDoneMsg:
+		a.showResume = false
+		a.resumeModel = nil
+		return a, nil
+
+	case screens.ResumeSelectMsg:
+		a.showResume = false
+		a.resumeModel = nil
+		return a.handleResumeSelect(msg.SessionID)
+
 	case screens.DoctorDoneMsg:
 		a.showDoctor = false
 		a.doctorModel = nil
@@ -330,6 +370,11 @@ func (a *AppModel) View() tea.View {
 		return a.doctorModel.View()
 	}
 
+	// Resume screen overlay
+	if a.showResume && a.resumeModel != nil {
+		return a.resumeModel.View()
+	}
+
 	t := theme.Current()
 	cs := t.Colors()
 	var sections []string
@@ -373,20 +418,10 @@ func (a *AppModel) View() tea.View {
 // --- Message handlers ---
 
 func (a *AppModel) handleShowDoctor() (*AppModel, tea.Cmd) {
-	// Build doctor config with current session info.
-	// Source: Doctor.tsx — gathers diagnostic data on mount.
-	cfg := screens.DoctorConfig{
-		Diagnostic: &screens.DoctorDiagnostic{
-			Version:            "0.2.0",
-			InstallationType:   "go-binary",
-			InstallationPath:   "gopher-code",
-			InvokedBinary:      "gopher-code",
-			ConfigInstallMethod: "direct",
-			AutoUpdates:        "enabled",
-		},
-		AutoUpdates:   "enabled",
-		UpdateChannel: "latest",
-	}
+	// Collect diagnostic data using the T69 aggregator.
+	// Source: Doctor.tsx — gathers diagnostic data on mount via getDoctorDiagnostic.
+	diag := pkgdoctor.Collect(pkgdoctor.CollectOptions{})
+	cfg := screens.NewDoctorConfigFromDiagnostic(diag)
 	a.doctorModel = screens.NewDoctorModel(cfg)
 	a.showDoctor = true
 	// Send a resize so doctor knows terminal dimensions.
@@ -774,4 +809,74 @@ func (a *AppModel) handleQueryDone(msg queryDoneMsg) (*AppModel, tea.Cmd) {
 	a.statusLine.Update(components.ModeChangeMsg{Mode: components.ModeIdle})
 
 	return a, nil
+}
+
+func (a *AppModel) handleShowResume() (*AppModel, tea.Cmd) {
+	// Load session list for the resume picker.
+	// Source: ResumeConversation.tsx — loads sessions on mount
+	sessions, err := session.ListSessions()
+	if err != nil {
+		errMsg := message.Message{
+			Role:    message.RoleAssistant,
+			Content: []message.ContentBlock{{Type: message.ContentText, Text: "Error loading sessions: " + err.Error()}},
+		}
+		a.conversation.AddMessage(errMsg)
+		return a, nil
+	}
+
+	a.resumeModel = screens.NewResumeModel(sessions)
+	a.showResume = true
+	if a.width > 0 && a.height > 0 {
+		a.resumeModel.Update(tea.WindowSizeMsg{Width: a.width, Height: a.height})
+	}
+	return a, nil
+}
+
+func (a *AppModel) handleResumeSelect(sessionID string) (*AppModel, tea.Cmd) {
+	// Load the selected session.
+	// Source: ResumeConversation.tsx — onSelect callback
+	loaded, err := session.Load(sessionID)
+	if err != nil {
+		errMsg := message.Message{
+			Role:    message.RoleAssistant,
+			Content: []message.ContentBlock{{Type: message.ContentText, Text: "Error loading session: " + err.Error()}},
+		}
+		a.conversation.AddMessage(errMsg)
+		return a, nil
+	}
+
+	// Replace current session with the loaded one
+	if a.session != nil {
+		loaded.CWD = a.session.CWD
+		loaded.Config.SystemPrompt = a.session.Config.SystemPrompt
+	}
+	a.session = loaded
+
+	// Reload conversation from restored session messages
+	a.conversation.Update(components.ClearMessagesMsg{})
+	for _, msg := range loaded.Messages {
+		a.conversation.AddMessage(msg)
+	}
+
+	// Update header
+	a.header.SetModel(loaded.Config.Model)
+
+	// Update status line
+	a.statusLine = components.NewStatusLine(loaded)
+
+	infoMsg := message.Message{
+		Role:    message.RoleAssistant,
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: fmt.Sprintf("Resumed session %s (%d turns)", shortSessionID(loaded.ID), loaded.TurnCount)}},
+	}
+	a.conversation.AddMessage(infoMsg)
+
+	return a, nil
+}
+
+// shortSessionID returns first 8 chars of a session ID.
+func shortSessionID(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
 }
