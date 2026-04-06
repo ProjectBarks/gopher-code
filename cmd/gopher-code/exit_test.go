@@ -100,7 +100,7 @@ func TestCLIErrorf(t *testing.T) {
 	}
 }
 
-// TestMainGo_NoDirectOsExit scans main.go for raw os.Exit calls.
+// TestMainGo_NoDirectOsExit scans all non-test Go files for raw os.Exit calls.
 // All exit paths must use cliError / cliErrorf / cliOk instead.
 // The only allowed file for os.Exit is exit.go (which defines exitFunc).
 func TestMainGo_NoDirectOsExit(t *testing.T) {
@@ -135,6 +135,42 @@ func TestMainGo_NoDirectOsExit(t *testing.T) {
 			}
 			if osExitRe.MatchString(line) {
 				t.Errorf("%s:%d: found direct os.Exit call — use cliError/cliErrorf/cliOk instead:\n  %s", name, i+1, trimmed)
+			}
+		}
+	}
+}
+
+// TestNoDirectExitFunc scans all non-test Go files (except exit.go) for bare
+// exitFunc( calls. All exit paths must go through cliError/cliErrorf/cliOk.
+func TestNoDirectExitFunc(t *testing.T) {
+	_, thisFile, _, _ := runtime.Caller(0)
+	pkgDir := filepath.Dir(thisFile)
+
+	exitFuncRe := regexp.MustCompile(`\bexitFunc\(`)
+
+	entries, err := os.ReadDir(pkgDir)
+	if err != nil {
+		t.Fatalf("reading package dir: %v", err)
+	}
+
+	for _, e := range entries {
+		name := e.Name()
+		// Skip test files, exit.go (defines exitFunc and the helpers), and non-Go files.
+		if strings.HasSuffix(name, "_test.go") || name == "exit.go" || !strings.HasSuffix(name, ".go") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(pkgDir, name))
+		if err != nil {
+			t.Fatalf("reading %s: %v", name, err)
+		}
+		lines := strings.Split(string(data), "\n")
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "//") {
+				continue
+			}
+			if exitFuncRe.MatchString(line) {
+				t.Errorf("%s:%d: found direct exitFunc call — use cliError/cliErrorf/cliOk instead:\n  %s", name, i+1, trimmed)
 			}
 		}
 	}
