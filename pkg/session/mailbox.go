@@ -35,6 +35,9 @@ func NewMailbox(teamsDir string) *Mailbox {
 	return &Mailbox{teamsDir: teamsDir}
 }
 
+// TeamsDir returns the root teams directory for this mailbox.
+func (m *Mailbox) TeamsDir() string { return m.teamsDir }
+
 // GetInboxPath returns the path to a teammate's inbox file.
 // Source: utils/teammateMailbox.ts:56-66
 func (m *Mailbox) GetInboxPath(agentName, teamName string) string {

@@ -102,9 +102,22 @@ func SpawnTeam(name, description, leadAgentID string) (*SpawnTeamResult, error) 
 	}, nil
 }
 
-// ReadTeamFile reads a team's configuration from disk.
+// ReadTeamFile reads a team's configuration from disk using the global teams dir.
 func ReadTeamFile(teamName string) (*TeamFile, error) {
 	path := GetTeamFilePath(teamName)
+	return readTeamFileAt(path)
+}
+
+// ReadTeamFileFromDir reads a team's configuration from an explicit teams directory.
+// This is used by components (e.g. SendMessageTool broadcast) that carry their own
+// teamsDir rather than relying on the global getTeamsDir.
+func ReadTeamFileFromDir(teamsDir, teamName string) (*TeamFile, error) {
+	safe := sanitizePathComponent(teamName)
+	path := filepath.Join(teamsDir, safe, "team.json")
+	return readTeamFileAt(path)
+}
+
+func readTeamFileAt(path string) (*TeamFile, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
