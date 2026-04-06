@@ -265,6 +265,81 @@ func TestSkillDefinitionToCommand_UserInvocableFalse(t *testing.T) {
 	}
 }
 
+// ── T37: user-toggleable with config integration ──────────────────────
+
+func TestGetBuiltinPlugins_UserDisablesDefaultEnabled(t *testing.T) {
+	ClearBuiltinPlugins()
+	defer ClearBuiltinPlugins()
+
+	RegisterBuiltinPlugin(BuiltinPluginDefinition{
+		Name:        "user-disabled",
+		Description: "Enabled by default, disabled by user",
+	})
+
+	// User explicitly disables it
+	EnabledPluginsFunc = func() map[string]bool {
+		return map[string]bool{"user-disabled@builtin": false}
+	}
+	defer func() { EnabledPluginsFunc = func() map[string]bool { return nil } }()
+
+	result := GetBuiltinPlugins()
+	if len(result.Enabled) != 0 {
+		t.Errorf("expected 0 enabled, got %d", len(result.Enabled))
+	}
+	if len(result.Disabled) != 1 {
+		t.Errorf("expected 1 disabled, got %d", len(result.Disabled))
+	}
+}
+
+// ── T36: isBuiltinPluginId additional edge cases ──────────────────────
+
+func TestIsBuiltinPluginID_ExactSuffix(t *testing.T) {
+	// Verify it checks @builtin suffix, not just "builtin" substring
+	if IsBuiltinPluginID("builtin@marketplace") {
+		t.Error("should not match 'builtin@marketplace'")
+	}
+	if !IsBuiltinPluginID("x@builtin") {
+		t.Error("should match 'x@builtin'")
+	}
+}
+
+// ── T39: skillDefinitionToCommand adapter completeness ────────────────
+
+func TestSkillDefinitionToCommand_AllFields(t *testing.T) {
+	cmd := skillDefinitionToCommand(SkillDefinition{
+		Name:                   "full-skill",
+		Description:            "Full skill",
+		AllowedTools:           []string{"Bash"},
+		ArgumentHint:           "<file>",
+		WhenToUse:              "When X",
+		Model:                  "claude-sonnet-4-20250514",
+		DisableModelInvocation: true,
+		Context:                "fork",
+		Agent:                  "my-agent",
+	})
+	if cmd.ArgumentHint != "<file>" {
+		t.Errorf("ArgumentHint = %q, want %q", cmd.ArgumentHint, "<file>")
+	}
+	if cmd.WhenToUse != "When X" {
+		t.Errorf("WhenToUse = %q, want %q", cmd.WhenToUse, "When X")
+	}
+	if cmd.Model != "claude-sonnet-4-20250514" {
+		t.Errorf("Model = %q, want %q", cmd.Model, "claude-sonnet-4-20250514")
+	}
+	if !cmd.DisableModelInvocation {
+		t.Error("DisableModelInvocation should be true")
+	}
+	if cmd.Context != "fork" {
+		t.Errorf("Context = %q, want %q", cmd.Context, "fork")
+	}
+	if cmd.Agent != "my-agent" {
+		t.Errorf("Agent = %q, want %q", cmd.Agent, "my-agent")
+	}
+	if cmd.ContentLength != 0 {
+		t.Errorf("ContentLength = %d, want 0", cmd.ContentLength)
+	}
+}
+
 func TestClearBuiltinPlugins(t *testing.T) {
 	ClearBuiltinPlugins()
 

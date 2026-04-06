@@ -53,6 +53,11 @@ type Settings struct {
 	// Updates
 	AutoUpdatesChannel string `json:"autoUpdatesChannel,omitempty"` // "latest", "beta", "stable"
 
+	// Plugins — user-toggleable enabled/disabled overrides for builtin plugins.
+	// Keys are plugin IDs (e.g., "my-plugin@builtin"), values are enabled state.
+	// Source: src/plugins/builtinPlugins.ts — settings.enabledPlugins
+	EnabledPlugins map[string]bool `json:"enabledPlugins,omitempty"`
+
 	// API
 	APIURL     string `json:"api_url,omitempty"`
 	APIVersion string `json:"api_version,omitempty"`
