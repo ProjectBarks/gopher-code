@@ -137,6 +137,23 @@ func GetToolPrompt(tool Tool) string {
 	return ""
 }
 
+// Aliaser is an optional interface tools implement to provide backward-
+// compatible alternative names. The registry matches tool_use blocks against
+// both Name() and Aliases().
+// Source: Tool.ts:432 — aliases
+type Aliaser interface {
+	Aliases() []string
+}
+
+// GetAliases returns the tool's aliases if it implements Aliaser.
+// Returns nil otherwise.
+func GetAliases(tool Tool) []string {
+	if a, ok := tool.(Aliaser); ok {
+		return a.Aliases()
+	}
+	return nil
+}
+
 // SearchHinter is an optional interface tools implement to provide a search
 // hint for tool discovery via ToolSearch.
 // Source: Tool.ts:436 — searchHint

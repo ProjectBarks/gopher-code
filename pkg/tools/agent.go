@@ -37,13 +37,33 @@ func NewAgentTool(prov provider.ModelProvider, reg *ToolRegistry, queryFn QueryF
 	return &AgentTool{provider: prov, registry: reg, queryFn: queryFn}
 }
 
-func (t *AgentTool) Name() string        { return "Agent" }
+func (t *AgentTool) Name() string { return AgentToolName }
 func (t *AgentTool) Description() string {
-	return "Launch a sub-agent to handle a complex task. The agent runs autonomously and returns its result."
+	return "Launch a new agent"
 }
 func (t *AgentTool) IsReadOnly() bool { return false }
 
-// Source: AgentTool/AgentTool.tsx inputSchema
+// Aliases returns the legacy tool name for backward compatibility.
+// Source: AgentTool/AgentTool.tsx:228
+func (t *AgentTool) Aliases() []string { return []string{LegacyAgentToolName} }
+
+// SearchHint returns the search hint for tool discovery.
+// Source: AgentTool/AgentTool.tsx:227
+func (t *AgentTool) SearchHint() string { return "delegate work to a subagent" }
+
+// MaxResultSizeChars returns the max result size for agent output.
+// Source: AgentTool/AgentTool.tsx:229
+func (t *AgentTool) MaxResultSizeChars() int { return 100_000 }
+
+// Prompt returns the system-prompt section for the Agent tool.
+// Source: AgentTool/prompt.ts:66-286
+func (t *AgentTool) Prompt() string {
+	// TODO(T502): build agentListSection from loaded agent definitions
+	agentListSection := "Available agent types are listed in <system-reminder> messages in the conversation."
+	return AgentToolPrompt(agentListSection)
+}
+
+// Source: AgentTool/AgentTool.tsx:82-102 inputSchema
 func (t *AgentTool) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
@@ -62,26 +82,34 @@ func (t *AgentTool) InputSchema() json.RawMessage {
 			},
 			"model": {
 				"type": "string",
-				"description": "Optional model override for this agent. If omitted, uses the agent definition's model, or inherits from the parent.",
+				"description": "Optional model override for this agent. Takes precedence over the agent definition's model frontmatter. If omitted, uses the agent definition's model, or inherits from the parent.",
 				"enum": ["sonnet", "opus", "haiku"]
+			},
+			"run_in_background": {
+				"type": "boolean",
+				"description": "Set to true to run this agent in the background. You will be notified when it completes."
 			},
 			"name": {
 				"type": "string",
 				"description": "Name for the spawned agent. Makes it addressable via SendMessage({to: name}) while running."
 			},
-			"run_in_background": {
-				"type": "boolean",
-				"description": "Set to true to run this agent in the background. You will be notified when it completes."
+			"team_name": {
+				"type": "string",
+				"description": "Team name for spawning. Uses current team context if omitted."
+			},
+			"mode": {
+				"type": "string",
+				"description": "Permission mode for spawned teammate (e.g., \"plan\" to require plan approval).",
+				"enum": ["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"]
 			},
 			"isolation": {
 				"type": "string",
 				"description": "Isolation mode. \"worktree\" creates a temporary git worktree so the agent works on an isolated copy of the repo.",
 				"enum": ["worktree"]
 			},
-			"mode": {
+			"cwd": {
 				"type": "string",
-				"description": "Permission mode for spawned teammate (e.g., \"plan\" to require plan approval).",
-				"enum": ["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"]
+				"description": "Absolute path to run the agent in. Overrides the working directory for all filesystem and shell operations within this agent. Mutually exclusive with isolation: \"worktree\"."
 			}
 		},
 		"required": ["description", "prompt"],
@@ -102,21 +130,12 @@ var agentModelAliases = map[string]string{
 }
 
 func (t *AgentTool) Execute(ctx context.Context, tc *ToolContext, input json.RawMessage) (*ToolOutput, error) {
-	var params struct {
-		Prompt       string `json:"prompt"`
-		Description  string `json:"description"`
-		SubagentType string `json:"subagent_type"`
-		Model        string `json:"model"`
-		Name         string `json:"name"`
-		RunInBG      bool   `json:"run_in_background"`
-		Isolation    string `json:"isolation"`
-		Mode         string `json:"mode"`
-	}
+	var params AgentToolInput
 	if err := json.Unmarshal(input, &params); err != nil {
 		return ErrorOutput("invalid input: " + err.Error()), nil
 	}
-	if params.Prompt == "" {
-		return ErrorOutput("prompt is required"), nil
+	if err := ValidateAgentToolInput(&params); err != nil {
+		return ErrorOutput(err.Error()), nil
 	}
 
 	// Resolve model: explicit override > parent session model > default
