@@ -33,7 +33,7 @@ const (
 type ParsedBinding struct {
 	Chord   Chord
 	Action  string
-	Context string
+	Context Context
 }
 
 // ParseKeystroke parses a string like "ctrl+shift+k" into a ParsedKeystroke.
@@ -167,7 +167,7 @@ func ParseBindings(blocks []KeybindingBlock) []ParsedBinding {
 			out = append(out, ParsedBinding{
 				Chord:   ParseChord(key),
 				Action:  action,
-				Context: string(block.Context),
+				Context: block.Context,
 			})
 		}
 	}

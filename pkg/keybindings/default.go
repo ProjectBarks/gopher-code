@@ -51,8 +51,8 @@ func modeCycleKey() string {
 	return "shift+tab"
 }
 
-// DefaultBindingBlocks returns the default keybinding blocks for all 20 contexts.
-func DefaultBindingBlocks() []KeybindingBlock {
+// DefaultBindings returns the default keybinding blocks for all 20 contexts.
+func DefaultBindings() []KeybindingBlock {
 	return []KeybindingBlock{
 		{Context: ContextGlobal, Bindings: map[string]string{
 			"ctrl+c":        string(ActionAppInterrupt),
@@ -62,7 +62,7 @@ func DefaultBindingBlocks() []KeybindingBlock {
 			"ctrl+o":        string(ActionAppToggleTranscript),
 			"ctrl+shift+b":  string(ActionAppToggleBrief),
 			"ctrl+shift+o":  string(ActionAppToggleTeammatePreview),
-			"ctrl+r":        string(ActionHistorySearchAction),
+			"ctrl+r":        string(ActionHistorySearch),
 			"ctrl+shift+f":  string(ActionAppGlobalSearch),
 			"cmd+shift+f":   string(ActionAppGlobalSearch),
 			"ctrl+shift+p":  string(ActionAppQuickOpen),
@@ -239,9 +239,9 @@ func DefaultBindingBlocks() []KeybindingBlock {
 	}
 }
 
-// DefaultBindings returns the default bindings as a BindingMap (context -> keystroke -> action).
-func DefaultBindings() BindingMap {
-	blocks := DefaultBindingBlocks()
+// DefaultBindingMap returns the default bindings as a BindingMap (context -> keystroke -> action).
+func DefaultBindingMap() BindingMap {
+	blocks := DefaultBindings()
 	m := make(BindingMap, len(blocks))
 	for _, block := range blocks {
 		binding := make(Binding, len(block.Bindings))
