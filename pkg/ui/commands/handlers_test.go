@@ -1,12 +1,17 @@
 package commands
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/projectbarks/gopher-code/pkg/message"
+	"github.com/projectbarks/gopher-code/pkg/session"
 )
 
 func TestDispatcherCreation(t *testing.T) {
@@ -50,6 +55,7 @@ func TestDispatcherModelCommand(t *testing.T) {
 }
 
 func TestDispatcherClearCommand(t *testing.T) {
+	// Default dispatcher returns ClearConversationMsg
 	d := NewDispatcher()
 	cmd := d.Dispatch("/clear")
 	if cmd == nil {
@@ -294,7 +300,7 @@ func TestRegistrations(t *testing.T) {
 	for _, r := range regs {
 		found[r.Name] = true
 	}
-	for _, name := range []string{"add-dir", "advisor", "agents", "branch", "remote-control", "bridge-kick", "brief", "btw", "chrome"} {
+	for _, name := range []string{"add-dir", "advisor", "agents", "branch", "remote-control", "bridge-kick", "brief", "btw", "chrome", "clear", "color", "commit", "commit-push-pr", "compact"} {
 		if !found[name] {
 			t.Errorf("Expected registration for %q in Registrations()", name)
 		}
@@ -987,9 +993,507 @@ func TestChrome_HasRegistration(t *testing.T) {
 
 func TestNewCommandsRegisteredInDefaults(t *testing.T) {
 	d := NewDispatcher()
-	for _, name := range []string{"/branch", "/remote-control", "/bridge-kick", "/brief", "/btw", "/chrome"} {
+	for _, name := range []string{"/branch", "/remote-control", "/bridge-kick", "/brief", "/btw", "/chrome", "/clear", "/color", "/commit", "/commit-push-pr", "/compact"} {
 		if !d.HasHandler(name) {
 			t.Errorf("Default dispatcher should have handler for %s", name)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T233: /clear full clearing chain tests
+// ---------------------------------------------------------------------------
+
+func TestClear_FullChain(t *testing.T) {
+	s := &session.SessionState{
+		ID:              "old-id",
+		Messages:        []message.Message{message.UserMessage("hello")},
+		TurnCount:       5,
+		TotalCostUSD:    1.23,
+		TotalInputTokens: 1000,
+		HasExitedPlanMode: true,
+		PlanSlugCache:   map[string]string{"a": "b"},
+		InvokedSkills:   map[string]bool{"x": true},
+		CWD:             "/some/path",
+	}
+	planCleaned := false
+	postClearCalled := false
+
+	d := NewDispatcher()
+	d.Register("/clear", newClearHandler(ClearState{
+		Session:        func() *session.SessionState { return s },
+		OriginalCWD:    func() string { return "/original" },
+		ClearPlanSlugs: func() { planCleaned = true },
+		OnPostClear:    func() { postClearCalled = true },
+	}))
+
+	cmd := d.Dispatch("/clear")
+	msg := cmd()
+	if _, ok := msg.(ClearConversationMsg); !ok {
+		t.Fatalf("Expected ClearConversationMsg, got %T", msg)
+	}
+
+	// Session ID should have been regenerated.
+	if s.ID == "old-id" {
+		t.Error("Session ID should have been regenerated")
+	}
+	// Parent should be set to old ID.
+	if s.ParentSessionID != "old-id" {
+		t.Errorf("ParentSessionID = %q, want 'old-id'", s.ParentSessionID)
+	}
+	// Messages should be cleared.
+	if len(s.Messages) != 0 {
+		t.Errorf("Expected 0 messages, got %d", len(s.Messages))
+	}
+	// Turn count should be reset.
+	if s.TurnCount != 0 {
+		t.Errorf("TurnCount = %d, want 0", s.TurnCount)
+	}
+	// Costs reset.
+	if s.TotalCostUSD != 0 {
+		t.Errorf("TotalCostUSD = %f, want 0", s.TotalCostUSD)
+	}
+	if s.TotalInputTokens != 0 {
+		t.Errorf("TotalInputTokens = %d, want 0", s.TotalInputTokens)
+	}
+	// Plan mode reset.
+	if s.HasExitedPlanMode {
+		t.Error("HasExitedPlanMode should be false")
+	}
+	// Plan slug cache cleared.
+	if s.PlanSlugCache != nil {
+		t.Error("PlanSlugCache should be nil")
+	}
+	// Invoked skills cleared.
+	if s.InvokedSkills != nil {
+		t.Error("InvokedSkills should be nil")
+	}
+	// CWD reset to original.
+	if s.CWD != "/original" {
+		t.Errorf("CWD = %q, want '/original'", s.CWD)
+	}
+	// Callbacks invoked.
+	if !planCleaned {
+		t.Error("ClearPlanSlugs should have been called")
+	}
+	if !postClearCalled {
+		t.Error("OnPostClear should have been called")
+	}
+}
+
+func TestClear_SetsEnvVar(t *testing.T) {
+	s := &session.SessionState{ID: "before"}
+	d := NewDispatcher()
+	d.Register("/clear", newClearHandler(ClearState{
+		Session: func() *session.SessionState { return s },
+	}))
+
+	cmd := d.Dispatch("/clear")
+	cmd()
+
+	envID := os.Getenv("CLAUDE_CODE_SESSION_ID")
+	if envID != s.ID {
+		t.Errorf("CLAUDE_CODE_SESSION_ID = %q, want %q", envID, s.ID)
+	}
+}
+
+func TestClear_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/clear")
+	if reg == nil {
+		t.Fatal("Should have registration for /clear")
+	}
+	if reg.Description != "Clear conversation and reset session" {
+		t.Errorf("Unexpected description: %q", reg.Description)
+	}
+	if !reg.Immediate {
+		t.Error("/clear should be immediate")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T234: /color tests
+// ---------------------------------------------------------------------------
+
+func TestColor_NoArgs_ShowsColors(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/color")
+	msg := cmd()
+	cm, ok := msg.(ColorMsg)
+	if !ok {
+		t.Fatalf("Expected ColorMsg, got %T", msg)
+	}
+	if cm.Error != nil {
+		t.Fatalf("Unexpected error: %v", cm.Error)
+	}
+	if !strings.Contains(cm.Message, "Available colors") {
+		t.Errorf("Expected color list, got: %s", cm.Message)
+	}
+	for _, c := range []string{"red", "blue", "green", "yellow", "purple", "orange", "pink", "cyan"} {
+		if !strings.Contains(cm.Message, c) {
+			t.Errorf("Missing color %q in message: %s", c, cm.Message)
+		}
+	}
+}
+
+func TestColor_SetValidColor(t *testing.T) {
+	var current string
+	d := NewDispatcher()
+	d.Register("/color", newColorHandler(
+		func() string { return current },
+		func(c string) { current = c },
+	))
+
+	cmd := d.Dispatch("/color blue")
+	msg := cmd()
+	cm := msg.(ColorMsg)
+	if cm.Error != nil {
+		t.Fatalf("Unexpected error: %v", cm.Error)
+	}
+	if cm.Color != "blue" {
+		t.Errorf("Expected color 'blue', got %q", cm.Color)
+	}
+	if current != "blue" {
+		t.Errorf("Setter should have been called with 'blue', got %q", current)
+	}
+	if cm.Message != "Session color set to: blue" {
+		t.Errorf("Unexpected message: %s", cm.Message)
+	}
+}
+
+func TestColor_ResetAliases(t *testing.T) {
+	for _, alias := range []string{"default", "reset", "none", "gray", "grey"} {
+		var current string
+		d := NewDispatcher()
+		d.Register("/color", newColorHandler(
+			func() string { return current },
+			func(c string) { current = c },
+		))
+
+		cmd := d.Dispatch("/color " + alias)
+		msg := cmd()
+		cm := msg.(ColorMsg)
+		if cm.Error != nil {
+			t.Errorf("%s: unexpected error: %v", alias, cm.Error)
+		}
+		if cm.Color != "" {
+			t.Errorf("%s: expected empty color for reset, got %q", alias, cm.Color)
+		}
+		if cm.Message != "Session color reset to default" {
+			t.Errorf("%s: unexpected message: %s", alias, cm.Message)
+		}
+	}
+}
+
+func TestColor_InvalidColor(t *testing.T) {
+	d := NewDispatcher()
+	d.Register("/color", newColorHandler(
+		func() string { return "" },
+		func(c string) {},
+	))
+
+	cmd := d.Dispatch("/color magenta")
+	msg := cmd()
+	cm := msg.(ColorMsg)
+	if cm.Error == nil {
+		t.Fatal("Expected error for invalid color")
+	}
+	if !strings.Contains(cm.Error.Error(), "Invalid color") {
+		t.Errorf("Error should mention 'Invalid color', got: %v", cm.Error)
+	}
+}
+
+func TestColor_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/color")
+	if reg == nil {
+		t.Fatal("Should have registration for /color")
+	}
+	if reg.Description != "Set session prompt bar color" {
+		t.Errorf("Unexpected description: %q", reg.Description)
+	}
+	if reg.ArgumentHint != "<color|default>" {
+		t.Errorf("Unexpected argument hint: %q", reg.ArgumentHint)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T235: /commit tests
+// ---------------------------------------------------------------------------
+
+func TestCommit_ReturnsPromptMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/commit")
+	msg := cmd()
+	pm, ok := msg.(PromptMsg)
+	if !ok {
+		t.Fatalf("Expected PromptMsg, got %T", msg)
+	}
+	if pm.Command != "/commit" {
+		t.Errorf("Expected command '/commit', got %q", pm.Command)
+	}
+	// Check key sections of the prompt template.
+	for _, want := range []string{
+		"## Context",
+		"## Git Safety Protocol",
+		"## Your task",
+		"NEVER update the git config",
+		"ALWAYS create NEW commits",
+		"git commit -m",
+		"HEREDOC syntax",
+	} {
+		if !strings.Contains(pm.Text, want) {
+			t.Errorf("Prompt should contain %q", want)
+		}
+	}
+}
+
+func TestCommit_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/commit")
+	if reg == nil {
+		t.Fatal("Should have registration for /commit")
+	}
+	if reg.Type != CommandTypePrompt {
+		t.Errorf("Expected CommandTypePrompt, got %v", reg.Type)
+	}
+	if reg.Description != "Create a git commit" {
+		t.Errorf("Unexpected description: %q", reg.Description)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T236: /commit-push-pr tests
+// ---------------------------------------------------------------------------
+
+func TestCommitPushPR_ReturnsPromptMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/commit-push-pr")
+	msg := cmd()
+	pm, ok := msg.(PromptMsg)
+	if !ok {
+		t.Fatalf("Expected PromptMsg, got %T", msg)
+	}
+	if pm.Command != "/commit-push-pr" {
+		t.Errorf("Expected command '/commit-push-pr', got %q", pm.Command)
+	}
+	for _, want := range []string{
+		"## Context",
+		"## Git Safety Protocol",
+		"## Your task",
+		"gh pr create",
+		"gh pr edit",
+		"NEVER run force push to main/master",
+		"Keep PR titles short",
+		"Return the PR URL",
+	} {
+		if !strings.Contains(pm.Text, want) {
+			t.Errorf("Prompt should contain %q", want)
+		}
+	}
+}
+
+func TestCommitPushPR_WithArgs(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/commit-push-pr fix the tests first")
+	msg := cmd()
+	pm := msg.(PromptMsg)
+	if !strings.Contains(pm.Text, "## Additional instructions from user") {
+		t.Error("Should contain additional instructions section")
+	}
+	if !strings.Contains(pm.Text, "fix the tests first") {
+		t.Error("Should contain the user's additional instructions")
+	}
+}
+
+func TestCommitPushPR_NoArgsNoAdditionalSection(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/commit-push-pr")
+	msg := cmd()
+	pm := msg.(PromptMsg)
+	if strings.Contains(pm.Text, "## Additional instructions from user") {
+		t.Error("Should not contain additional instructions section when no args")
+	}
+}
+
+func TestCommitPushPR_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/commit-push-pr")
+	if reg == nil {
+		t.Fatal("Should have registration for /commit-push-pr")
+	}
+	if reg.Type != CommandTypePrompt {
+		t.Errorf("Expected CommandTypePrompt, got %v", reg.Type)
+	}
+	if reg.Description != "Commit, push, and open a PR" {
+		t.Errorf("Unexpected description: %q", reg.Description)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T237: /compact tests
+// ---------------------------------------------------------------------------
+
+func TestCompact_Success(t *testing.T) {
+	msgs := []message.Message{
+		message.UserMessage("hello"),
+		{Role: message.RoleAssistant, Content: []message.ContentBlock{{Type: message.ContentText, Text: "hi there"}}},
+	}
+	var completedMsgs []message.Message
+
+	d := NewDispatcher()
+	d.Register("/compact", newCompactHandler(CompactDeps{
+		GetMessages: func() []message.Message { return msgs },
+		Summarize: func(ctx context.Context, m []message.Message, prompt string) (string, error) {
+			return "Summary of conversation about greetings.", nil
+		},
+		TranscriptPath: func() string { return "/tmp/test.jsonl" },
+		OnComplete:     func(m []message.Message) { completedMsgs = m },
+	}))
+
+	cmd := d.Dispatch("/compact")
+	msg := cmd()
+	cr, ok := msg.(CompactResultMsg)
+	if !ok {
+		t.Fatalf("Expected CompactResultMsg, got %T", msg)
+	}
+	if cr.Error != nil {
+		t.Fatalf("Unexpected error: %v", cr.Error)
+	}
+	if cr.Result == nil {
+		t.Fatal("Expected non-nil result")
+	}
+	if cr.Message != "Compacted conversation" {
+		t.Errorf("Unexpected message: %s", cr.Message)
+	}
+	if len(completedMsgs) == 0 {
+		t.Error("OnComplete should have been called with new messages")
+	}
+}
+
+func TestCompact_NoMessages(t *testing.T) {
+	d := NewDispatcher()
+	d.Register("/compact", newCompactHandler(CompactDeps{
+		GetMessages: func() []message.Message { return nil },
+		Summarize: func(ctx context.Context, m []message.Message, prompt string) (string, error) {
+			return "", nil
+		},
+	}))
+
+	cmd := d.Dispatch("/compact")
+	msg := cmd()
+	cr := msg.(CompactResultMsg)
+	if cr.Error == nil {
+		t.Fatal("Expected error for no messages")
+	}
+	if !strings.Contains(cr.Error.Error(), "Not enough messages") {
+		t.Errorf("Error should mention 'Not enough messages', got: %v", cr.Error)
+	}
+}
+
+func TestCompact_SummarizerError(t *testing.T) {
+	msgs := []message.Message{message.UserMessage("hi")}
+
+	d := NewDispatcher()
+	d.Register("/compact", newCompactHandler(CompactDeps{
+		GetMessages: func() []message.Message { return msgs },
+		Summarize: func(ctx context.Context, m []message.Message, prompt string) (string, error) {
+			return "", fmt.Errorf("API error: model overloaded")
+		},
+	}))
+
+	cmd := d.Dispatch("/compact")
+	msg := cmd()
+	cr := msg.(CompactResultMsg)
+	if cr.Error == nil {
+		t.Fatal("Expected error from summarizer")
+	}
+	if !strings.Contains(cr.Error.Error(), "Error during compaction") {
+		t.Errorf("Error should wrap as compaction error, got: %v", cr.Error)
+	}
+}
+
+func TestCompact_EmptySummary(t *testing.T) {
+	msgs := []message.Message{message.UserMessage("hi")}
+
+	d := NewDispatcher()
+	d.Register("/compact", newCompactHandler(CompactDeps{
+		GetMessages: func() []message.Message { return msgs },
+		Summarize: func(ctx context.Context, m []message.Message, prompt string) (string, error) {
+			return "   ", nil // whitespace-only = incomplete
+		},
+	}))
+
+	cmd := d.Dispatch("/compact")
+	msg := cmd()
+	cr := msg.(CompactResultMsg)
+	if cr.Error == nil {
+		t.Fatal("Expected error for empty summary")
+	}
+	if !strings.Contains(cr.Error.Error(), "interrupted") {
+		t.Errorf("Error should mention 'interrupted', got: %v", cr.Error)
+	}
+}
+
+func TestCompact_UserAbort(t *testing.T) {
+	msgs := []message.Message{message.UserMessage("hi")}
+
+	d := NewDispatcher()
+	d.Register("/compact", newCompactHandler(CompactDeps{
+		GetMessages: func() []message.Message { return msgs },
+		Summarize: func(ctx context.Context, m []message.Message, prompt string) (string, error) {
+			return "", context.Canceled
+		},
+	}))
+
+	cmd := d.Dispatch("/compact")
+	msg := cmd()
+	cr := msg.(CompactResultMsg)
+	if cr.Error == nil {
+		t.Fatal("Expected error for user abort")
+	}
+	if !strings.Contains(cr.Error.Error(), "canceled") && !strings.Contains(cr.Error.Error(), "Canceled") {
+		t.Errorf("Error should mention cancellation, got: %v", cr.Error)
+	}
+}
+
+func TestCompact_WithCustomInstructions(t *testing.T) {
+	msgs := []message.Message{message.UserMessage("hi")}
+	var receivedPrompt string
+
+	d := NewDispatcher()
+	d.Register("/compact", newCompactHandler(CompactDeps{
+		GetMessages: func() []message.Message { return msgs },
+		Summarize: func(ctx context.Context, m []message.Message, prompt string) (string, error) {
+			receivedPrompt = prompt
+			return "Summary with focus on testing.", nil
+		},
+		OnComplete: func(m []message.Message) {},
+	}))
+
+	cmd := d.Dispatch("/compact focus on the testing changes")
+	msg := cmd()
+	cr := msg.(CompactResultMsg)
+	if cr.Error != nil {
+		t.Fatalf("Unexpected error: %v", cr.Error)
+	}
+	// The custom instructions are passed through to the compact prompt builder,
+	// which incorporates them into the system prompt. Verify the prompt is non-empty.
+	if receivedPrompt == "" {
+		t.Error("Summarizer should have received a non-empty prompt")
+	}
+}
+
+func TestCompact_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/compact")
+	if reg == nil {
+		t.Fatal("Should have registration for /compact")
+	}
+	if reg.Description != "Compact conversation history" {
+		t.Errorf("Unexpected description: %q", reg.Description)
+	}
+	if reg.ArgumentHint != "[custom instructions]" {
+		t.Errorf("Unexpected argument hint: %q", reg.ArgumentHint)
 	}
 }

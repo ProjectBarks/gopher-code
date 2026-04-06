@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,10 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/projectbarks/gopher-code/pkg/compact"
+	"github.com/projectbarks/gopher-code/pkg/message"
+	"github.com/projectbarks/gopher-code/pkg/session"
 )
 
 // ---------------------------------------------------------------------------
@@ -143,6 +148,52 @@ type MovedToPluginMsg struct {
 	Command    string
 	PluginName string
 	Message    string
+}
+
+// PromptMsg is returned by prompt-type commands (e.g. /commit, /commit-push-pr).
+// The query loop picks this up and sends the text to the LLM as a user message.
+type PromptMsg struct {
+	Command string
+	Text    string
+}
+
+// ColorMsg is returned when /color sets or resets the prompt bar color.
+type ColorMsg struct {
+	Color   string
+	Message string
+	Error   error
+}
+
+// CompactResultMsg is returned when /compact completes (success or error).
+type CompactResultMsg struct {
+	Result  *compact.CompactionResult
+	Message string
+	Error   error
+}
+
+// ClearState holds session-state handles needed by the /clear full clearing chain.
+// Callers inject real implementations; tests inject stubs.
+type ClearState struct {
+	// Session returns a pointer to the session state to mutate.
+	Session func() *session.SessionState
+	// OriginalCWD returns the original working directory.
+	OriginalCWD func() string
+	// ClearPlanSlugs clears plan slug caches.
+	ClearPlanSlugs func()
+	// OnPostClear is called after all clearing is done (e.g. to run session-start hooks).
+	OnPostClear func()
+}
+
+// CompactDeps holds dependencies needed by the /compact command.
+type CompactDeps struct {
+	// GetMessages returns the current conversation messages.
+	GetMessages func() []message.Message
+	// Summarize is the LLM summarization callback.
+	Summarize compact.SummaryFunc
+	// TranscriptPath returns the path to the current transcript file.
+	TranscriptPath func() string
+	// OnComplete is called after successful compaction with the new message list.
+	OnComplete func(msgs []message.Message)
 }
 
 // Handler is a function that processes a slash command.
@@ -800,6 +851,372 @@ func newChromeHandler() Handler {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// T233: /clear full clearing chain
+// Source: src/commands/clear/conversation.ts — clearConversation (~20 steps)
+// ---------------------------------------------------------------------------
+
+// newClearHandler creates the /clear handler that performs the full clearing chain.
+// Source: src/commands/clear/conversation.ts
+func newClearHandler(state ClearState) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			s := state.Session()
+
+			// Step 1: Regenerate session ID with parent lineage.
+			s.RegenerateSessionID(true)
+
+			// Step 2: Update env for subprocess inheritance.
+			os.Setenv("CLAUDE_CODE_SESSION_ID", s.ID)
+
+			// Step 3: Clear messages and reset turn count.
+			s.Messages = nil
+			s.TurnCount = 0
+
+			// Step 4: Reset cost/usage counters for the new session.
+			s.TotalInputTokens = 0
+			s.TotalOutputTokens = 0
+			s.TotalCacheCreationTokens = 0
+			s.TotalCacheReadTokens = 0
+			s.LastInputTokens = 0
+			s.TotalCostUSD = 0
+			s.TotalAPIDuration = 0
+			s.TotalAPIDurationWithoutRetries = 0
+			s.TotalToolDuration = 0
+			s.TotalLinesAdded = 0
+			s.TotalLinesRemoved = 0
+
+			// Step 5: Reset plan mode tracking.
+			s.HasExitedPlanMode = false
+			s.NeedsPlanModeExitAttachment = false
+			s.NeedsAutoModeExitAttachment = false
+
+			// Step 6: Clear plan slug cache.
+			s.PlanSlugCache = nil
+			if state.ClearPlanSlugs != nil {
+				state.ClearPlanSlugs()
+			}
+
+			// Step 7: Clear model usage.
+			s.ModelUsage = nil
+
+			// Step 8: Clear in-memory error log.
+			s.InMemoryErrorLog = nil
+
+			// Step 9: Clear cached CLAUDE.md content (will be re-read).
+			s.CachedClaudeMdContent = ""
+
+			// Step 10: Clear invoked skills.
+			s.InvokedSkills = nil
+
+			// Step 11: Clear slow operations.
+			s.SlowOperations = nil
+
+			// Step 12: Reset pending post-compaction flag.
+			s.PendingPostCompaction = false
+
+			// Step 13: Reset last API request data.
+			s.LastAPIRequest = nil
+			s.LastAPIRequestMessages = nil
+			s.LastClassifierRequests = nil
+			s.LastMainRequestId = ""
+			s.LastApiCompletionTimestamp = nil
+
+			// Step 14: Reset per-turn tracking.
+			s.TurnHookDurationMs = 0
+			s.TurnToolDurationMs = 0
+			s.TurnClassifierDurationMs = 0
+			s.TurnToolCount = 0
+			s.TurnHookCount = 0
+			s.TurnClassifierCount = 0
+
+			// Step 15: Reset CWD to original.
+			if state.OriginalCWD != nil {
+				if orig := state.OriginalCWD(); orig != "" {
+					s.CWD = orig
+				}
+			}
+
+			// Step 16: Reset prompt ID.
+			s.PromptId = ""
+
+			// Step 17: Reset LSP recommendation flag.
+			s.LspRecommendationShownThisSession = false
+
+			// Step 18: Post-clear callback (hooks, worktree save, etc.).
+			if state.OnPostClear != nil {
+				state.OnPostClear()
+			}
+
+			return ClearConversationMsg{}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T234: /color session prompt bar
+// Source: src/commands/color/color.ts
+// ---------------------------------------------------------------------------
+
+// agentColorNames is the ordered palette matching the TS AGENT_COLORS list.
+var agentColorNames = []string{
+	"red", "blue", "green", "yellow", "purple", "orange", "pink", "cyan",
+}
+
+// colorResetAliases match the TS RESET_ALIASES.
+var colorResetAliases = map[string]bool{
+	"default": true, "reset": true, "none": true, "gray": true, "grey": true,
+}
+
+// newColorHandler creates the /color command handler.
+// Source: src/commands/color/color.ts
+func newColorHandler(getColor func() string, setColor func(string)) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			arg := strings.TrimSpace(strings.ToLower(args))
+
+			if arg == "" {
+				colorList := strings.Join(agentColorNames, ", ")
+				return ColorMsg{
+					Message: fmt.Sprintf("Please provide a color. Available colors: %s, default", colorList),
+				}
+			}
+
+			// Handle reset aliases.
+			if colorResetAliases[arg] {
+				setColor("")
+				return ColorMsg{
+					Color:   "",
+					Message: "Session color reset to default",
+				}
+			}
+
+			// Validate color name.
+			valid := false
+			for _, c := range agentColorNames {
+				if c == arg {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				colorList := strings.Join(agentColorNames, ", ")
+				return ColorMsg{
+					Error: fmt.Errorf("Invalid color %q. Available colors: %s, default", arg, colorList),
+				}
+			}
+
+			setColor(arg)
+			return ColorMsg{
+				Color:   arg,
+				Message: fmt.Sprintf("Session color set to: %s", arg),
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T235: /commit prompt command
+// Source: src/commands/commit.ts
+// ---------------------------------------------------------------------------
+
+// commitPromptTemplate is the prompt text returned by /commit.
+// The query loop expands !`cmd` patterns and sends it to the LLM.
+// Source: src/commands/commit.ts — getPromptContent()
+const commitPromptTemplate = `## Context
+
+- Current git status: ` + "`git status`" + `
+- Current git diff (staged and unstaged changes): ` + "`git diff HEAD`" + `
+- Current branch: ` + "`git branch --show-current`" + `
+- Recent commits: ` + "`git log --oneline -10`" + `
+
+## Git Safety Protocol
+
+- NEVER update the git config
+- NEVER skip hooks (--no-verify, --no-gpg-sign, etc) unless the user explicitly requests it
+- CRITICAL: ALWAYS create NEW commits. NEVER use git commit --amend, unless the user explicitly requests it
+- Do not commit files that likely contain secrets (.env, credentials.json, etc). Warn the user if they specifically request to commit those files
+- If there are no changes to commit (i.e., no untracked files and no modifications), do not create an empty commit
+- Never use git commands with the -i flag (like git rebase -i or git add -i) since they require interactive input which is not supported
+
+## Your task
+
+Based on the above changes, create a single git commit:
+
+1. Analyze all staged changes and draft a commit message:
+   - Look at the recent commits above to follow this repository's commit message style
+   - Summarize the nature of the changes (new feature, enhancement, bug fix, refactoring, test, docs, etc.)
+   - Ensure the message accurately reflects the changes and their purpose (i.e. "add" means a wholly new feature, "update" means an enhancement to an existing feature, "fix" means a bug fix, etc.)
+   - Draft a concise (1-2 sentences) commit message that focuses on the "why" rather than the "what"
+
+2. Stage relevant files and create the commit using HEREDOC syntax:
+` + "```" + `
+git commit -m "$(cat <<'EOF'
+Commit message here.
+EOF
+)"
+` + "```" + `
+
+You have the capability to call multiple tools in a single response. Stage and create the commit using a single message. Do not use any other tools or do anything else. Do not send any other text or messages besides these tool calls.`
+
+// newCommitHandler creates the /commit prompt command handler.
+// Source: src/commands/commit.ts
+func newCommitHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			return PromptMsg{
+				Command: "/commit",
+				Text:    commitPromptTemplate,
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T236: /commit-push-pr prompt command
+// Source: src/commands/commit-push-pr.ts
+// ---------------------------------------------------------------------------
+
+// commitPushPRPromptTemplate is the prompt text returned by /commit-push-pr.
+// Source: src/commands/commit-push-pr.ts — getPromptContent()
+func buildCommitPushPRPrompt(additionalArgs string) string {
+	defaultBranch := "main"
+	safeUser := os.Getenv("SAFEUSER")
+	username := os.Getenv("USER")
+
+	prompt := `## Context
+
+- ` + "`SAFEUSER`" + `: ` + safeUser + `
+- ` + "`whoami`" + `: ` + username + `
+- ` + "`git status`" + `: ` + "`git status`" + `
+- ` + "`git diff HEAD`" + `: ` + "`git diff HEAD`" + `
+- ` + "`git branch --show-current`" + `: ` + "`git branch --show-current`" + `
+- ` + "`git diff " + defaultBranch + "...HEAD`" + `: ` + "`git diff " + defaultBranch + "...HEAD`" + `
+- ` + "`gh pr view --json number 2>/dev/null || true`" + `: ` + "`gh pr view --json number 2>/dev/null || true`" + `
+
+## Git Safety Protocol
+
+- NEVER update the git config
+- NEVER run destructive/irreversible git commands (like push --force, hard reset, etc) unless the user explicitly requests them
+- NEVER skip hooks (--no-verify, --no-gpg-sign, etc) unless the user explicitly requests it
+- NEVER run force push to main/master, warn the user if they request it
+- Do not commit files that likely contain secrets (.env, credentials.json, etc)
+- Never use git commands with the -i flag (like git rebase -i or git add -i) since they require interactive input which is not supported
+
+## Your task
+
+Analyze all changes that will be included in the pull request, making sure to look at all relevant commits (NOT just the latest commit, but ALL commits that will be included in the pull request from the git diff ` + defaultBranch + `...HEAD output above).
+
+Based on the above changes:
+1. Create a new branch if on ` + defaultBranch + ` (use SAFEUSER from context above for the branch name prefix, falling back to whoami if SAFEUSER is empty, e.g., ` + "`username/feature-name`" + `)
+2. Create a single commit with an appropriate message using heredoc syntax:
+` + "```" + `
+git commit -m "$(cat <<'EOF'
+Commit message here.
+EOF
+)"
+` + "```" + `
+3. Push the branch to origin
+4. If a PR already exists for this branch (check the gh pr view output above), update the PR title and body using ` + "`gh pr edit`" + ` to reflect the current diff. Otherwise, create a pull request using ` + "`gh pr create`" + ` with heredoc syntax for the body.
+   - IMPORTANT: Keep PR titles short (under 70 characters). Use the body for details.
+` + "```" + `
+gh pr create --title "Short, descriptive title" --body "$(cat <<'EOF'
+## Summary
+<1-3 bullet points>
+
+## Test plan
+[Bulleted markdown checklist of TODOs for testing the pull request...]
+EOF
+)"
+` + "```" + `
+
+You have the capability to call multiple tools in a single response. You MUST do all of the above in a single message.
+
+Return the PR URL when you're done, so the user can see it.`
+
+	if additionalArgs != "" {
+		prompt += "\n\n## Additional instructions from user\n\n" + additionalArgs
+	}
+	return prompt
+}
+
+// newCommitPushPRHandler creates the /commit-push-pr prompt command handler.
+// Source: src/commands/commit-push-pr.ts
+func newCommitPushPRHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			return PromptMsg{
+				Command: "/commit-push-pr",
+				Text:    buildCommitPushPRPrompt(strings.TrimSpace(args)),
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T237: /compact compaction
+// Source: src/commands/compact/compact.ts
+// ---------------------------------------------------------------------------
+
+// newCompactHandler creates the /compact handler that calls CompactConversation.
+// Source: src/commands/compact/compact.ts — call()
+func newCompactHandler(deps CompactDeps) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			messages := deps.GetMessages()
+			if len(messages) == 0 {
+				return CompactResultMsg{
+					Error:   fmt.Errorf(compact.ErrorMessageNotEnoughMessages),
+					Message: compact.ErrorMessageNotEnoughMessages,
+				}
+			}
+
+			customInstructions := strings.TrimSpace(args)
+			transcriptPath := ""
+			if deps.TranscriptPath != nil {
+				transcriptPath = deps.TranscriptPath()
+			}
+
+			result, err := compact.CompactConversation(
+				context.Background(),
+				messages,
+				deps.Summarize,
+				false, // suppressFollowUp
+				customInstructions,
+				compact.TriggerManual,
+				transcriptPath,
+			)
+			if err != nil {
+				errMsg := err.Error()
+				switch errMsg {
+				case compact.ErrorMessageNotEnoughMessages:
+					return CompactResultMsg{Error: err, Message: errMsg}
+				case compact.ErrorMessageUserAbort:
+					return CompactResultMsg{Error: fmt.Errorf("Compaction canceled."), Message: "Compaction canceled."}
+				case compact.ErrorMessageIncompleteResponse:
+					return CompactResultMsg{Error: err, Message: errMsg}
+				default:
+					return CompactResultMsg{
+						Error:   fmt.Errorf("Error during compaction: %w", err),
+						Message: fmt.Sprintf("Error during compaction: %s", errMsg),
+					}
+				}
+			}
+
+			// Build the post-compact message list.
+			newMessages := compact.BuildPostCompactMessages(result)
+			if deps.OnComplete != nil {
+				deps.OnComplete(newMessages)
+			}
+
+			return CompactResultMsg{
+				Result:  &result,
+				Message: "Compacted conversation",
+			}
+		}
+	}
+}
+
 func (d *Dispatcher) registerDefaults() {
 	d.Register("/model", func(args string) tea.Cmd {
 		if args == "" {
@@ -814,8 +1231,17 @@ func (d *Dispatcher) registerDefaults() {
 		return func() tea.Msg { return SessionSwitchMsg{} }
 	})
 
-	d.Register("/clear", func(args string) tea.Cmd {
-		return func() tea.Msg { return ClearConversationMsg{} }
+	// T233: /clear — full clearing chain (expanded from stub)
+	d.RegisterCommand(CommandRegistration{
+		Name:        "clear",
+		Description: "Clear conversation and reset session",
+		Type:        CommandTypeLocal,
+		Immediate:   true,
+		Source:      "builtin",
+		Handler: newClearHandler(ClearState{
+			Session:     func() *session.SessionState { return &session.SessionState{} },
+			OriginalCWD: func() string { return "" },
+		}),
 	})
 
 	d.Register("/help", func(args string) tea.Cmd {
@@ -826,8 +1252,19 @@ func (d *Dispatcher) registerDefaults() {
 		return func() tea.Msg { return QuitMsg{} }
 	})
 
-	d.Register("/compact", func(args string) tea.Cmd {
-		return func() tea.Msg { return CompactMsg{} }
+	// T237: /compact — model-driven compaction (expanded from stub)
+	d.RegisterCommand(CommandRegistration{
+		Name:         "compact",
+		Description:  "Compact conversation history",
+		Type:         CommandTypeLocal,
+		ArgumentHint: "[custom instructions]",
+		Source:       "builtin",
+		Handler: newCompactHandler(CompactDeps{
+			GetMessages: func() []message.Message { return nil },
+			Summarize: func(ctx context.Context, msgs []message.Message, prompt string) (string, error) {
+				return "", fmt.Errorf("summarizer not configured")
+			},
+		}),
 	})
 
 	d.Register("/thinking", func(args string) tea.Cmd {
@@ -942,5 +1379,37 @@ func (d *Dispatcher) registerDefaults() {
 		ArgumentHint: "[install|reconnect|manage-permissions|toggle-default]",
 		Source:       "builtin",
 		Handler:      newChromeHandler(),
+	})
+
+	// T234: /color — set prompt bar color for this session
+	d.RegisterCommand(CommandRegistration{
+		Name:         "color",
+		Description:  "Set session prompt bar color",
+		Type:         CommandTypeLocal,
+		ArgumentHint: "<color|default>",
+		Source:       "builtin",
+		Handler: newColorHandler(
+			func() string { return "" },
+			func(c string) {},
+		),
+	})
+
+	// T235: /commit — prompt-type command for creating a git commit
+	d.RegisterCommand(CommandRegistration{
+		Name:        "commit",
+		Description: "Create a git commit",
+		Type:        CommandTypePrompt,
+		Source:      "builtin",
+		Handler:     newCommitHandler(),
+	})
+
+	// T236: /commit-push-pr — prompt-type command for full PR workflow
+	d.RegisterCommand(CommandRegistration{
+		Name:         "commit-push-pr",
+		Description:  "Commit, push, and open a PR",
+		Type:         CommandTypePrompt,
+		ArgumentHint: "[additional instructions]",
+		Source:       "builtin",
+		Handler:      newCommitPushPRHandler(),
 	})
 }
