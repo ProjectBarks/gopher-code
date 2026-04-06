@@ -414,6 +414,14 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case commands.QuitMsg:
 		return a, tea.Quit
 
+	case commands.ExitGoodbyeMsg:
+		// Show goodbye message then quit
+		a.session.Messages = append(a.session.Messages, message.Message{
+			Role:    "assistant",
+			Content: []message.ContentBlock{{Type: "text", Text: msg.Message}},
+		})
+		return a, tea.Quit
+
 	case commands.ShowDoctorMsg:
 		return a.handleShowDoctor()
 
