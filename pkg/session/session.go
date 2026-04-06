@@ -187,6 +187,28 @@ type SessionState struct {
 	// T135: Runtime permission bypass toggle (session-scoped).
 	// Source: bootstrap/state.ts — sessionBypassPermissionsMode
 	SessionBypassPermissionsMode bool `json:"-"`
+
+	// T136: Scheduled tasks enabled flag + session-only cron tasks.
+	// Source: bootstrap/state.ts — scheduledTasksEnabled, sessionCronTasks
+	ScheduledTasksEnabled bool              `json:"-"`
+	SessionCronTasks      []SessionCronTask `json:"-"`
+
+	// T137: Teams created during this session, cleaned up on shutdown.
+	// Source: bootstrap/state.ts — sessionCreatedTeams
+	SessionCreatedTeams map[string]struct{} `json:"-"`
+
+	// T138: Session-only trust flag for home directory (not persisted to disk).
+	// Source: bootstrap/state.ts — sessionTrustAccepted
+	SessionTrustAccepted bool `json:"-"`
+
+	// T139: Session-only flag to disable session persistence to disk.
+	// Source: bootstrap/state.ts — sessionPersistenceDisabled
+	SessionPersistenceDisabled bool `json:"-"`
+
+	// T140: Plan mode transition tracking.
+	// Source: bootstrap/state.ts — hasExitedPlanMode, needsPlanModeExitAttachment
+	HasExitedPlanMode            bool `json:"-"`
+	NeedsPlanModeExitAttachment  bool `json:"-"`
 }
 
 // New creates a new SessionState with the given config and working directory.
@@ -205,6 +227,8 @@ func New(config SessionConfig, cwd string) *SessionState {
 		LastInteractionTime: now,
 		ModelUsage:          make(map[string]*ModelUsageEntry),
 		ClientType:          "cli",
+		SessionCronTasks:    make([]SessionCronTask, 0),
+		SessionCreatedTeams: make(map[string]struct{}),
 	}
 }
 
@@ -396,6 +420,169 @@ func (s *SessionState) GetErrorLog() []string {
 // Source: bootstrap/state.ts — sessionBypassPermissionsMode
 func (s *SessionState) SetBypassPermissionsMode(bypass bool) {
 	s.SessionBypassPermissionsMode = bypass
+}
+
+// ---------------------------------------------------------------------------
+// T136: Cron task state — Source: bootstrap/state.ts
+// ---------------------------------------------------------------------------
+
+// SessionCronTask represents a session-only cron task created via CronCreate
+// with durable: false. These fire on schedule but are never written to disk.
+// Source: bootstrap/state.ts — SessionCronTask type
+type SessionCronTask struct {
+	ID        string `json:"id"`
+	Cron      string `json:"cron"`
+	Prompt    string `json:"prompt"`
+	CreatedAt int64  `json:"created_at"` // Unix ms
+	Recurring bool   `json:"recurring,omitempty"`
+	AgentID   string `json:"agent_id,omitempty"` // routes to a subagent instead of main REPL
+}
+
+// SetScheduledTasksEnabled enables or disables the scheduled tasks watcher.
+// Source: bootstrap/state.ts — setScheduledTasksEnabled
+func (s *SessionState) SetScheduledTasksEnabled(enabled bool) {
+	s.ScheduledTasksEnabled = enabled
+}
+
+// GetScheduledTasksEnabled returns whether scheduled tasks are enabled.
+// Source: bootstrap/state.ts — getScheduledTasksEnabled
+func (s *SessionState) GetScheduledTasksEnabled() bool {
+	return s.ScheduledTasksEnabled
+}
+
+// GetSessionCronTasks returns the session-only cron tasks.
+// Source: bootstrap/state.ts — getSessionCronTasks
+func (s *SessionState) GetSessionCronTasks() []SessionCronTask {
+	return s.SessionCronTasks
+}
+
+// AddSessionCronTask appends a cron task to the session-only list.
+// Source: bootstrap/state.ts — addSessionCronTask
+func (s *SessionState) AddSessionCronTask(task SessionCronTask) {
+	s.SessionCronTasks = append(s.SessionCronTasks, task)
+}
+
+// RemoveSessionCronTasks removes tasks by ID and returns the number removed.
+// Source: bootstrap/state.ts — removeSessionCronTasks
+func (s *SessionState) RemoveSessionCronTasks(ids []string) int {
+	if len(ids) == 0 {
+		return 0
+	}
+	idSet := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		idSet[id] = struct{}{}
+	}
+	remaining := make([]SessionCronTask, 0, len(s.SessionCronTasks))
+	for _, t := range s.SessionCronTasks {
+		if _, ok := idSet[t.ID]; !ok {
+			remaining = append(remaining, t)
+		}
+	}
+	removed := len(s.SessionCronTasks) - len(remaining)
+	if removed > 0 {
+		s.SessionCronTasks = remaining
+	}
+	return removed
+}
+
+// ---------------------------------------------------------------------------
+// T137: Team tracking — Source: bootstrap/state.ts — sessionCreatedTeams
+// ---------------------------------------------------------------------------
+
+// GetSessionCreatedTeams returns the set of teams created during this session.
+// Source: bootstrap/state.ts — getSessionCreatedTeams
+func (s *SessionState) GetSessionCreatedTeams() map[string]struct{} {
+	return s.SessionCreatedTeams
+}
+
+// AddSessionCreatedTeam records a team created during this session.
+func (s *SessionState) AddSessionCreatedTeam(teamName string) {
+	if s.SessionCreatedTeams == nil {
+		s.SessionCreatedTeams = make(map[string]struct{})
+	}
+	s.SessionCreatedTeams[teamName] = struct{}{}
+}
+
+// RemoveSessionCreatedTeam removes a team from the session tracking set
+// (e.g. when TeamDelete is called, to avoid double-cleanup on shutdown).
+func (s *SessionState) RemoveSessionCreatedTeam(teamName string) {
+	delete(s.SessionCreatedTeams, teamName)
+}
+
+// ---------------------------------------------------------------------------
+// T138: Session trust — Source: bootstrap/state.ts
+// ---------------------------------------------------------------------------
+
+// SetSessionTrustAccepted sets the session-scoped trust flag.
+// Source: bootstrap/state.ts — setSessionTrustAccepted
+func (s *SessionState) SetSessionTrustAccepted(accepted bool) {
+	s.SessionTrustAccepted = accepted
+}
+
+// GetSessionTrustAccepted returns whether trust has been accepted this session.
+// Source: bootstrap/state.ts — getSessionTrustAccepted
+func (s *SessionState) GetSessionTrustAccepted() bool {
+	return s.SessionTrustAccepted
+}
+
+// ---------------------------------------------------------------------------
+// T139: Session persistence — Source: bootstrap/state.ts
+// ---------------------------------------------------------------------------
+
+// SetSessionPersistenceDisabled disables session persistence to disk.
+// Source: bootstrap/state.ts — setSessionPersistenceDisabled
+func (s *SessionState) SetSessionPersistenceDisabled(disabled bool) {
+	s.SessionPersistenceDisabled = disabled
+}
+
+// IsSessionPersistenceDisabled returns whether persistence is disabled.
+// Source: bootstrap/state.ts — isSessionPersistenceDisabled
+func (s *SessionState) IsSessionPersistenceDisabled() bool {
+	return s.SessionPersistenceDisabled
+}
+
+// ---------------------------------------------------------------------------
+// T140: Plan mode transitions — Source: bootstrap/state.ts
+// ---------------------------------------------------------------------------
+
+// HasExitedPlanModeInSession returns whether the user has exited plan mode.
+// Source: bootstrap/state.ts — hasExitedPlanModeInSession
+func (s *SessionState) HasExitedPlanModeInSession() bool {
+	return s.HasExitedPlanMode
+}
+
+// SetHasExitedPlanMode sets the plan mode exit tracking flag.
+// Source: bootstrap/state.ts — setHasExitedPlanMode
+func (s *SessionState) SetHasExitedPlanMode(value bool) {
+	s.HasExitedPlanMode = value
+}
+
+// GetNeedsPlanModeExitAttachment returns whether the exit attachment is pending.
+// Source: bootstrap/state.ts — needsPlanModeExitAttachment
+func (s *SessionState) GetNeedsPlanModeExitAttachment() bool {
+	return s.NeedsPlanModeExitAttachment
+}
+
+// SetNeedsPlanModeExitAttachment sets the exit attachment flag.
+// Source: bootstrap/state.ts — setNeedsPlanModeExitAttachment
+func (s *SessionState) SetNeedsPlanModeExitAttachment(value bool) {
+	s.NeedsPlanModeExitAttachment = value
+}
+
+// HandlePlanModeTransition processes a mode switch and updates plan mode flags.
+// When switching TO plan mode, clears any pending exit attachment.
+// When switching FROM plan mode, triggers the exit attachment.
+// Source: bootstrap/state.ts — handlePlanModeTransition
+func (s *SessionState) HandlePlanModeTransition(fromMode, toMode string) {
+	// Entering plan mode: clear pending exit attachment to avoid sending both
+	// plan_mode and plan_mode_exit when the user toggles quickly.
+	if toMode == "plan" && fromMode != "plan" {
+		s.NeedsPlanModeExitAttachment = false
+	}
+	// Leaving plan mode: trigger the one-time exit attachment.
+	if fromMode == "plan" && toMode != "plan" {
+		s.NeedsPlanModeExitAttachment = true
+	}
 }
 
 // RegenerateSessionID creates a new session ID, optionally setting the current as parent.

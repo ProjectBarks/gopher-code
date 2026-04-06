@@ -672,3 +672,189 @@ func TestSaveAndLoad_NewFields(t *testing.T) {
 		t.Errorf("ModelUsage.InputTokens = %d, want 10000", entry.InputTokens)
 	}
 }
+
+// T136: scheduledTasksEnabled + sessionCronTasks + SessionCronTask
+func TestScheduledTasksAndCronTasks(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	// Defaults
+	if s.ScheduledTasksEnabled {
+		t.Error("ScheduledTasksEnabled should default to false")
+	}
+	if len(s.SessionCronTasks) != 0 {
+		t.Errorf("SessionCronTasks len = %d, want 0", len(s.SessionCronTasks))
+	}
+
+	// Toggle enabled flag
+	s.SetScheduledTasksEnabled(true)
+	if !s.GetScheduledTasksEnabled() {
+		t.Error("GetScheduledTasksEnabled should return true after set")
+	}
+	s.SetScheduledTasksEnabled(false)
+	if s.GetScheduledTasksEnabled() {
+		t.Error("GetScheduledTasksEnabled should return false after unset")
+	}
+
+	// Add cron tasks
+	s.AddSessionCronTask(SessionCronTask{ID: "cron-1", Cron: "*/5 * * * *", Prompt: "check status", CreatedAt: 1000, Recurring: true})
+	s.AddSessionCronTask(SessionCronTask{ID: "cron-2", Cron: "0 9 * * *", Prompt: "morning report", CreatedAt: 2000})
+	s.AddSessionCronTask(SessionCronTask{ID: "cron-3", Cron: "0 17 * * 1-5", Prompt: "eod summary", CreatedAt: 3000, AgentID: "agent-1"})
+
+	tasks := s.GetSessionCronTasks()
+	if len(tasks) != 3 {
+		t.Fatalf("GetSessionCronTasks len = %d, want 3", len(tasks))
+	}
+	if tasks[0].ID != "cron-1" || tasks[0].Recurring != true {
+		t.Errorf("task[0] = %+v, want cron-1 recurring", tasks[0])
+	}
+	if tasks[2].AgentID != "agent-1" {
+		t.Errorf("task[2].AgentID = %q, want agent-1", tasks[2].AgentID)
+	}
+
+	// Remove by ID — returns count
+	removed := s.RemoveSessionCronTasks([]string{"cron-1", "cron-3"})
+	if removed != 2 {
+		t.Errorf("RemoveSessionCronTasks returned %d, want 2", removed)
+	}
+	if len(s.SessionCronTasks) != 1 {
+		t.Fatalf("after remove, len = %d, want 1", len(s.SessionCronTasks))
+	}
+	if s.SessionCronTasks[0].ID != "cron-2" {
+		t.Errorf("remaining task ID = %q, want cron-2", s.SessionCronTasks[0].ID)
+	}
+
+	// Remove non-existent returns 0
+	if n := s.RemoveSessionCronTasks([]string{"no-such-id"}); n != 0 {
+		t.Errorf("RemoveSessionCronTasks(non-existent) = %d, want 0", n)
+	}
+
+	// Remove empty slice returns 0
+	if n := s.RemoveSessionCronTasks(nil); n != 0 {
+		t.Errorf("RemoveSessionCronTasks(nil) = %d, want 0", n)
+	}
+}
+
+// T137: sessionCreatedTeams
+func TestSessionCreatedTeams(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	// Default: initialized empty set
+	teams := s.GetSessionCreatedTeams()
+	if len(teams) != 0 {
+		t.Errorf("SessionCreatedTeams len = %d, want 0", len(teams))
+	}
+
+	// Add teams
+	s.AddSessionCreatedTeam("team-alpha")
+	s.AddSessionCreatedTeam("team-beta")
+	s.AddSessionCreatedTeam("team-alpha") // duplicate is a no-op
+
+	if len(s.SessionCreatedTeams) != 2 {
+		t.Errorf("SessionCreatedTeams len = %d, want 2", len(s.SessionCreatedTeams))
+	}
+	if _, ok := s.SessionCreatedTeams["team-alpha"]; !ok {
+		t.Error("team-alpha should be in SessionCreatedTeams")
+	}
+
+	// Remove team
+	s.RemoveSessionCreatedTeam("team-alpha")
+	if _, ok := s.SessionCreatedTeams["team-alpha"]; ok {
+		t.Error("team-alpha should be removed from SessionCreatedTeams")
+	}
+	if len(s.SessionCreatedTeams) != 1 {
+		t.Errorf("after remove, len = %d, want 1", len(s.SessionCreatedTeams))
+	}
+
+	// Remove non-existent is safe
+	s.RemoveSessionCreatedTeam("no-such-team")
+}
+
+// T138: sessionTrustAccepted
+func TestSessionTrustAccepted(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.GetSessionTrustAccepted() {
+		t.Error("SessionTrustAccepted should default to false")
+	}
+
+	s.SetSessionTrustAccepted(true)
+	if !s.GetSessionTrustAccepted() {
+		t.Error("SessionTrustAccepted should be true after set")
+	}
+
+	s.SetSessionTrustAccepted(false)
+	if s.GetSessionTrustAccepted() {
+		t.Error("SessionTrustAccepted should be false after unset")
+	}
+}
+
+// T139: sessionPersistenceDisabled
+func TestSessionPersistenceDisabled(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	if s.IsSessionPersistenceDisabled() {
+		t.Error("SessionPersistenceDisabled should default to false")
+	}
+
+	s.SetSessionPersistenceDisabled(true)
+	if !s.IsSessionPersistenceDisabled() {
+		t.Error("SessionPersistenceDisabled should be true after set")
+	}
+
+	s.SetSessionPersistenceDisabled(false)
+	if s.IsSessionPersistenceDisabled() {
+		t.Error("SessionPersistenceDisabled should be false after unset")
+	}
+}
+
+// T140: plan mode transitions
+func TestPlanModeTransitions(t *testing.T) {
+	s := New(DefaultConfig(), "/tmp/test")
+
+	// Defaults
+	if s.HasExitedPlanModeInSession() {
+		t.Error("HasExitedPlanMode should default to false")
+	}
+	if s.GetNeedsPlanModeExitAttachment() {
+		t.Error("NeedsPlanModeExitAttachment should default to false")
+	}
+
+	// Entering plan mode from normal: clears exit attachment
+	s.SetNeedsPlanModeExitAttachment(true) // simulate stale flag
+	s.HandlePlanModeTransition("normal", "plan")
+	if s.GetNeedsPlanModeExitAttachment() {
+		t.Error("entering plan mode should clear NeedsPlanModeExitAttachment")
+	}
+
+	// Exiting plan mode to normal: triggers exit attachment
+	s.HandlePlanModeTransition("plan", "normal")
+	if !s.GetNeedsPlanModeExitAttachment() {
+		t.Error("exiting plan mode should set NeedsPlanModeExitAttachment")
+	}
+
+	// plan -> plan: no-op (both conditions false)
+	s.SetNeedsPlanModeExitAttachment(false)
+	s.HandlePlanModeTransition("plan", "plan")
+	if s.GetNeedsPlanModeExitAttachment() {
+		t.Error("plan->plan should not set NeedsPlanModeExitAttachment")
+	}
+
+	// normal -> normal: no-op
+	s.HandlePlanModeTransition("normal", "normal")
+	if s.GetNeedsPlanModeExitAttachment() {
+		t.Error("normal->normal should not set NeedsPlanModeExitAttachment")
+	}
+
+	// Quick toggle: enter then exit plan mode
+	s.HandlePlanModeTransition("normal", "plan")
+	s.HandlePlanModeTransition("plan", "auto")
+	if !s.GetNeedsPlanModeExitAttachment() {
+		t.Error("plan->auto should set NeedsPlanModeExitAttachment")
+	}
+
+	// SetHasExitedPlanMode
+	s.SetHasExitedPlanMode(true)
+	if !s.HasExitedPlanModeInSession() {
+		t.Error("HasExitedPlanMode should be true after set")
+	}
+}
