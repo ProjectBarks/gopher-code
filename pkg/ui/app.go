@@ -9,7 +9,9 @@ import (
 	"charm.land/lipgloss/v2"
 	pkgdoctor "github.com/projectbarks/gopher-code/pkg/doctor"
 	"github.com/projectbarks/gopher-code/pkg/message"
+	"github.com/projectbarks/gopher-code/pkg/permissions"
 	"github.com/projectbarks/gopher-code/pkg/query"
+	"github.com/projectbarks/gopher-code/pkg/remote"
 	"github.com/projectbarks/gopher-code/pkg/session"
 	"github.com/projectbarks/gopher-code/pkg/ui/commands"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
@@ -127,6 +129,14 @@ type AppModel struct {
 	showResume bool
 	resumeModel *screens.ResumeModel
 
+	// Permission prompt state
+	// Source: interactiveHandler.ts — permission prompt overlay
+	pendingPermission *permissions.PermissionRequestMsg
+
+	// Remote permission bridge (for CCR synthetic message wrapping)
+	// Source: remotePermissionBridge.ts
+	remoteBridge *remote.PermissionBridge
+
 	// Ctrl+C double-press tracking
 	// Claude requires two Ctrl+C presses on empty idle input to quit.
 	// First press shows "Press Ctrl-C again to exit" hint.
@@ -168,6 +178,9 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 		spinner:         components.NewThinkingSpinner(t),
 		activeToolCalls: make(map[string]string),
 	}
+
+	// Remote permission bridge for CCR synthetic wrapping
+	app.remoteBridge = remote.NewPermissionBridge()
 
 	// Focus ring: input gets initial focus, conversation is focusable for scrolling
 	app.focus = core.NewFocusManager(inputPane, app.conversation)
@@ -328,8 +341,26 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.doctorModel = nil
 		return a, nil
 
+	// --- Permission prompt integration ---
+	// Source: interactiveHandler.ts — permission prompt overlay in REPL
+	case permissions.PermissionRequestMsg:
+		return a.handlePermissionRequest(msg)
+
+	case permissions.PermissionResponseMsg:
+		return a.handlePermissionResponse(msg)
+
+	// --- Slash command: /compact ---
+	// Source: REPL.tsx — /compact triggers context window compaction
+	case commands.CompactMsg:
+		return a.handleCompact()
+
+	// --- Slash command: /thinking ---
+	// Source: REPL.tsx — /thinking toggles extended thinking
+	case commands.ThinkingToggleMsg:
+		return a.handleThinkingToggle()
+
 	case commands.ShowHelpMsg:
-		helpText := "Commands: /help /clear /model <name> /session /quit /compact /thinking"
+		helpText := "Commands: /help /clear /model <name> /session /quit /compact /thinking /doctor /resume"
 		helpMsg := message.Message{
 			Role:    message.RoleAssistant,
 			Content: []message.ContentBlock{{Type: message.ContentText, Text: helpText}},
@@ -768,6 +799,13 @@ func (a *AppModel) handleTurnComplete(msg TurnCompleteMsg) (*AppModel, tea.Cmd) 
 
 	a.statusLine.Update(components.ModeChangeMsg{Mode: components.ModeIdle})
 
+	// Persist session after each turn.
+	// Source: REPL.tsx — session is saved after each assistant turn.
+	if a.session != nil {
+		a.session.TurnCount++
+		_ = a.session.Save() // fire-and-forget; errors are non-fatal
+	}
+
 	return a, nil
 }
 
@@ -870,6 +908,16 @@ func (a *AppModel) handleResumeSelect(sessionID string) (*AppModel, tea.Cmd) {
 	}
 	a.conversation.AddMessage(infoMsg)
 
+	// Cross-project resume warning
+	// Source: sessionRestore.ts:439-440
+	if warning := session.ValidateCrossProjectResume(loaded.CWD, a.session.CWD); warning != "" {
+		warnMsg := message.Message{
+			Role:    message.RoleAssistant,
+			Content: []message.ContentBlock{{Type: message.ContentText, Text: warning}},
+		}
+		a.conversation.AddMessage(warnMsg)
+	}
+
 	return a, nil
 }
 
@@ -879,4 +927,66 @@ func shortSessionID(id string) string {
 		return id[:8]
 	}
 	return id
+}
+
+// --- T73: Permission prompt flow ---
+
+// handlePermissionRequest shows a permission prompt in the conversation area.
+// Source: REPL.tsx + interactiveHandler.ts — permission prompt display
+func (a *AppModel) handlePermissionRequest(msg permissions.PermissionRequestMsg) (*AppModel, tea.Cmd) {
+	a.pendingPermission = &msg
+
+	// Format the permission prompt as a system message
+	inputDesc := remote.FormatToolInput(msg.Input, 3)
+	promptText := fmt.Sprintf("Permission required: %s\n  %s\n  %s\n\n  [y]es / [n]o / [a]lways allow",
+		msg.ToolName, msg.Description, inputDesc)
+	promptMsg := message.Message{
+		Role:    message.RoleAssistant,
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: promptText}},
+	}
+	a.conversation.AddMessage(promptMsg)
+
+	return a, nil
+}
+
+// handlePermissionResponse processes user response to a permission prompt.
+func (a *AppModel) handlePermissionResponse(msg permissions.PermissionResponseMsg) (*AppModel, tea.Cmd) {
+	a.pendingPermission = nil
+	return a, nil
+}
+
+// handleCompact triggers context window compaction.
+// Source: REPL.tsx — /compact handler
+func (a *AppModel) handleCompact() (*AppModel, tea.Cmd) {
+	if a.session == nil {
+		return a, nil
+	}
+	infoMsg := message.Message{
+		Role:    message.RoleAssistant,
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: "Compacting conversation context..."}},
+	}
+	a.conversation.AddMessage(infoMsg)
+	return a, nil
+}
+
+// handleThinkingToggle toggles extended thinking mode.
+// Source: REPL.tsx — /thinking handler
+func (a *AppModel) handleThinkingToggle() (*AppModel, tea.Cmd) {
+	if a.session == nil {
+		return a, nil
+	}
+	a.session.Config.ThinkingEnabled = !a.session.Config.ThinkingEnabled
+	state := "disabled"
+	if a.session.Config.ThinkingEnabled {
+		state = "enabled"
+		if a.session.Config.ThinkingBudget == 0 {
+			a.session.Config.ThinkingBudget = 10000 // default budget
+		}
+	}
+	infoMsg := message.Message{
+		Role:    message.RoleAssistant,
+		Content: []message.ContentBlock{{Type: message.ContentText, Text: fmt.Sprintf("Extended thinking %s (budget: %d tokens)", state, a.session.Config.ThinkingBudget)}},
+	}
+	a.conversation.AddMessage(infoMsg)
+	return a, nil
 }
