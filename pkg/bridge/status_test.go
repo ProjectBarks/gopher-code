@@ -379,7 +379,7 @@ func TestNewStatusMachineStartsDisconnected(t *testing.T) {
 // Constants
 // ---------------------------------------------------------------------------
 
-func TestConstants(t *testing.T) {
+func TestStatusConstants(t *testing.T) {
 	if ToolDisplayExpiryMS != 30000 {
 		t.Errorf("ToolDisplayExpiryMS = %d", ToolDisplayExpiryMS)
 	}
