@@ -1,12 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -488,65 +485,19 @@ func main() {
 	// Handle -p / --print mode
 	if *printMode {
 		orchestrator := tools.NewOrchestrator(registry)
-
-		// Handle --input-format stream-json: read JSON lines from stdin
-		if *inputFormat == "stream-json" {
-			scanner := bufio.NewScanner(os.Stdin)
-			for scanner.Scan() {
-				line := scanner.Text()
-				var msg struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
-				}
-				if json.Unmarshal([]byte(line), &msg) == nil && msg.Text != "" {
-					sess.PushMessage(message.UserMessage(msg.Text))
-				}
-			}
-		} else {
-			prompt := strings.Join(flag.Args(), " ")
-			if prompt == "" {
-				// Read from stdin
-				data, err := io.ReadAll(os.Stdin)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error reading stdin: %v\n", err)
-					os.Exit(1)
-				}
-				prompt = strings.TrimSpace(string(data))
-			}
-			if prompt == "" {
-				fmt.Fprintln(os.Stderr, "Error: no prompt provided")
-				os.Exit(1)
-			}
-			sess.PushMessage(message.UserMessage(prompt))
-		}
 		if hookRunner != nil {
 			orchestrator.SetHookRunner(hookRunner)
 		}
-
-		// Select callback based on output format
-		if *outputFormat == "json" {
-			collector := cli.NewJSONCollector()
-			err := query.Query(ctx, sess, prov, registry, orchestrator, collector.Callback)
-			collector.Emit()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
-		} else if *outputFormat == "stream-json" {
-			err := query.Query(ctx, sess, prov, registry, orchestrator, cli.StreamJSONCallback)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
-		} else {
-			err := query.Query(ctx, sess, prov, registry, orchestrator, cli.PlainTextCallback)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
-			}
-			fmt.Println() // Final newline
+		outFmt, err := ParseOutputFormat(*outputFormat)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
-		os.Exit(0)
+		runHeadless(ctx, sess, prov, registry, orchestrator, HeadlessConfig{
+			OutputFormat: outFmt,
+			InputFormat:  *inputFormat,
+			Verbose:      *verbose,
+		}, flag.Args())
 	}
 
 	// Handle --query flag (one-shot mode, kept for compat)

@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/projectbarks/gopher-code/pkg/query"
@@ -113,6 +114,14 @@ func (c *JSONCollector) Callback(evt query.QueryEvent) {
 
 // Emit prints the final JSON envelope to stdout.
 func (c *JSONCollector) Emit() {
+	c.EmitTo(nil)
+}
+
+// EmitTo prints the final JSON envelope to w (defaults to os.Stdout).
+func (c *JSONCollector) EmitTo(w interface{ Write([]byte) (int, error) }) {
+	if w == nil {
+		w = defaultStdout()
+	}
 	result := map[string]interface{}{
 		"type":        "result",
 		"role":        "assistant",
@@ -129,7 +138,32 @@ func (c *JSONCollector) Emit() {
 		result["tool_results"] = c.toolResults
 	}
 	data, _ := json.MarshalIndent(result, "", "  ")
-	fmt.Println(string(data))
+	fmt.Fprintln(w, string(data))
+}
+
+// defaultStdout returns os.Stdout; used as fallback for nil writers.
+func defaultStdout() *os.File { return os.Stdout }
+
+// NewPlainTextWriter returns an EventCallback that writes text deltas to w.
+func NewPlainTextWriter(w interface{ Write([]byte) (int, error) }) query.EventCallback {
+	return func(evt query.QueryEvent) {
+		if evt.Type == query.QEventTextDelta {
+			fmt.Fprint(w, evt.Text)
+		}
+	}
+}
+
+// NewStreamJSONWriter returns an EventCallback that writes NDJSON lines to w.
+func NewStreamJSONWriter(w interface{ Write([]byte) (int, error) }) query.EventCallback {
+	return func(evt query.QueryEvent) {
+		data, _ := json.Marshal(map[string]interface{}{
+			"type":    string(evt.Type),
+			"text":    evt.Text,
+			"tool":    evt.ToolName,
+			"content": evt.Content,
+		})
+		fmt.Fprintln(w, ndjsonSafeStringify(string(data)))
+	}
 }
 
 // truncate shortens a string to maxLen, appending "..." if truncated.
