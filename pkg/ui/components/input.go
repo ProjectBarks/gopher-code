@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/projectbarks/gopher-code/pkg/ui/hooks/input"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
 
@@ -18,23 +19,20 @@ type SubmitMsg struct {
 
 // InputPane is a text input with command history and terminal-style keybindings.
 type InputPane struct {
-	runes      []rune // Input buffer as runes for Unicode safety
-	width      int
-	height     int
-	focused    bool
-	cursor     int // Cursor position in runes (not bytes)
-	history    []string
-	historyIdx int  // -1 means "not navigating history"
-	multiline  bool // True when in multi-line editing mode
-	savedInput string // Saved input when navigating history
+	runes     []rune // Input buffer as runes for Unicode safety
+	width     int
+	height    int
+	focused   bool
+	cursor    int // Cursor position in runes (not bytes)
+	History   *input.InputHistory
+	multiline bool // True when in multi-line editing mode
 }
 
 // NewInputPane creates a new empty input pane.
 func NewInputPane() *InputPane {
 	return &InputPane{
-		runes:      make([]rune, 0),
-		history:    make([]string, 0),
-		historyIdx: -1,
+		runes:   make([]rune, 0),
+		History: input.NewInputHistory(),
 	}
 }
 
@@ -114,8 +112,7 @@ func (ip *InputPane) Clear() {
 
 // AddToHistory adds a command to the history.
 func (ip *InputPane) AddToHistory(cmd string) {
-	ip.history = append(ip.history, cmd)
-	ip.historyIdx = -1
+	ip.History.Add(cmd)
 }
 
 // --- Key handling ---
@@ -127,7 +124,7 @@ func (ip *InputPane) handleKey(msg tea.KeyPressMsg) (*InputPane, tea.Cmd) {
 		text := strings.TrimSpace(string(ip.runes))
 		if text != "" {
 			ip.Clear()
-			ip.historyIdx = -1
+			ip.History.Reset()
 			return ip, func() tea.Msg {
 				return SubmitMsg{Text: text}
 			}
@@ -185,15 +182,15 @@ func (ip *InputPane) handleKey(msg tea.KeyPressMsg) (*InputPane, tea.Cmd) {
 		ip.deleteWordBackward()
 		return ip, nil
 
-	// History navigation: only when input is empty or already navigating
+	// History navigation with draft preservation and mode filtering.
 	case msg.Code == tea.KeyUp:
-		if len(ip.runes) == 0 || ip.historyIdx >= 0 {
-			ip.navigateHistoryUp()
+		if text, changed := ip.History.NavigateUp(string(ip.runes)); changed {
+			ip.SetValue(text)
 		}
 		return ip, nil
 	case msg.Code == tea.KeyDown:
-		if ip.historyIdx >= 0 {
-			ip.navigateHistoryDown()
+		if text, changed := ip.History.NavigateDown(); changed {
+			ip.SetValue(text)
 		}
 		return ip, nil
 
@@ -229,31 +226,3 @@ func (ip *InputPane) deleteWordBackward() {
 	ip.cursor = pos
 }
 
-func (ip *InputPane) navigateHistoryUp() {
-	if len(ip.history) == 0 {
-		return
-	}
-	if ip.historyIdx == -1 {
-		// Save current input before entering history
-		ip.savedInput = string(ip.runes)
-		ip.historyIdx = len(ip.history) - 1
-	} else if ip.historyIdx > 0 {
-		ip.historyIdx--
-	}
-	ip.SetValue(ip.history[ip.historyIdx])
-}
-
-func (ip *InputPane) navigateHistoryDown() {
-	if ip.historyIdx == -1 {
-		return
-	}
-	if ip.historyIdx < len(ip.history)-1 {
-		ip.historyIdx++
-		ip.SetValue(ip.history[ip.historyIdx])
-	} else {
-		// Restore saved input
-		ip.historyIdx = -1
-		ip.SetValue(ip.savedInput)
-		ip.savedInput = ""
-	}
-}
