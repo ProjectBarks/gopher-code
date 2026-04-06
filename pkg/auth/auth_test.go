@@ -5,7 +5,16 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/zalando/go-keyring"
 )
+
+func TestMain(m *testing.M) {
+	// Use in-memory mock keyring to avoid macOS Keychain access,
+	// which blocks threads when no keychain is available.
+	keyring.MockInit()
+	os.Exit(m.Run())
+}
 
 func TestGetAPIKey_EnvVar(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-123")
@@ -43,6 +52,7 @@ func TestGetAPIKey_EnvVarOverridesFile(t *testing.T) {
 }
 
 func TestGetAPIKey_FileAuth(t *testing.T) {
+	keyring.MockInit() // reset mock keyring so previous tests' saved keys don't leak
 	t.Setenv("ANTHROPIC_API_KEY", "")
 
 	tmpDir := t.TempDir()
@@ -64,6 +74,7 @@ func TestGetAPIKey_FileAuth(t *testing.T) {
 }
 
 func TestGetAPIKey_NoKeyFound(t *testing.T) {
+	keyring.MockInit() // reset mock keyring so previous tests' saved keys don't leak
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("HOME", t.TempDir())
 
@@ -110,6 +121,7 @@ func TestStatus_Authenticated(t *testing.T) {
 }
 
 func TestStatus_NotAuthenticated(t *testing.T) {
+	keyring.MockInit() // reset mock keyring so previous tests' saved keys don't leak
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("HOME", t.TempDir())
 

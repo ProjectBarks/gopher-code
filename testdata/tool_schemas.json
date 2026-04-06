@@ -29,7 +29,9 @@
           "description": "Set this to true to dangerously override sandbox mode and run commands without sandboxing."
         }
       },
-      "required": ["command"],
+      "required": [
+        "command"
+      ],
       "additionalProperties": false
     }
   },
@@ -61,7 +63,9 @@
           "description": "Page range for PDF files (e.g., \"1-5\", \"3\", \"10-20\"). Only applicable to PDF files. Maximum 20 pages per request."
         }
       },
-      "required": ["file_path"],
+      "required": [
+        "file_path"
+      ],
       "additionalProperties": false
     }
   },
@@ -83,7 +87,10 @@
           "description": "The content to write to the file"
         }
       },
-      "required": ["file_path", "content"],
+      "required": [
+        "file_path",
+        "content"
+      ],
       "additionalProperties": false
     }
   },
@@ -114,7 +121,11 @@
           "description": "Replace all occurrences of old_string (default false)"
         }
       },
-      "required": ["file_path", "old_string", "new_string"],
+      "required": [
+        "file_path",
+        "old_string",
+        "new_string"
+      ],
       "additionalProperties": false
     }
   },
@@ -136,7 +147,9 @@
           "description": "The directory to search in. If not specified, the current working directory will be used."
         }
       },
-      "required": ["pattern"],
+      "required": [
+        "pattern"
+      ],
       "additionalProperties": false
     }
   },
@@ -163,7 +176,11 @@
         },
         "output_mode": {
           "type": "string",
-          "enum": ["content", "files_with_matches", "count"],
+          "enum": [
+            "content",
+            "files_with_matches",
+            "count"
+          ],
           "description": "Output mode. Defaults to \"files_with_matches\"."
         },
         "-B": {
@@ -207,7 +224,9 @@
           "description": "Enable multiline mode. Default: false."
         }
       },
-      "required": ["pattern"],
+      "required": [
+        "pattern"
+      ],
       "additionalProperties": false
     }
   },
@@ -229,7 +248,10 @@
           "description": "The prompt to run on the fetched content"
         }
       },
-      "required": ["url", "prompt"],
+      "required": [
+        "url",
+        "prompt"
+      ],
       "additionalProperties": false
     }
   },
@@ -262,7 +284,9 @@
           "description": "Never include search results from these domains"
         }
       },
-      "required": ["query"],
+      "required": [
+        "query"
+      ],
       "additionalProperties": false
     }
   },
@@ -289,7 +313,11 @@
         },
         "model": {
           "type": "string",
-          "enum": ["sonnet", "opus", "haiku"],
+          "enum": [
+            "sonnet",
+            "opus",
+            "haiku"
+          ],
           "description": "Optional model override for this agent."
         },
         "run_in_background": {
@@ -298,11 +326,16 @@
         },
         "isolation": {
           "type": "string",
-          "enum": ["worktree"],
+          "enum": [
+            "worktree"
+          ],
           "description": "Isolation mode."
         }
       },
-      "required": ["description", "prompt"],
+      "required": [
+        "description",
+        "prompt"
+      ],
       "additionalProperties": false
     }
   },
@@ -324,7 +357,9 @@
           "description": "Optional arguments for the skill"
         }
       },
-      "required": ["skill"],
+      "required": [
+        "skill"
+      ],
       "additionalProperties": false
     }
   },
@@ -347,7 +382,9 @@
           "description": "Maximum number of results to return (default: 5)"
         }
       },
-      "required": ["query"],
+      "required": [
+        "query"
+      ],
       "additionalProperties": false
     }
   },
@@ -388,7 +425,12 @@
           "description": "The character offset (1-based)"
         }
       },
-      "required": ["operation", "filePath", "line", "character"],
+      "required": [
+        "operation",
+        "filePath",
+        "line",
+        "character"
+      ],
       "additionalProperties": false
     }
   },
@@ -415,16 +457,26 @@
         },
         "cell_type": {
           "type": "string",
-          "enum": ["code", "markdown"],
+          "enum": [
+            "code",
+            "markdown"
+          ],
           "description": "The type of the cell."
         },
         "edit_mode": {
           "type": "string",
-          "enum": ["replace", "insert", "delete"],
+          "enum": [
+            "replace",
+            "insert",
+            "delete"
+          ],
           "description": "The type of edit to make. Defaults to replace."
         }
       },
-      "required": ["notebook_path", "new_source"],
+      "required": [
+        "notebook_path",
+        "new_source"
+      ],
       "additionalProperties": false
     }
   },
@@ -445,7 +497,10 @@
             "properties": {
               "status": {
                 "type": "string",
-                "enum": ["pending", "completed"]
+                "enum": [
+                  "pending",
+                  "completed"
+                ]
               },
               "content": {
                 "type": "string"
@@ -454,7 +509,9 @@
           }
         }
       },
-      "required": ["todos"],
+      "required": [
+        "todos"
+      ],
       "additionalProperties": false
     }
   },
@@ -484,7 +541,10 @@
           "description": "Arbitrary metadata to attach to the task"
         }
       },
-      "required": ["subject", "description"],
+      "required": [
+        "subject",
+        "description"
+      ],
       "additionalProperties": false
     }
   },
@@ -512,7 +572,12 @@
         },
         "status": {
           "type": "string",
-          "enum": ["pending", "in_progress", "completed", "deleted"]
+          "enum": [
+            "pending",
+            "in_progress",
+            "completed",
+            "deleted"
+          ]
         },
         "addBlocks": {
           "type": "array",
@@ -535,7 +600,9 @@
           "type": "object"
         }
       },
-      "required": ["taskId"],
+      "required": [
+        "taskId"
+      ],
       "additionalProperties": false
     }
   },
@@ -553,7 +620,9 @@
           "description": "The ID of the task to retrieve"
         }
       },
-      "required": ["taskId"],
+      "required": [
+        "taskId"
+      ],
       "additionalProperties": false
     }
   },
@@ -579,12 +648,18 @@
     "input_schema": {
       "type": "object",
       "properties": {
-        "taskId": {
+        "task_id": {
           "type": "string",
           "description": "The ID of the task to stop"
+        },
+        "shell_id": {
+          "type": "string",
+          "description": "Deprecated alias for task_id"
         }
       },
-      "required": ["taskId"],
+      "required": [
+        "task_id"
+      ],
       "additionalProperties": false
     }
   },
@@ -597,16 +672,26 @@
     "input_schema": {
       "type": "object",
       "properties": {
-        "taskId": {
+        "task_id": {
           "type": "string",
-          "description": "The ID of the task to record output for"
+          "description": "The ID of the task to read output from"
         },
         "output": {
           "type": "string",
           "description": "The output to capture"
+        },
+        "block": {
+          "type": "boolean",
+          "description": "Whether to block until the task completes (default true)"
+        },
+        "timeout": {
+          "type": "number",
+          "description": "Timeout in milliseconds (0-600000, default 30000)"
         }
       },
-      "required": ["taskId", "output"],
+      "required": [
+        "task_id"
+      ],
       "additionalProperties": false
     }
   },
@@ -652,7 +737,10 @@
                       "type": "string"
                     }
                   },
-                  "required": ["label", "description"]
+                  "required": [
+                    "label",
+                    "description"
+                  ]
                 }
               },
               "multiSelect": {
@@ -660,7 +748,12 @@
                 "default": false
               }
             },
-            "required": ["question", "header", "options", "multiSelect"]
+            "required": [
+              "question",
+              "header",
+              "options",
+              "multiSelect"
+            ]
           }
         },
         "answers": {
@@ -678,7 +771,9 @@
           }
         }
       },
-      "required": ["questions"],
+      "required": [
+        "questions"
+      ],
       "additionalProperties": false
     }
   },
@@ -700,7 +795,9 @@
           "description": "Timeout in seconds (default 30)"
         }
       },
-      "required": ["command"],
+      "required": [
+        "command"
+      ],
       "additionalProperties": false
     }
   },
@@ -713,19 +810,22 @@
     "input_schema": {
       "type": "object",
       "properties": {
-        "name": {
+        "team_name": {
           "type": "string",
-          "description": "Name for the team"
+          "description": "Name for the new team to create."
         },
-        "members": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "List of agent descriptions"
+        "description": {
+          "type": "string",
+          "description": "Description of the team purpose."
+        },
+        "agent_type": {
+          "type": "string",
+          "description": "Type of agents in this team."
         }
       },
-      "required": ["name"],
+      "required": [
+        "team_name"
+      ],
       "additionalProperties": false
     }
   },
@@ -738,12 +838,14 @@
     "input_schema": {
       "type": "object",
       "properties": {
-        "name": {
+        "team_name": {
           "type": "string",
-          "description": "Name of the team to delete"
+          "description": "Name of the team to delete."
         }
       },
-      "required": ["name"],
+      "required": [
+        "team_name"
+      ],
       "additionalProperties": false
     }
   },
@@ -758,7 +860,11 @@
       "properties": {
         "action": {
           "type": "string",
-          "enum": ["get", "set", "list"],
+          "enum": [
+            "get",
+            "set",
+            "list"
+          ],
           "description": "Action to perform"
         },
         "key": {
@@ -770,7 +876,9 @@
           "description": "Value to set (for set action)"
         }
       },
-      "required": ["action"],
+      "required": [
+        "action"
+      ],
       "additionalProperties": false
     }
   },
@@ -792,7 +900,10 @@
           "description": "Prompt to send to the remote agent"
         }
       },
-      "required": ["agent", "prompt"],
+      "required": [
+        "agent",
+        "prompt"
+      ],
       "additionalProperties": false
     }
   },
@@ -810,7 +921,9 @@
           "description": "Text to return as synthetic output"
         }
       },
-      "required": ["text"],
+      "required": [
+        "text"
+      ],
       "additionalProperties": false
     }
   }

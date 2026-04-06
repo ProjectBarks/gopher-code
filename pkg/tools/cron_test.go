@@ -33,8 +33,8 @@ func newCronToolSet(t *testing.T) (create, del, list tools.Tool) {
 	return
 }
 
-// exec is a shorthand for tool.Execute in tests.
-func exec(t *testing.T, tool tools.Tool, inputJSON string) *tools.ToolOutput {
+// execTool is a shorthand for tool.Execute in tests.
+func execTool(t *testing.T, tool tools.Tool, inputJSON string) *tools.ToolOutput {
 	t.Helper()
 	out, err := tool.Execute(context.Background(), nil, json.RawMessage(inputJSON))
 	if err != nil {
@@ -288,7 +288,7 @@ func TestCronCreate_ValidationErrors(t *testing.T) {
 	create, _, _ := newCronToolSet(t)
 
 	t.Run("errorCode1_invalid_cron_expression", func(t *testing.T) {
-		out := exec(t, create, `{"cron": "bad cron", "prompt": "test"}`)
+		out := execTool(t, create, `{"cron": "bad cron", "prompt": "test"}`)
 		if !out.IsError {
 			t.Fatal("expected error for invalid cron")
 		}
@@ -301,7 +301,7 @@ func TestCronCreate_ValidationErrors(t *testing.T) {
 	})
 
 	t.Run("errorCode1_wrong_field_count", func(t *testing.T) {
-		out := exec(t, create, `{"cron": "* * *", "prompt": "test"}`)
+		out := execTool(t, create, `{"cron": "* * *", "prompt": "test"}`)
 		if !out.IsError {
 			t.Fatal("expected error for 3-field cron")
 		}
@@ -312,7 +312,7 @@ func TestCronCreate_ValidationErrors(t *testing.T) {
 
 	t.Run("errorCode2_dead_cron_feb30", func(t *testing.T) {
 		// Feb 30 never exists — dead cron
-		out := exec(t, create, `{"cron": "0 0 30 2 *", "prompt": "test"}`)
+		out := execTool(t, create, `{"cron": "0 0 30 2 *", "prompt": "test"}`)
 		if !out.IsError {
 			t.Fatal("expected error for dead cron (Feb 30)")
 		}
@@ -325,13 +325,13 @@ func TestCronCreate_ValidationErrors(t *testing.T) {
 		// Create a fresh set and fill to MaxCronJobs
 		create2, _, _ := newCronToolSet(t)
 		for i := 0; i < tools.MaxCronJobs; i++ {
-			out := exec(t, create2, fmt.Sprintf(`{"cron": "*/5 * * * *", "prompt": "job %d"}`, i))
+			out := execTool(t, create2, fmt.Sprintf(`{"cron": "*/5 * * * *", "prompt": "job %d"}`, i))
 			if out.IsError {
 				t.Fatalf("failed to create job %d: %s", i, out.Content)
 			}
 		}
 		// The 51st should fail
-		out := exec(t, create2, `{"cron": "*/5 * * * *", "prompt": "one too many"}`)
+		out := execTool(t, create2, `{"cron": "*/5 * * * *", "prompt": "one too many"}`)
 		if !out.IsError {
 			t.Fatal("expected error at max jobs cap")
 		}
@@ -341,21 +341,21 @@ func TestCronCreate_ValidationErrors(t *testing.T) {
 	})
 
 	t.Run("empty_cron", func(t *testing.T) {
-		out := exec(t, create, `{"cron": "", "prompt": "test"}`)
+		out := execTool(t, create, `{"cron": "", "prompt": "test"}`)
 		if !out.IsError {
 			t.Fatal("expected error for empty cron")
 		}
 	})
 
 	t.Run("empty_prompt", func(t *testing.T) {
-		out := exec(t, create, `{"cron": "* * * * *", "prompt": ""}`)
+		out := execTool(t, create, `{"cron": "* * * * *", "prompt": ""}`)
 		if !out.IsError {
 			t.Fatal("expected error for empty prompt")
 		}
 	})
 
 	t.Run("invalid_json", func(t *testing.T) {
-		out := exec(t, create, `{bad}`)
+		out := execTool(t, create, `{bad}`)
 		if !out.IsError {
 			t.Fatal("expected error for invalid JSON")
 		}
@@ -368,7 +368,7 @@ func TestCronCreate_ValidationErrors(t *testing.T) {
 func TestCronCreate_HumanScheduleInOutput(t *testing.T) {
 	create, _, _ := newCronToolSet(t)
 
-	out := exec(t, create, `{"cron": "*/5 * * * *", "prompt": "check status"}`)
+	out := execTool(t, create, `{"cron": "*/5 * * * *", "prompt": "check status"}`)
 	if out.IsError {
 		t.Fatalf("unexpected error: %s", out.Content)
 	}
@@ -390,7 +390,7 @@ func TestCronCreate_HumanScheduleInOutput(t *testing.T) {
 func TestCronCreate_OneShotOutput(t *testing.T) {
 	create, _, _ := newCronToolSet(t)
 
-	out := exec(t, create, `{"cron": "30 14 15 6 *", "prompt": "deploy check", "recurring": false}`)
+	out := execTool(t, create, `{"cron": "30 14 15 6 *", "prompt": "deploy check", "recurring": false}`)
 	if out.IsError {
 		t.Fatalf("unexpected error: %s", out.Content)
 	}
@@ -405,7 +405,7 @@ func TestCronCreate_OneShotOutput(t *testing.T) {
 func TestCronCreate_DurableOutput(t *testing.T) {
 	create, _, _ := newCronToolSet(t)
 
-	out := exec(t, create, `{"cron": "0 9 * * 1-5", "prompt": "standup", "durable": true}`)
+	out := execTool(t, create, `{"cron": "0 9 * * 1-5", "prompt": "standup", "durable": true}`)
 	if out.IsError {
 		t.Fatalf("unexpected error: %s", out.Content)
 	}
@@ -420,13 +420,13 @@ func TestCronCreate_DurableOutput(t *testing.T) {
 func TestCronCreateAndList(t *testing.T) {
 	create, _, list := newCronToolSet(t)
 
-	out := exec(t, create, `{"cron": "*/5 * * * *", "prompt": "check status"}`)
+	out := execTool(t, create, `{"cron": "*/5 * * * *", "prompt": "check status"}`)
 	if out.IsError {
 		t.Fatalf("create failed: %s", out.Content)
 	}
 	id := extractID(t, out.Content)
 
-	listOut := exec(t, list, `{}`)
+	listOut := execTool(t, list, `{}`)
 	if listOut.IsError {
 		t.Fatalf("list failed: %s", listOut.Content)
 	}
@@ -458,7 +458,7 @@ func TestCronCreateAndList(t *testing.T) {
 func TestCronList_EmptyVerbatim(t *testing.T) {
 	_, _, list := newCronToolSet(t)
 
-	out := exec(t, list, `{}`)
+	out := execTool(t, list, `{}`)
 	// Source: CronListTool.ts:93 — "No scheduled jobs."
 	if out.Content != "No scheduled jobs." {
 		t.Errorf("expected 'No scheduled jobs.', got %q", out.Content)
@@ -472,11 +472,11 @@ func TestCronList_OneShotAndDurableLabels(t *testing.T) {
 	create, _, list := newCronToolSet(t)
 
 	// One-shot session-only
-	exec(t, create, `{"cron": "30 14 15 6 *", "prompt": "once", "recurring": false}`)
+	execTool(t, create, `{"cron": "30 14 15 6 *", "prompt": "once", "recurring": false}`)
 	// Recurring durable — should NOT have [session-only]
-	exec(t, create, `{"cron": "*/5 * * * *", "prompt": "forever", "durable": true}`)
+	execTool(t, create, `{"cron": "*/5 * * * *", "prompt": "forever", "durable": true}`)
 
-	out := exec(t, list, `{}`)
+	out := execTool(t, list, `{}`)
 	lines := strings.Split(out.Content, "\n")
 	if len(lines) < 2 {
 		t.Fatalf("expected 2 lines, got %d: %q", len(lines), out.Content)
@@ -513,9 +513,9 @@ func TestCronList_PromptTruncation(t *testing.T) {
 	create, _, list := newCronToolSet(t)
 
 	longPrompt := strings.Repeat("a", 120)
-	exec(t, create, fmt.Sprintf(`{"cron": "*/5 * * * *", "prompt": %q}`, longPrompt))
+	execTool(t, create, fmt.Sprintf(`{"cron": "*/5 * * * *", "prompt": %q}`, longPrompt))
 
-	out := exec(t, list, `{}`)
+	out := execTool(t, list, `{}`)
 	// The full 120-char prompt should NOT appear
 	if strings.Contains(out.Content, longPrompt) {
 		t.Error("list should truncate prompts > 80 chars")
@@ -532,11 +532,11 @@ func TestCronList_PromptTruncation(t *testing.T) {
 func TestCronCreateAndDelete(t *testing.T) {
 	create, del, list := newCronToolSet(t)
 
-	out := exec(t, create, `{"cron": "0 * * * *", "prompt": "hourly check"}`)
+	out := execTool(t, create, `{"cron": "0 * * * *", "prompt": "hourly check"}`)
 	id := extractID(t, out.Content)
 
 	// Delete it
-	delOut := exec(t, del, fmt.Sprintf(`{"id": %q}`, id))
+	delOut := execTool(t, del, fmt.Sprintf(`{"id": %q}`, id))
 	if delOut.IsError {
 		t.Fatalf("delete failed: %s", delOut.Content)
 	}
@@ -547,7 +547,7 @@ func TestCronCreateAndDelete(t *testing.T) {
 	}
 
 	// List should be empty
-	listOut := exec(t, list, `{}`)
+	listOut := execTool(t, list, `{}`)
 	if listOut.Content != "No scheduled jobs." {
 		t.Errorf("expected empty list after delete, got %q", listOut.Content)
 	}
@@ -559,7 +559,7 @@ func TestCronCreateAndDelete(t *testing.T) {
 func TestCronDelete_NotFound(t *testing.T) {
 	_, del, _ := newCronToolSet(t)
 
-	out := exec(t, del, `{"id": "cron-999"}`)
+	out := execTool(t, del, `{"id": "cron-999"}`)
 	if !out.IsError {
 		t.Fatal("expected error for nonexistent job")
 	}
@@ -572,7 +572,7 @@ func TestCronDelete_NotFound(t *testing.T) {
 func TestCronDelete_MissingID(t *testing.T) {
 	_, del, _ := newCronToolSet(t)
 
-	out := exec(t, del, `{"id": ""}`)
+	out := execTool(t, del, `{"id": ""}`)
 	if !out.IsError {
 		t.Fatal("expected error for missing id")
 	}
@@ -581,7 +581,7 @@ func TestCronDelete_MissingID(t *testing.T) {
 func TestCronDelete_InvalidJSON(t *testing.T) {
 	_, del, _ := newCronToolSet(t)
 
-	out := exec(t, del, `{bad}`)
+	out := execTool(t, del, `{bad}`)
 	if !out.IsError {
 		t.Fatal("expected error for invalid JSON")
 	}

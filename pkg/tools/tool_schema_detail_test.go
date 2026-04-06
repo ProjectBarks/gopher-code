@@ -278,7 +278,7 @@ func TestPerToolExpectedValues(t *testing.T) {
 		{"TaskUpdate", false, true, 100000, 9, 1, []string{"taskId"}},
 		{"TaskGet", true, true, 100000, 1, 1, []string{"taskId"}},
 		{"TaskList", true, true, 100000, 0, 0, []string{}},
-		{"TaskStop", false, true, 100000, 2, 0, []string{}},
+		{"TaskStop", false, true, 100000, 2, 1, []string{"task_id"}},
 		{"TaskOutput", false, true, 100000, 4, 1, []string{"task_id"}},
 		{"AskUserQuestion", true, true, 100000, 4, 1, []string{"questions"}},
 		{"PowerShell", false, false, 30000, 2, 1, []string{"command"}},
