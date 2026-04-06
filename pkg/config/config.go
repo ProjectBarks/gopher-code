@@ -6,6 +6,14 @@ import (
 	"path/filepath"
 )
 
+// AutoModeSettings holds user-defined auto-mode classifier rules.
+// Source: utils/settings/settings.ts:940-944
+type AutoModeSettings struct {
+	Allow       []string `json:"allow,omitempty"`
+	SoftDeny    []string `json:"soft_deny,omitempty"`
+	Environment []string `json:"environment,omitempty"`
+}
+
 // HookConfig for settings (mirrors hooks.HookConfig to avoid import cycles).
 type HookConfig struct {
 	Type    string `json:"type"`
@@ -33,6 +41,10 @@ type Settings struct {
 	// System prompt
 	SystemPrompt       string `json:"system_prompt,omitempty"`
 	AppendSystemPrompt string `json:"append_system_prompt,omitempty"`
+
+	// Auto mode classifier rules
+	// Source: utils/settings/settings.ts:936-982
+	AutoMode *AutoModeSettings `json:"autoMode,omitempty"`
 
 	// UI
 	Theme   string `json:"theme,omitempty"`
