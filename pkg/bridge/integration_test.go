@@ -69,6 +69,47 @@ func TestNewRemoteControlConfigIntegration(t *testing.T) {
 	}
 }
 
+// TestPollConfigIntegration exercises the poll config defaults through the
+// DynamicPollConfig path that the binary uses (T175). It verifies that
+// DefaultPollConfig flows through NewDynamicPollConfig and produces the
+// expected poll delays at each capacity state.
+func TestPollConfigIntegration(t *testing.T) {
+	// Single-session mode (matches the binary's remote-control init).
+	dpc := NewDynamicPollConfig(DefaultPollConfig, false)
+
+	// At CapacityNone the delay should equal the not-at-capacity interval.
+	if got := dpc.NextPollDelay(); got != DefaultPollConfig.PollIntervalNotAtCapacity {
+		t.Fatalf("NextPollDelay(CapacityNone) = %v, want %v", got, DefaultPollConfig.PollIntervalNotAtCapacity)
+	}
+
+	// Switch to full capacity — should return at-capacity interval.
+	dpc.SetCapacity(CapacityFull)
+	if got := dpc.NextPollDelay(); got != DefaultPollConfig.PollIntervalAtCapacity {
+		t.Fatalf("NextPollDelay(CapacityFull) = %v, want %v", got, DefaultPollConfig.PollIntervalAtCapacity)
+	}
+
+	// Config round-trips through JSON (simulates wire format from server).
+	raw, err := json.Marshal(DefaultPollConfig)
+	if err != nil {
+		t.Fatalf("Marshal DefaultPollConfig: %v", err)
+	}
+	var decoded PollIntervalConfig
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("Unmarshal DefaultPollConfig: %v", err)
+	}
+	if decoded.PollIntervalNotAtCapacity != DefaultPollConfig.PollIntervalNotAtCapacity {
+		t.Fatalf("round-trip PollIntervalNotAtCapacity = %v, want %v",
+			decoded.PollIntervalNotAtCapacity, DefaultPollConfig.PollIntervalNotAtCapacity)
+	}
+
+	// Hot-swap config via SetConfig (simulates GrowthBook refresh).
+	dpc.SetConfig(decoded)
+	dpc.SetCapacity(CapacityNone)
+	if got := dpc.NextPollDelay(); got != DefaultPollConfig.PollIntervalNotAtCapacity {
+		t.Fatalf("NextPollDelay after SetConfig = %v, want %v", got, DefaultPollConfig.PollIntervalNotAtCapacity)
+	}
+}
+
 // TestBridgeConfigToPollWorkflow exercises the full config → register →
 // poll-for-work → acknowledge workflow with bridge types flowing through
 // each step.
