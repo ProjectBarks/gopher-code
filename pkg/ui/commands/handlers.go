@@ -263,6 +263,10 @@ type HooksMsg struct {
 }
 
 // InstallSlackAppMsg is returned when /install-slack-app opens the Slack app install URL.
+type MemoryMsg struct {
+	Message string
+}
+
 type InstallSlackAppMsg struct {
 	Message string
 	URL     string
@@ -2039,6 +2043,57 @@ func newInstallSlackAppHandler() Handler {
 }
 
 // ---------------------------------------------------------------------------
+// T265: /memory — display or create CLAUDE.md memory file
+// Source: src/commands/memory.tsx
+// ---------------------------------------------------------------------------
+
+// MemoryDeps holds dependencies for the /memory handler.
+type MemoryDeps struct {
+	// CWD returns the current working directory.
+	CWD func() string
+}
+
+// newMemoryHandler creates the /memory command handler.
+// Reads CLAUDE.md from CWD (or home dir) and displays its contents.
+// If no CLAUDE.md exists, prompts the user to create one via /init.
+func newMemoryHandler(deps MemoryDeps) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			cwd := deps.CWD()
+			if cwd == "" {
+				cwd, _ = os.Getwd()
+			}
+
+			// Search for CLAUDE.md in CWD, then home dir.
+			candidates := []string{
+				filepath.Join(cwd, "CLAUDE.md"),
+			}
+			if home, err := os.UserHomeDir(); err == nil {
+				candidates = append(candidates, filepath.Join(home, "CLAUDE.md"))
+			}
+
+			for _, path := range candidates {
+				data, err := os.ReadFile(path)
+				if err != nil {
+					continue
+				}
+				content := strings.TrimSpace(string(data))
+				if content == "" {
+					continue
+				}
+				return MemoryMsg{
+					Message: fmt.Sprintf("## CLAUDE.md (%s)\n\n%s", path, content),
+				}
+			}
+
+			return MemoryMsg{
+				Message: "No CLAUDE.md found.\n\nRun /init to create one for this project.",
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // T251: /files — list files in context (ant-only)
 // Source: src/commands/files.ts
 // ---------------------------------------------------------------------------
@@ -2957,5 +3012,16 @@ func (d *Dispatcher) registerDefaults() {
 		Type:        CommandTypeLocal,
 		Source:      "builtin",
 		Handler:     newInstallGitHubAppHandler(),
+	})
+
+	// T265: /memory — display or create CLAUDE.md memory file
+	d.RegisterCommand(CommandRegistration{
+		Name:        "memory",
+		Description: "Show CLAUDE.md memory file",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: newMemoryHandler(MemoryDeps{
+			CWD: func() string { return "" },
+		}),
 	})
 }
