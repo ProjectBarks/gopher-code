@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -312,5 +314,123 @@ func TestWorkSecretEncryptionRoundTrip(t *testing.T) {
 	wantLocal := "ws://localhost:8080/v2/session_ingress/ws/sess_local"
 	if localURL != wantLocal {
 		t.Errorf("BuildSdkUrl (localhost) = %q, want %q", localURL, wantLocal)
+	}
+}
+
+// TestBridgeMessagingIntegration exercises message construction, JSON
+// serialization, enqueue, flush, and ack — the full outbound event lifecycle
+// that the binary's remote-control path relies on (T184).
+func TestBridgeMessagingIntegration(t *testing.T) {
+	var received [][]BridgeEvent
+	var mu sync.Mutex
+
+	bm := NewBridgeMessaging(BridgeMessagingConfig{
+		MaxBatchSize: 10,
+		MaxQueueSize: 100,
+		AckTimeout:   5 * time.Second,
+		Send: func(_ context.Context, batch []BridgeEvent) error {
+			mu.Lock()
+			cp := make([]BridgeEvent, len(batch))
+			copy(cp, batch)
+			received = append(received, cp)
+			mu.Unlock()
+			return nil
+		},
+	})
+	defer bm.Close()
+
+	ctx := context.Background()
+
+	// Step 1: Construct events with typed payloads and serialize to JSON.
+	type userPayload struct {
+		Type      string `json:"type"`
+		SessionID string `json:"session_id"`
+		Content   string `json:"content"`
+	}
+	type assistantPayload struct {
+		Type    string `json:"type"`
+		Content string `json:"content"`
+		Model   string `json:"model"`
+	}
+
+	payloads := []interface{}{
+		userPayload{Type: "user", SessionID: "sess-int-1", Content: "hello"},
+		assistantPayload{Type: "assistant", Content: "world", Model: "claude-opus-4-6"},
+		userPayload{Type: "user", SessionID: "sess-int-1", Content: "follow-up"},
+	}
+
+	for _, p := range payloads {
+		raw, err := json.Marshal(p)
+		if err != nil {
+			t.Fatalf("json.Marshal payload: %v", err)
+		}
+		evt := BridgeEvent{
+			Type:      "user",
+			SessionID: "sess-int-1",
+			Payload:   raw,
+		}
+		if err := bm.Enqueue(ctx, evt); err != nil {
+			t.Fatalf("Enqueue: %v", err)
+		}
+	}
+
+	// Step 2: Flush all events.
+	if err := bm.Flush(ctx); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+
+	// Step 3: Verify all events were sent with monotonic sequence numbers.
+	mu.Lock()
+	var allEvents []BridgeEvent
+	for _, batch := range received {
+		allEvents = append(allEvents, batch...)
+	}
+	mu.Unlock()
+
+	if len(allEvents) != 3 {
+		t.Fatalf("expected 3 events, got %d", len(allEvents))
+	}
+	for i := 1; i < len(allEvents); i++ {
+		if allEvents[i].SeqNum <= allEvents[i-1].SeqNum {
+			t.Errorf("seq[%d]=%d not > seq[%d]=%d", i, allEvents[i].SeqNum, i-1, allEvents[i-1].SeqNum)
+		}
+	}
+
+	// Step 4: Verify each event's Payload round-trips through JSON.
+	for i, evt := range allEvents {
+		// The BridgeEvent itself should serialize cleanly.
+		evtJSON, err := json.Marshal(evt)
+		if err != nil {
+			t.Fatalf("json.Marshal event[%d]: %v", i, err)
+		}
+		var decoded BridgeEvent
+		if err := json.Unmarshal(evtJSON, &decoded); err != nil {
+			t.Fatalf("json.Unmarshal event[%d]: %v", i, err)
+		}
+		if decoded.SeqNum != evt.SeqNum {
+			t.Errorf("event[%d] SeqNum mismatch: got %d, want %d", i, decoded.SeqNum, evt.SeqNum)
+		}
+		if decoded.SessionID != evt.SessionID {
+			t.Errorf("event[%d] SessionID mismatch: got %q, want %q", i, decoded.SessionID, evt.SessionID)
+		}
+
+		// Payload JSON should be valid and decodable.
+		var raw map[string]interface{}
+		if err := json.Unmarshal(decoded.Payload, &raw); err != nil {
+			t.Fatalf("event[%d] payload unmarshal: %v", i, err)
+		}
+		if _, ok := raw["type"]; !ok {
+			t.Errorf("event[%d] payload missing 'type' field", i)
+		}
+	}
+
+	// Step 5: Acknowledge all events.
+	for _, evt := range allEvents {
+		if !bm.Acknowledge(evt.SeqNum) {
+			t.Errorf("Acknowledge(%d) returned false", evt.SeqNum)
+		}
+	}
+	if bm.PendingAckCount() != 0 {
+		t.Errorf("expected 0 pending acks after acknowledging all, got %d", bm.PendingAckCount())
 	}
 }
