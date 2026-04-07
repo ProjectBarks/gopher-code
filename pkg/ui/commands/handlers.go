@@ -18,6 +18,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/projectbarks/gopher-code/pkg/compact"
+	"github.com/projectbarks/gopher-code/pkg/keybindings"
 	appcontext "github.com/projectbarks/gopher-code/pkg/context"
 	"github.com/projectbarks/gopher-code/pkg/hooks"
 	"github.com/projectbarks/gopher-code/pkg/message"
@@ -259,6 +260,11 @@ type FilesMsg struct {
 
 // HooksMsg is returned when /hooks displays hook configuration.
 type HooksMsg struct {
+	Message string
+}
+
+// KeybindingsMsg is returned when /keybindings displays the current keybinding configuration.
+type KeybindingsMsg struct {
 	Message string
 }
 
@@ -2039,6 +2045,60 @@ func newInstallSlackAppHandler() Handler {
 }
 
 // ---------------------------------------------------------------------------
+// T261: /keybindings — display current keybinding configuration
+// Source: src/commands/keybindings/
+// ---------------------------------------------------------------------------
+
+// newKeybindingsHandler creates the /keybindings command handler.
+// Displays the current keybinding configuration grouped by context.
+func newKeybindingsHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			blocks := keybindings.DefaultBindings()
+			var b strings.Builder
+			b.WriteString("Current Keybindings\n")
+			b.WriteString(strings.Repeat("=", 40) + "\n")
+
+			for _, block := range blocks {
+				desc := keybindings.ContextDescriptions[block.Context]
+				b.WriteString(fmt.Sprintf("\n[%s]", string(block.Context)))
+				if desc != "" {
+					b.WriteString(fmt.Sprintf(" — %s", desc))
+				}
+				b.WriteString("\n")
+
+				// Collect and sort keys for stable output.
+				keys := make([]string, 0, len(block.Bindings))
+				for k := range block.Bindings {
+					keys = append(keys, k)
+				}
+				for i := 1; i < len(keys); i++ {
+					for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
+						keys[j], keys[j-1] = keys[j-1], keys[j]
+					}
+				}
+
+				// Find max key width for alignment.
+				maxW := 0
+				for _, k := range keys {
+					if len(k) > maxW {
+						maxW = len(k)
+					}
+				}
+
+				for _, k := range keys {
+					padding := strings.Repeat(" ", maxW-len(k)+2)
+					b.WriteString(fmt.Sprintf("  %-s%s%s\n", k, padding, block.Bindings[k]))
+				}
+			}
+
+			b.WriteString("\nEdit ~/.claude/keybindings.json to customize.\n")
+			return KeybindingsMsg{Message: b.String()}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // T251: /files — list files in context (ant-only)
 // Source: src/commands/files.ts
 // ---------------------------------------------------------------------------
@@ -2926,6 +2986,15 @@ func (d *Dispatcher) registerDefaults() {
 		Type:        CommandTypeLocal,
 		Source:      "builtin",
 		Handler:     newInstallSlackAppHandler(),
+	})
+
+	// T261: /keybindings — display current keybinding configuration
+	d.RegisterCommand(CommandRegistration{
+		Name:        "keybindings",
+		Description: "Show current keybindings",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler:     newKeybindingsHandler(),
 	})
 
 	// T254: /hooks — show/manage hook configuration

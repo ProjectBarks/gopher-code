@@ -2887,3 +2887,50 @@ func TestInstallSlackApp_DispatchReturnsMsg(t *testing.T) {
 		t.Fatalf("expected InstallSlackAppMsg, got %T", msg)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T261: /keybindings tests
+// ---------------------------------------------------------------------------
+
+func TestKeybindings_ShowsBindings(t *testing.T) {
+	h := newKeybindingsHandler()
+	msg := h("")()
+	m, ok := msg.(KeybindingsMsg)
+	if !ok {
+		t.Fatalf("expected KeybindingsMsg, got %T", msg)
+	}
+	if !strings.Contains(m.Message, "Current Keybindings") {
+		t.Error("expected header in output")
+	}
+	if !strings.Contains(m.Message, "[Global]") {
+		t.Error("expected [Global] context section")
+	}
+	if !strings.Contains(m.Message, "[Chat]") {
+		t.Error("expected [Chat] context section")
+	}
+	if !strings.Contains(m.Message, "ctrl+c") {
+		t.Error("expected ctrl+c binding in output")
+	}
+	if !strings.Contains(m.Message, "keybindings.json") {
+		t.Error("expected customization hint in output")
+	}
+}
+
+func TestKeybindings_RegisteredInDispatcher(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/keybindings") {
+		t.Fatal("/keybindings not registered")
+	}
+}
+
+func TestKeybindings_DispatchReturnsMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/keybindings")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from dispatch")
+	}
+	msg := cmd()
+	if _, ok := msg.(KeybindingsMsg); !ok {
+		t.Fatalf("expected KeybindingsMsg, got %T", msg)
+	}
+}
