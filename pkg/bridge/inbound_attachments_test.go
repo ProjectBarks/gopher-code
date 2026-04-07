@@ -434,6 +434,111 @@ func TestResolveAndPrepend_WithAttachment(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Integration: ExtractInboundMessageFields → ResolveAndPrepend
+// ---------------------------------------------------------------------------
+
+// TestIntegration_InboundAttachmentPipeline exercises the full pipeline:
+// raw inbound JSON → extract fields + attachments → resolve via HTTP → prepend refs.
+func TestIntegration_InboundAttachmentPipeline(t *testing.T) {
+	// Fake file server that returns content for any UUID.
+	deps, srv := newTestDeps(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("resolved-content"))
+	})
+	defer srv.Close()
+
+	// Simulate a full inbound bridge message with both content and file_attachments.
+	inboundJSON := []byte(`{
+		"type": "user",
+		"uuid": "msg-001",
+		"message": {
+			"content": "please review this",
+			"file_attachments": [
+				{"file_uuid": "fa01fa01-1234", "file_name": "design.png"},
+				{"file_uuid": "fb02fb02-5678", "file_name": "notes.txt"}
+			]
+		}
+	}`)
+
+	// Step 1: Extract inbound message fields.
+	fields, err := ExtractInboundMessageFields(inboundJSON)
+	if err != nil {
+		t.Fatalf("ExtractInboundMessageFields: %v", err)
+	}
+	if fields == nil {
+		t.Fatal("expected non-nil fields")
+	}
+	if fields.UUID != "msg-001" {
+		t.Errorf("UUID = %q, want msg-001", fields.UUID)
+	}
+	if !fields.IsString() {
+		t.Fatal("expected string content")
+	}
+	if fields.ContentString != "please review this" {
+		t.Errorf("content = %q", fields.ContentString)
+	}
+
+	// Step 2: Extract raw message payload for attachment resolution.
+	var envelope struct {
+		Message json.RawMessage `json:"message"`
+	}
+	if err := json.Unmarshal(inboundJSON, &envelope); err != nil {
+		t.Fatal(err)
+	}
+
+	// Step 3: ResolveAndPrepend — the convenience pipeline.
+	result := ResolveAndPrepend(context.Background(), envelope.Message, fields.ContentString, deps)
+	s, ok := result.(string)
+	if !ok {
+		t.Fatalf("expected string result, got %T", result)
+	}
+
+	// Should have @-refs prepended and original content at the end.
+	if !strings.HasSuffix(s, "please review this") {
+		t.Errorf("original content missing from end: %q", s)
+	}
+	if strings.Count(s, `@"`) != 2 {
+		t.Errorf("expected 2 @-refs, got %q", s)
+	}
+	if !strings.Contains(s, "design.png") {
+		t.Errorf("expected design.png in path refs: %q", s)
+	}
+	if !strings.Contains(s, "notes.txt") {
+		t.Errorf("expected notes.txt in path refs: %q", s)
+	}
+
+	// Verify files were actually written to disk.
+	dir := UploadsDir(deps.GetConfigDir(), deps.GetSessionID())
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("reading uploads dir: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("expected 2 files in uploads dir, got %d", len(entries))
+	}
+	for _, e := range entries {
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Errorf("reading %s: %v", e.Name(), err)
+			continue
+		}
+		if string(data) != "resolved-content" {
+			t.Errorf("file %s has unexpected content: %q", e.Name(), string(data))
+		}
+	}
+}
+
+// TestIntegration_InboundAttachmentPipeline_NoAttachments verifies the fast
+// path when a message has no file_attachments.
+func TestIntegration_InboundAttachmentPipeline_NoAttachments(t *testing.T) {
+	raw := json.RawMessage(`{"content": "just text"}`)
+	result := ResolveAndPrepend(context.Background(), raw, "just text", nil)
+	if result != "just text" {
+		t.Errorf("expected unchanged content, got %v", result)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // DownloadTimeoutMS constant
 // ---------------------------------------------------------------------------
 

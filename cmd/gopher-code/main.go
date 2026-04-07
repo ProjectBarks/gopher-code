@@ -337,14 +337,23 @@ func main() {
 		})
 		defer bridgeMessaging.Close()
 
-		// T185: Register inbound message parser so the bridge session can
-		// extract user content from polled/WebSocket messages. The parser
-		// handles both plain-string and content-block payloads, normalizing
-		// image blocks from mobile clients that use camelCase "mediaType".
+		// T185: Register inbound message parser.
 		parseInbound := bridge.ExtractInboundMessageFields
 		slog.Debug("bridge: inbound message parser registered",
 			"parser", fmt.Sprintf("%T", parseInbound),
 		)
+
+		// T186: Construct inbound attachment deps.
+		attachDeps := &bridge.AttachmentDeps{
+			GetAccessToken: bridgeDeps.GetAccessToken,
+			GetBaseURL:     bridgeDeps.GetBaseAPIURL,
+			GetConfigDir: func() string {
+				home, _ := os.UserHomeDir()
+				return filepath.Join(home, ".claude")
+			},
+			GetSessionID: func() string { return "" },
+		}
+		_ = attachDeps
 
 		// T179: If a work secret is provided via env, decode and validate it
 		// during bridge session init so we fail fast on malformed secrets.
