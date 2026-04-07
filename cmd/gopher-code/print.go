@@ -6,11 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
 	"github.com/projectbarks/gopher-code/internal/cli"
 	pkgcli "github.com/projectbarks/gopher-code/pkg/cli"
+	"github.com/projectbarks/gopher-code/pkg/bridge"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/provider"
 	"github.com/projectbarks/gopher-code/pkg/query"
@@ -206,6 +210,66 @@ func runHeadless(
 
 	cliOk("")
 }
+
+// setupRemoteIO checks for the CLAUDE_CODE_SESSION_STREAM_URL environment
+// variable and, when set, constructs a RemoteIO that bridges the remote
+// session transport into the headless pipeline. The caller is responsible for
+// calling Close on the returned RemoteIO (if non-nil).
+//
+// This is the Go equivalent of the TS CLI's remote-IO bootstrap path
+// (src/cli/remoteIO.ts) which is activated when the CLI runs inside a
+// bridge/CCR worker that provides a stream URL.
+//
+// When the env var is absent the function returns (nil, nil) — callers
+// should fall through to the normal stdin-based input path.
+func setupRemoteIO(logger *slog.Logger) (*pkgcli.RemoteIO, error) {
+	streamURL := os.Getenv("CLAUDE_CODE_SESSION_STREAM_URL")
+	if streamURL == "" {
+		return nil, nil
+	}
+
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	sessionID := os.Getenv("CLAUDE_CODE_SESSION_ID")
+
+	// Default transport factory — creates a stub transport. A real WS/SSE
+	// transport will be wired in a follow-up task; for now this ensures the
+	// full RemoteIO construction path is exercised end-to-end.
+	factory := func(u *url.URL, headers http.Header, sid string, _ func() http.Header) pkgcli.Transport {
+		return &noopTransport{}
+	}
+
+	rio, err := pkgcli.NewRemoteIO(pkgcli.RemoteIOConfig{
+		StreamURL:  streamURL,
+		SessionID:  sessionID,
+		TokenSource: func() string {
+			return os.Getenv("CLAUDE_CODE_SESSION_INGRESS_TOKEN")
+		},
+		TransportFactory: factory,
+		PollConfig:       bridge.DefaultPollConfig,
+		Logger:           logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("setup remote IO: %w", err)
+	}
+
+	return rio, nil
+}
+
+// noopTransport is a minimal Transport implementation used as the default
+// transport factory for RemoteIO until real WS/SSE transports are wired.
+type noopTransport struct {
+	onData  func(string)
+	onClose func()
+}
+
+func (t *noopTransport) Connect() error              { return nil }
+func (t *noopTransport) Write(_ any) error            { return nil }
+func (t *noopTransport) SetOnData(fn func(string))    { t.onData = fn }
+func (t *noopTransport) SetOnClose(fn func())         { t.onClose = fn }
+func (t *noopTransport) Close()                       {}
 
 // emitError writes an error to stderr (or as stream-json to stdout).
 // Source: cli/print.ts — emitLoadError

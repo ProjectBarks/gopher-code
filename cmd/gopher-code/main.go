@@ -1299,6 +1299,19 @@ func main() {
 		if err != nil {
 			cliError(err.Error())
 		}
+
+		// T210: If a remote session stream URL is configured, construct the
+		// RemoteIO so the headless pipeline can consume input from the remote
+		// transport instead of (or in addition to) local stdin.
+		remoteIO, rioErr := setupRemoteIO(nil)
+		if rioErr != nil {
+			cliErrorf("remote IO setup: %v", rioErr)
+		}
+		if remoteIO != nil {
+			defer remoteIO.Close()
+			slog.Debug("remote IO active", "version", remoteIO.Version())
+		}
+
 		runHeadless(ctx, sess, prov, registry, orchestrator, HeadlessConfig{
 			OutputFormat: outFmt,
 			InputFormat:  *inputFormat,
