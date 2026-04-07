@@ -231,3 +231,34 @@ func (d *BridgeDebug) LogSession(sessionID, event string) {
 		"session_id": sessionID,
 	})
 }
+
+// ---------------------------------------------------------------------------
+// Global BridgeDebug singleton — set once during CLI bootstrap (T189)
+// ---------------------------------------------------------------------------
+
+var (
+	globalDebugMu sync.Mutex
+	globalDebug   *BridgeDebug
+)
+
+// SetGlobalBridgeDebug stores a process-wide BridgeDebug instance.
+// Typically called once during CLI startup in the remote-control path.
+func SetGlobalBridgeDebug(d *BridgeDebug) {
+	globalDebugMu.Lock()
+	globalDebug = d
+	globalDebugMu.Unlock()
+}
+
+// GlobalBridgeDebug returns the process-wide BridgeDebug, or nil if not set.
+func GlobalBridgeDebug() *BridgeDebug {
+	globalDebugMu.Lock()
+	defer globalDebugMu.Unlock()
+	return globalDebug
+}
+
+// ResetGlobalBridgeDebugForTesting clears the global BridgeDebug (test helper).
+func ResetGlobalBridgeDebugForTesting() {
+	globalDebugMu.Lock()
+	globalDebug = nil
+	globalDebugMu.Unlock()
+}

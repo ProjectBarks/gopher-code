@@ -250,6 +250,16 @@ func main() {
 			}
 		}
 
+		// T189: Initialize BridgeDebug logger for the remote-control session.
+		// Uses LogLevelDebug so all bridge subsystem messages are captured in
+		// the circular buffer; slog filtering still applies for console output.
+		bridgeDebug := bridge.NewBridgeDebug(bridge.LogLevelDebug, bridge.DefaultBufferSize, nil)
+		bridge.SetGlobalBridgeDebug(bridgeDebug)
+		bridgeDebug.LogStatus("remote-control session starting", map[string]string{
+			"bridge_url": bridgeURL,
+			"authed":     fmt.Sprintf("%v", bridgeAuthed),
+		})
+
 		fmt.Fprintf(os.Stderr, "Starting remote control session")
 		if rcName != "" {
 			fmt.Fprintf(os.Stderr, " %q", rcName)
@@ -303,7 +313,7 @@ func main() {
 		sessionRunner := bridge.NewSessionRunner(bridge.SessionRunnerDeps{
 			API:           apiClient,
 			EnvironmentID: "",                          // set after RegisterBridgeEnvironment
-			OnDebug:       func(msg string) { slog.Debug(msg) },
+			OnDebug:       func(msg string) { bridgeDebug.LogStatus(msg, nil) },
 			OnStateChange: func(from, to bridge.RunnerState) {
 				slog.Debug("bridge: session runner state change", "from", from, "to", to)
 			},
@@ -321,7 +331,7 @@ func main() {
 			GetAccessToken: func() string { tok, _ := bridgeDeps.GetAccessToken(); return tok },
 			GetOrgUUID:     func() string { return "" }, // resolved at session-creation time
 			GetModel:       func() string { return "" }, // resolved at session-creation time
-			OnDebug:        func(msg string) { slog.Debug(msg) },
+			OnDebug:        func(msg string) { bridgeDebug.LogStatus(msg, nil) },
 		})
 		_ = sessionClient // used by orchestrator once bridge REPL is wired
 
@@ -329,7 +339,7 @@ func main() {
 		// create code sessions and fetch remote credentials via the
 		// code-session API (/v1/code/sessions).
 		codeSessionClient := bridge.NewCodeSessionClient(bridge.CodeSessionClientConfig{
-			OnDebug: func(msg string) { slog.Debug(msg) },
+			OnDebug: func(msg string) { bridgeDebug.LogStatus(msg, nil) },
 		})
 		_ = codeSessionClient
 
@@ -399,6 +409,7 @@ func main() {
 		_ = bridgeStatus
 		_ = bridgeMessaging
 		_ = parseInbound
+		_ = bridgeDebug
 		cliOk("")
 	}
 
