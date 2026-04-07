@@ -316,6 +316,11 @@ type PassesMsg struct {
 	Opened  bool // true if browser was opened successfully
 }
 
+// PermissionsMsg is returned when /permissions displays the current permission rules.
+type PermissionsMsg struct {
+	Message string
+}
+
 // InstallSlackAppMsg is returned when /install-slack-app opens the Slack app install URL.
 type MemoryMsg struct {
 	Message string
@@ -2261,6 +2266,94 @@ func newKeybindingsHandler() Handler {
 }
 
 // ---------------------------------------------------------------------------
+// T270: /permissions — display current permission rules
+// Source: commands/permissions.tsx
+// ---------------------------------------------------------------------------
+
+// PermissionsDeps holds dependencies for the /permissions handler.
+type PermissionsDeps struct {
+	GetPermissionMode func() string
+	GetAllowRules     func() map[string][]string // source → rules
+	GetDenyRules      func() map[string][]string // source → rules
+}
+
+func newPermissionsHandler(deps PermissionsDeps) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			var b strings.Builder
+			b.WriteString("Permission Rules\n")
+			b.WriteString(strings.Repeat("=", 40) + "\n\n")
+
+			mode := "default"
+			if deps.GetPermissionMode != nil {
+				if m := deps.GetPermissionMode(); m != "" {
+					mode = m
+				}
+			}
+			b.WriteString(fmt.Sprintf("Mode: %s\n", mode))
+
+			writeRuleSection := func(header string, rulesMap map[string][]string) {
+				if rulesMap == nil {
+					return
+				}
+				// Collect all rules with sources.
+				type entry struct {
+					source string
+					rule   string
+				}
+				var entries []entry
+				sources := make([]string, 0, len(rulesMap))
+				for src := range rulesMap {
+					sources = append(sources, src)
+				}
+				sort.Strings(sources)
+				for _, src := range sources {
+					for _, r := range rulesMap[src] {
+						entries = append(entries, entry{source: src, rule: r})
+					}
+				}
+				if len(entries) == 0 {
+					return
+				}
+				b.WriteString(fmt.Sprintf("\n%s:\n", header))
+				for _, e := range entries {
+					b.WriteString(fmt.Sprintf("  %s  (from %s)\n", e.rule, e.source))
+				}
+			}
+
+			var allowRules, denyRules map[string][]string
+			if deps.GetAllowRules != nil {
+				allowRules = deps.GetAllowRules()
+			}
+			if deps.GetDenyRules != nil {
+				denyRules = deps.GetDenyRules()
+			}
+
+			writeRuleSection("Allowed", allowRules)
+			writeRuleSection("Denied", denyRules)
+
+			hasRules := false
+			for _, rs := range allowRules {
+				if len(rs) > 0 {
+					hasRules = true
+				}
+			}
+			for _, rs := range denyRules {
+				if len(rs) > 0 {
+					hasRules = true
+				}
+			}
+			if !hasRules {
+				b.WriteString("\nNo custom permission rules configured.\n")
+			}
+
+			b.WriteString("\nEdit settings.json or use /permissions in interactive mode to manage rules.\n")
+			return PermissionsMsg{Message: b.String()}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // T265: /memory — display or create CLAUDE.md memory file
 // Source: src/commands/memory.tsx
 // ---------------------------------------------------------------------------
@@ -3382,5 +3475,18 @@ func (d *Dispatcher) registerDefaults() {
 		Availability: []CommandAvailability{AvailabilityClaudeAI},
 		Source:       "builtin",
 		Handler:      newPassesHandler(),
+	})
+
+	// T270: /permissions — display current permission rules
+	d.RegisterCommand(CommandRegistration{
+		Name:        "permissions",
+		Description: "Show current permission rules",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: newPermissionsHandler(PermissionsDeps{
+			GetPermissionMode: func() string { return "default" },
+			GetAllowRules:     func() map[string][]string { return nil },
+			GetDenyRules:      func() map[string][]string { return nil },
+		}),
 	})
 }

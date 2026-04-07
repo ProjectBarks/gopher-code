@@ -3225,6 +3225,22 @@ func TestModel_SwitchWithArg(t *testing.T) {
 	}
 }
 
+func TestPermissions_DispatchReturnsMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/permissions")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	pm, ok := msg.(PermissionsMsg)
+	if !ok {
+		t.Fatalf("expected PermissionsMsg, got %T", msg)
+	}
+	if !strings.Contains(pm.Message, "Permission Rules") {
+		t.Errorf("expected header, got %q", pm.Message)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // T268: /output-style — deprecation notice
 // ---------------------------------------------------------------------------
@@ -3304,7 +3320,45 @@ func TestModel_NoArgsShowsCurrent(t *testing.T) {
 		t.Fatalf("expected ModelShowMsg, got %T", msg)
 	}
 	if !strings.Contains(sm.Message, "claude-sonnet-4-20250514") {
-		t.Errorf("expected message to contain current model name, got %q", sm.Message)
+		t.Errorf("expected current model in message, got %q", sm.Message)
+	}
+}
+
+func TestPermissions_WithRules(t *testing.T) {
+	d := NewDispatcher()
+	d.RegisterCommand(CommandRegistration{
+		Name:        "permissions-test",
+		Description: "Test permissions with rules",
+		Type:        CommandTypeLocal,
+		Source:      "test",
+		Handler: newPermissionsHandler(PermissionsDeps{
+			GetPermissionMode: func() string { return "acceptEdits" },
+			GetAllowRules: func() map[string][]string {
+				return map[string][]string{
+					"userSettings": {"Bash(npm test)", "Read"},
+				}
+			},
+			GetDenyRules: func() map[string][]string {
+				return map[string][]string{
+					"projectSettings": {"Bash(rm -rf)"},
+				}
+			},
+		}),
+	})
+	cmd := d.Dispatch("/permissions-test")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	pm, ok := msg.(PermissionsMsg)
+	if !ok {
+		t.Fatalf("expected PermissionsMsg, got %T", msg)
+	}
+	if !strings.Contains(pm.Message, "acceptEdits") {
+		t.Errorf("expected mode in output, got: %s", pm.Message)
+	}
+	if !strings.Contains(pm.Message, "Bash(npm test)") {
+		t.Errorf("expected allow rule in output, got: %s", pm.Message)
 	}
 }
 
@@ -3320,7 +3374,7 @@ func TestModel_NoArgsDefaultUnknown(t *testing.T) {
 		t.Fatalf("expected ModelShowMsg, got %T", msg)
 	}
 	if !strings.Contains(sm.Message, "(unknown)") {
-		t.Errorf("expected message to contain '(unknown)', got %q", sm.Message)
+		t.Errorf("expected '(unknown)' in message, got %q", sm.Message)
 	}
 }
 
