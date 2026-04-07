@@ -290,6 +290,13 @@ func main() {
 		// T173: Construct the BridgeAPIClient for the orchestrator/REPL bridge.
 		apiClient := bridge.NewBridgeAPIClientFromConfig(rcCfg, func() string { return "" }, nil)
 
+		// T188: Initialize bridge status state machine so lifecycle transitions
+		// are tracked and logged throughout the remote-control session.
+		bridgeStatus := bridge.NewStatusMachine()
+		bridgeStatus.OnStatusChange(func(from, to bridge.BridgeStatus) {
+			slog.Debug("bridge: status transition", "from", from, "to", to)
+		})
+
 		// T181: Construct SessionRunner so the lifecycle state machine is linked
 		// into the binary. The runner manages heartbeat, archive, and graceful
 		// shutdown for each bridge work item.
@@ -356,6 +363,7 @@ func main() {
 		_ = rcCfg
 		_ = pollCfg
 		_ = tdm
+		_ = bridgeStatus
 		_ = bridgeMessaging
 		cliOk("")
 	}
