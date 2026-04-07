@@ -12,6 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/projectbarks/gopher-code/pkg/hooks"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/session"
 )
@@ -1054,7 +1055,7 @@ func TestChrome_HasRegistration(t *testing.T) {
 
 func TestNewCommandsRegisteredInDefaults(t *testing.T) {
 	d := NewDispatcher()
-	for _, name := range []string{"/branch", "/remote-control", "/bridge-kick", "/brief", "/btw", "/chrome", "/clear", "/color", "/commit", "/commit-push-pr", "/compact"} {
+	for _, name := range []string{"/branch", "/remote-control", "/bridge-kick", "/brief", "/btw", "/chrome", "/clear", "/color", "/commit", "/commit-push-pr", "/compact", "/hooks"} {
 		if !d.HasHandler(name) {
 			t.Errorf("Default dispatcher should have handler for %s", name)
 		}
@@ -2445,5 +2446,114 @@ func TestHeapdump_ProfileError(t *testing.T) {
 	}
 	if !strings.Contains(m.Error.Error(), "pprof failure") {
 		t.Errorf("expected pprof failure message, got %q", m.Error.Error())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T254: /hooks — show/manage hook configuration
+// ---------------------------------------------------------------------------
+
+func TestHooksHandler_NoHooks(t *testing.T) {
+	h := newHooksHandler(HooksDeps{
+		GetHooks:     func() []hooks.IndividualHookConfig { return nil },
+		GetToolNames: func() []string { return nil },
+	})
+	msg := h("")()
+	m, ok := msg.(HooksMsg)
+	if !ok {
+		t.Fatalf("Expected HooksMsg, got %T", msg)
+	}
+	if !strings.Contains(m.Message, "No hooks configured") {
+		t.Errorf("Expected 'No hooks configured' message, got %q", m.Message)
+	}
+	if !strings.Contains(m.Message, "settings.json") {
+		t.Errorf("Expected settings.json hint in message, got %q", m.Message)
+	}
+}
+
+func TestHooksHandler_WithHooks(t *testing.T) {
+	h := newHooksHandler(HooksDeps{
+		GetHooks: func() []hooks.IndividualHookConfig {
+			return []hooks.IndividualHookConfig{
+				{
+					Event:  hooks.PreToolUse,
+					Config: hooks.HookCommand{Type: hooks.HookCommandTypeBash, Command: "echo pre-tool"},
+					Source: hooks.HookSourceUserSettings,
+				},
+				{
+					Event:   hooks.PreToolUse,
+					Config:  hooks.HookCommand{Type: hooks.HookCommandTypeBash, Command: "echo bash-only"},
+					Matcher: "Bash",
+					Source:  hooks.HookSourceProjectSettings,
+				},
+				{
+					Event:  hooks.SessionStart,
+					Config: hooks.HookCommand{Type: hooks.HookCommandTypePrompt, Prompt: "Welcome!"},
+					Source: hooks.HookSourceLocalSettings,
+				},
+			}
+		},
+		GetToolNames: func() []string { return []string{"Bash", "Read", "Write"} },
+	})
+
+	msg := h("")()
+	m, ok := msg.(HooksMsg)
+	if !ok {
+		t.Fatalf("Expected HooksMsg, got %T", msg)
+	}
+
+	// Should contain section headers
+	if !strings.Contains(m.Message, "Configured Hooks") {
+		t.Error("Expected 'Configured Hooks' header")
+	}
+	if !strings.Contains(m.Message, "PreToolUse") {
+		t.Error("Expected PreToolUse event section")
+	}
+	if !strings.Contains(m.Message, "SessionStart") {
+		t.Error("Expected SessionStart event section")
+	}
+
+	// Should contain hook details
+	if !strings.Contains(m.Message, "echo pre-tool") {
+		t.Error("Expected 'echo pre-tool' command")
+	}
+	if !strings.Contains(m.Message, "echo bash-only") {
+		t.Error("Expected 'echo bash-only' command")
+	}
+	if !strings.Contains(m.Message, "Welcome!") {
+		t.Error("Expected 'Welcome!' prompt")
+	}
+
+	// Should contain source labels
+	if !strings.Contains(m.Message, "User") {
+		t.Error("Expected User source label")
+	}
+	if !strings.Contains(m.Message, "Project") {
+		t.Error("Expected Project source label")
+	}
+	if !strings.Contains(m.Message, "Local") {
+		t.Error("Expected Local source label")
+	}
+
+	// Should contain matcher info
+	if !strings.Contains(m.Message, "tool_name=Bash") {
+		t.Error("Expected tool_name=Bash matcher")
+	}
+
+	// Should contain total count
+	if !strings.Contains(m.Message, "Total: 3 hook(s)") {
+		t.Errorf("Expected 'Total: 3 hook(s)', got %q", m.Message)
+	}
+}
+
+func TestHooksHandler_Dispatch(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/hooks")
+	if cmd == nil {
+		t.Fatal("Expected non-nil command for /hooks")
+	}
+	msg := cmd()
+	if _, ok := msg.(HooksMsg); !ok {
+		t.Fatalf("Expected HooksMsg, got %T", msg)
 	}
 }

@@ -19,6 +19,7 @@ import (
 
 	"github.com/projectbarks/gopher-code/pkg/compact"
 	appcontext "github.com/projectbarks/gopher-code/pkg/context"
+	"github.com/projectbarks/gopher-code/pkg/hooks"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/session"
 )
@@ -248,6 +249,11 @@ type FeedbackMsg struct {
 
 // FilesMsg is returned when /files lists files in context.
 type FilesMsg struct {
+	Message string
+}
+
+// HooksMsg is returned when /hooks displays hook configuration.
+type HooksMsg struct {
 	Message string
 }
 
@@ -2005,6 +2011,79 @@ func newFilesHandler(deps FilesDeps) Handler {
 }
 
 // ---------------------------------------------------------------------------
+// T254: /hooks — show/manage hook configuration
+// Source: src/commands/hooks/
+// ---------------------------------------------------------------------------
+
+// HooksDeps holds dependencies for the /hooks handler.
+type HooksDeps struct {
+	// GetHooks returns all configured individual hooks.
+	GetHooks func() []hooks.IndividualHookConfig
+	// GetToolNames returns the list of known tool names (for matcher metadata).
+	GetToolNames func() []string
+}
+
+// newHooksHandler creates the /hooks command handler.
+// Displays all configured hooks grouped by event, with source and matcher info.
+func newHooksHandler(deps HooksDeps) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			allHooks := deps.GetHooks()
+			if len(allHooks) == 0 {
+				return HooksMsg{Message: "No hooks configured.\n\nHooks can be configured in:\n  - User settings:    ~/.claude/settings.json\n  - Project settings: .claude/settings.json\n  - Local settings:   .claude/settings.local.json"}
+			}
+
+			toolNames := deps.GetToolNames()
+			grouped := hooks.GroupHooksByEventAndMatcher(allHooks, toolNames)
+			metadata := hooks.GetHookEventMetadata(toolNames)
+
+			var sb strings.Builder
+			sb.WriteString("## Configured Hooks\n\n")
+
+			totalCount := 0
+			for _, event := range hooks.AllHookEvents {
+				eventGroup := grouped[event]
+				matchers := hooks.GetSortedMatchersForEvent(grouped, event)
+
+				// Count hooks in this event
+				eventCount := 0
+				for _, m := range matchers {
+					eventCount += len(eventGroup[m])
+				}
+				if eventCount == 0 {
+					continue
+				}
+				totalCount += eventCount
+
+				meta := metadata[event]
+				sb.WriteString(fmt.Sprintf("### %s — %s\n", event, meta.Summary))
+
+				for _, matcher := range matchers {
+					hooksForMatcher := eventGroup[matcher]
+					if len(hooksForMatcher) == 0 {
+						continue
+					}
+
+					if matcher != "" {
+						sb.WriteString(fmt.Sprintf("  [%s=%s]\n", meta.MatcherMetadata.FieldToMatch, matcher))
+					}
+
+					for _, h := range hooksForMatcher {
+						displayText := hooks.GetHookDisplayText(h.Config)
+						sourceLabel := hooks.HookSourceInline(h.Source)
+						sb.WriteString(fmt.Sprintf("  - (%s) %s\n", sourceLabel, displayText))
+					}
+				}
+				sb.WriteString("\n")
+			}
+
+			sb.WriteString(fmt.Sprintf("Total: %d hook(s)\n", totalCount))
+			return HooksMsg{Message: strings.TrimRight(sb.String(), "\n")}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // T252: /heapdump — write heap profile (hidden)
 // Source: src/commands/heapdump.ts
 // ---------------------------------------------------------------------------
@@ -2391,5 +2470,17 @@ func (d *Dispatcher) registerDefaults() {
 		IsHidden:    true,
 		Source:      "builtin",
 		Handler:     newHeapdumpHandler(),
+	})
+
+	// T254: /hooks — show/manage hook configuration
+	d.RegisterCommand(CommandRegistration{
+		Name:        "hooks",
+		Description: "Show hook configuration",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: newHooksHandler(HooksDeps{
+			GetHooks:     func() []hooks.IndividualHookConfig { return nil },
+			GetToolNames: func() []string { return nil },
+		}),
 	})
 }
