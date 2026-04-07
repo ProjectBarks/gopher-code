@@ -2887,3 +2887,45 @@ func TestInstallSlackApp_DispatchReturnsMsg(t *testing.T) {
 		t.Fatalf("expected InstallSlackAppMsg, got %T", msg)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T263: /logout
+// ---------------------------------------------------------------------------
+
+func TestLogout_RegisteredInDispatcher(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/logout") {
+		t.Fatal("/logout not registered")
+	}
+}
+
+func TestLogout_ReturnsLogoutMsg(t *testing.T) {
+	h := newLogoutHandler()
+	cmd := h("")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	m, ok := msg.(LogoutMsg)
+	if !ok {
+		t.Fatalf("expected LogoutMsg, got %T", msg)
+	}
+	if m.Error != nil {
+		t.Fatalf("unexpected error: %v", m.Error)
+	}
+	if !strings.Contains(m.Message, "Logged out") {
+		t.Errorf("expected confirmation message, got %q", m.Message)
+	}
+}
+
+func TestLogout_DispatchReturnsMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/logout")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from dispatch")
+	}
+	msg := cmd()
+	if _, ok := msg.(LogoutMsg); !ok {
+		t.Fatalf("expected LogoutMsg, got %T", msg)
+	}
+}

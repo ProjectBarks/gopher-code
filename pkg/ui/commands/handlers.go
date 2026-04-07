@@ -17,6 +17,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/projectbarks/gopher-code/pkg/auth"
 	"github.com/projectbarks/gopher-code/pkg/compact"
 	appcontext "github.com/projectbarks/gopher-code/pkg/context"
 	"github.com/projectbarks/gopher-code/pkg/hooks"
@@ -150,6 +151,12 @@ type AdvisorMsg struct {
 // InstallGitHubAppMsg is returned when /install-github-app is invoked.
 type InstallGitHubAppMsg struct {
 	Message string
+}
+
+// LogoutMsg is returned when /logout clears stored credentials.
+type LogoutMsg struct {
+	Message string
+	Error   error
 }
 
 // AgentsMsg is returned when /agents lists agent configurations.
@@ -2532,6 +2539,24 @@ func newInstallGitHubAppHandler() Handler {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// T263: /logout — clear stored credentials
+// Source: src/commands/logout.ts
+// ---------------------------------------------------------------------------
+
+// newLogoutHandler creates the /logout command handler.
+// It clears stored API keys and OAuth tokens, then returns a confirmation.
+func newLogoutHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			auth.DeleteAPIKey()
+			return LogoutMsg{
+				Message: "Logged out. Stored credentials have been removed.",
+			}
+		}
+	}
+}
+
 func (d *Dispatcher) registerDefaults() {
 	d.Register("/model", func(args string) tea.Cmd {
 		if args == "" {
@@ -2957,5 +2982,15 @@ func (d *Dispatcher) registerDefaults() {
 		Type:        CommandTypeLocal,
 		Source:      "builtin",
 		Handler:     newInstallGitHubAppHandler(),
+	})
+
+	// T263: /logout — clear stored credentials and log out
+	d.RegisterCommand(CommandRegistration{
+		Name:        "logout",
+		Description: "Log out and clear stored credentials",
+		Type:        CommandTypeLocal,
+		Immediate:   true,
+		Source:      "builtin",
+		Handler:     newLogoutHandler(),
 	})
 }
