@@ -245,11 +245,20 @@ func main() {
 			"worker_type", rcCfg.WorkerType,
 		)
 
+		// T176: Construct a DynamicPollConfig with defaults so the adaptive
+		// backoff logic is exercised during the remote-control session.
+		pollCfg := bridge.NewDynamicPollConfig(bridge.DefaultPollConfig, rcCfg.MaxSessions > 1)
+		slog.Debug("bridge: poll config initialized",
+			"multisession", rcCfg.MaxSessions > 1,
+			"initial_delay", pollCfg.NextPollDelay(),
+		)
+
 		// T173: Construct the BridgeAPIClient for the orchestrator/REPL bridge.
 		_ = bridge.NewBridgeAPIClientFromConfig(rcCfg, func() string { return "" }, nil)
 
 		// TODO(T195+): Wire full bridge REPL init once bridge core is implemented.
 		_ = rcCfg
+		_ = pollCfg
 		cliOk("")
 	}
 
