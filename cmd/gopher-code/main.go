@@ -991,6 +991,19 @@ func main() {
 		cliOk("")
 	}
 
+	// Handle "update" subcommand before flag.Parse()
+	// Source: src/cli.ts — `claude update`
+	if len(os.Args) > 1 && os.Args[1] == "update" {
+		if code := handlers.Update(handlers.UpdateOpts{
+			Output:  os.Stdout,
+			Stderr:  os.Stderr,
+			Version: Version,
+		}); code != 0 {
+			cliError("update failed")
+		}
+		cliOk("")
+	}
+
 	// Handle "doctor" subcommand before flag.Parse()
 	if len(os.Args) > 1 && os.Args[1] == "doctor" {
 		if code := handlers.Doctor(handlers.DoctorOpts{}); code != 0 {
