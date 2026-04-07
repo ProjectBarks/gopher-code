@@ -227,7 +227,23 @@ func main() {
 			GetBaseAPIURL: func() string { return "https://api.anthropic.com" },
 		}
 		bridgeURL := bridge.BridgeBaseURL(bridgeDeps)
-		_, bridgeAuthed := bridge.BridgeAccessToken(bridgeDeps)
+		bridgeToken, bridgeAuthed := bridge.BridgeAccessToken(bridgeDeps)
+
+		// T177: Validate bridge access token via JWT parsing before proceeding.
+		// If the token is a decodable JWT, check expiry and log claims for
+		// diagnostics. Non-JWT tokens (e.g. plain API keys) are passed through.
+		if bridgeAuthed && bridgeToken != "" {
+			if claims := bridge.DecodeJWTClaims(bridgeToken); claims != nil {
+				if bridge.IsJWTExpired(bridgeToken) {
+					cliError("bridge access token is expired; please re-authenticate")
+				}
+				slog.Debug("bridge: JWT validated",
+					"sub", claims.Sub,
+					"org_uuid", claims.OrgUUID,
+					"session_id", claims.SessionID,
+				)
+			}
+		}
 
 		fmt.Fprintf(os.Stderr, "Starting remote control session")
 		if rcName != "" {

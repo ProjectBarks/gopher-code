@@ -302,6 +302,94 @@ func TestFormatDuration(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Integration: end-to-end JWT parse → validate → check fields
+// ---------------------------------------------------------------------------
+
+func TestJWTIntegration_ParseValidateFields(t *testing.T) {
+	// Build a realistic bridge JWT with all standard claims.
+	exp := time.Now().Add(time.Hour).Unix()
+	tok := makeJWT(t, map[string]any{
+		"exp":        exp,
+		"sub":        "user-integration-1",
+		"org_uuid":   "org-int-456",
+		"scopes":     []string{"bridge:read", "bridge:write"},
+		"session_id": "sess-int-789",
+	})
+
+	// Step 1: raw payload decode succeeds.
+	payload := DecodeJWTPayload(tok)
+	if payload == nil {
+		t.Fatal("DecodeJWTPayload returned nil for valid token")
+	}
+
+	// Step 2: typed claims decode succeeds with correct values.
+	claims := DecodeJWTClaims(tok)
+	if claims == nil {
+		t.Fatal("DecodeJWTClaims returned nil for valid token")
+	}
+	if claims.Sub != "user-integration-1" {
+		t.Errorf("Sub = %q, want user-integration-1", claims.Sub)
+	}
+	if claims.OrgUUID != "org-int-456" {
+		t.Errorf("OrgUUID = %q, want org-int-456", claims.OrgUUID)
+	}
+	if claims.SessionID != "sess-int-789" {
+		t.Errorf("SessionID = %q, want sess-int-789", claims.SessionID)
+	}
+	if len(claims.Scopes) != 2 {
+		t.Errorf("Scopes len = %d, want 2", len(claims.Scopes))
+	}
+	if claims.Exp == nil || *claims.Exp != exp {
+		t.Errorf("Exp = %v, want %d", claims.Exp, exp)
+	}
+
+	// Step 3: expiry check — token is valid (not expired).
+	if IsJWTExpired(tok) {
+		t.Error("fresh token should not be expired")
+	}
+
+	// Step 4: expiry with a fixed clock far in the future → expired.
+	futureTime := time.Unix(exp+3600, 0) // 1 hour after expiry
+	if !IsJWTExpiredAt(tok, futureTime) {
+		t.Error("token should be expired when clock is past exp")
+	}
+
+	// Step 5: session-ingress prefix variant.
+	prefixed := "sk-ant-si-" + tok
+	prefixedClaims := DecodeJWTClaims(prefixed)
+	if prefixedClaims == nil {
+		t.Fatal("DecodeJWTClaims should handle sk-ant-si- prefix")
+	}
+	if prefixedClaims.Sub != claims.Sub {
+		t.Errorf("prefixed Sub = %q, want %q", prefixedClaims.Sub, claims.Sub)
+	}
+
+	// Step 6: TokenPrefix for logging.
+	prefix := TokenPrefix(tok)
+	if len(prefix) < 16 {
+		t.Errorf("TokenPrefix too short: %q", prefix)
+	}
+}
+
+func TestJWTIntegration_ExpiredTokenRejected(t *testing.T) {
+	// Token that expired 5 minutes ago — should be treated as expired.
+	exp := time.Now().Add(-5 * time.Minute).Unix()
+	tok := makeJWT(t, map[string]any{
+		"exp":        exp,
+		"sub":        "user-expired",
+		"session_id": "sess-old",
+	})
+
+	claims := DecodeJWTClaims(tok)
+	if claims == nil {
+		t.Fatal("should still decode expired token claims")
+	}
+	if !IsJWTExpired(tok) {
+		t.Error("token expired 5m ago should be expired (past 30s tolerance)")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
