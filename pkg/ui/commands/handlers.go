@@ -262,6 +262,13 @@ type HooksMsg struct {
 	Message string
 }
 
+// InstallSlackAppMsg is returned when /install-slack-app opens the Slack app install URL.
+type InstallSlackAppMsg struct {
+	Message string
+	URL     string
+	Opened  bool // true if browser was opened successfully
+}
+
 // IDEMsg is returned when /ide detects installed IDEs and extension status.
 type IDEMsg struct {
 	IDEs    []IDEInfo
@@ -2002,6 +2009,36 @@ func newFeedbackHandler() Handler {
 }
 
 // ---------------------------------------------------------------------------
+// T260: /install-slack-app — open the Slack app installation page
+// Source: src/commands/install-slack-app.ts
+// ---------------------------------------------------------------------------
+
+// slackAppInstallURL is the URL for installing the Claude Code Slack app.
+const slackAppInstallURL = "https://slackbot.anthropic.com/install"
+
+// newInstallSlackAppHandler creates the /install-slack-app command handler.
+// Opens the Slack app installation URL in the default browser. Falls back to displaying the URL.
+func newInstallSlackAppHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			opened := false
+			if err := openBrowser(slackAppInstallURL); err == nil {
+				opened = true
+			}
+			msg := "Install the Claude Code Slack app at " + slackAppInstallURL
+			if opened {
+				msg = "Opened " + slackAppInstallURL + " in your browser"
+			}
+			return InstallSlackAppMsg{
+				Message: msg,
+				URL:     slackAppInstallURL,
+				Opened:  opened,
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // T251: /files — list files in context (ant-only)
 // Source: src/commands/files.ts
 // ---------------------------------------------------------------------------
@@ -2880,6 +2917,15 @@ func (d *Dispatcher) registerDefaults() {
 		Type:        CommandTypePrompt,
 		Source:      "builtin",
 		Handler:     newInitHandler(),
+	})
+
+	// T260: /install-slack-app — open Slack app installation page
+	d.RegisterCommand(CommandRegistration{
+		Name:        "install-slack-app",
+		Description: "Install the Claude Code Slack app",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler:     newInstallSlackAppHandler(),
 	})
 
 	// T254: /hooks — show/manage hook configuration
