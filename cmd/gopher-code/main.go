@@ -559,6 +559,37 @@ func main() {
 			slog.Debug("bridge: flush gate available", "active", replBridge.IsFlushActive())
 		}
 
+		// T200: Construct RemoteBridgeCore — shared abstraction composed by both
+		// BridgeOrchestrator and ReplBridge. Encapsulates session tracking,
+		// config merging, state lifecycle, and graceful shutdown coordination.
+		remoteBridgeCore := bridge.NewRemoteBridgeCore(bridge.RemoteBridgeCoreConfig{
+			MaxSessions: rcCfg.MaxSessions,
+			LocalConfig: bridge.BridgeConfig{
+				Dir:       rcCfg.Dir,
+				SpawnMode: rcCfg.SpawnMode,
+			},
+			RemoteConfig: &envlessCfg,
+			PollConfig:   pollCfg,
+			OnDebug:      func(msg string) { bridgeDebug.LogStatus(msg, nil) },
+			OnStateChange: func(state bridge.BridgeState, detail string) {
+				slog.Debug("bridge: core state change", "state", state, "detail", detail)
+				_ = bridgeStatus.Transition(bridge.StatusConnecting)
+			},
+			OnSessionCountChange: func(active, max int) {
+				slog.Debug("bridge: core session count change", "active", active, "max", max)
+				if active < max {
+					capacityWake.Wake()
+				}
+			},
+		})
+		defer remoteBridgeCore.Shutdown(rcCtx)
+		slog.Debug("bridge: remote core initialized",
+			"state", remoteBridgeCore.State(),
+			"max_sessions", remoteBridgeCore.MaxSessions(),
+			"merged_connect_timeout", remoteBridgeCore.Config().ConnectTimeout(),
+		)
+
+		_ = remoteBridgeCore
 		_ = replBridge
 		_ = replTransport
 		_ = orchestrator
