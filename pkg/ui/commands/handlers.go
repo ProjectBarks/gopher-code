@@ -147,6 +147,11 @@ type AdvisorMsg struct {
 	Error   error
 }
 
+// InstallGitHubAppMsg is returned when /install-github-app is invoked.
+type InstallGitHubAppMsg struct {
+	Message string
+}
+
 // AgentsMsg is returned when /agents lists agent configurations.
 type AgentsMsg struct {
 	Message string
@@ -2474,6 +2479,22 @@ func newHeapdumpHandler() Handler {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// T259: /install-github-app — GitHub App installation wizard (stub)
+// Source: src/commands/install-github-app.ts
+// ---------------------------------------------------------------------------
+
+func newInstallGitHubAppHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			return InstallGitHubAppMsg{
+				Message: "GitHub App installation wizard coming soon. " +
+					"Visit https://github.com/apps/claude to install manually.",
+			}
+		}
+	}
+}
+
 func (d *Dispatcher) registerDefaults() {
 	d.Register("/model", func(args string) tea.Cmd {
 		if args == "" {
@@ -2881,5 +2902,14 @@ func (d *Dispatcher) registerDefaults() {
 		ArgumentHint: "[time period]",
 		Source:       "builtin",
 		Handler:      newInsightsHandler(),
+	})
+
+	// T259: /install-github-app — GitHub App installation wizard (stub)
+	d.RegisterCommand(CommandRegistration{
+		Name:        "install-github-app",
+		Description: "Install the GitHub App for Claude",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler:     newInstallGitHubAppHandler(),
 	})
 }
