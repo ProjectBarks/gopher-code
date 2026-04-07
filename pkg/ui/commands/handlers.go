@@ -2099,6 +2099,107 @@ func newHooksHandler(deps HooksDeps) Handler {
 }
 
 // ---------------------------------------------------------------------------
+// T257: /init-verifiers prompt command
+// Source: src/commands/init-verifiers.ts
+// ---------------------------------------------------------------------------
+
+// initVerifiersPromptTemplate is the prompt text returned by /init-verifiers.
+// It guides the LLM through detecting project types and creating verifier skills.
+// Source: src/commands/init-verifiers.ts — getPromptForCommand()
+const initVerifiersPromptTemplate = `Use the TodoWrite tool to track your progress through this multi-step task.
+
+## Goal
+
+Create one or more verifier skills that can be used by the Verify agent to automatically verify code changes in this project or folder. You may create multiple verifiers if the project has different verification needs (e.g., both web UI and API endpoints).
+
+**Do NOT create verifiers for unit tests or typechecking.** Those are already handled by the standard build/test workflow and don't need dedicated verifier skills. Focus on functional verification: web UI (Playwright), CLI (Tmux), and API (HTTP) verifiers.
+
+## Phase 1: Auto-Detection
+
+Analyze the project to detect what's in different subdirectories. The project may contain multiple sub-projects or areas that need different verification approaches (e.g., a web frontend, an API backend, and shared libraries all in one repo).
+
+1. **Scan top-level directories** to identify distinct project areas:
+   - Look for separate package.json, Cargo.toml, pyproject.toml, go.mod in subdirectories
+   - Identify distinct application types in different folders
+
+2. **For each area, detect:**
+
+   a. **Project type and stack**
+      - Primary language(s) and frameworks
+      - Package managers (npm, yarn, pnpm, pip, cargo, etc.)
+
+   b. **Application type**
+      - Web app (React, Next.js, Vue, etc.) → suggest Playwright-based verifier
+      - CLI tool → suggest Tmux-based verifier
+      - API service (Express, FastAPI, etc.) → suggest HTTP-based verifier
+
+   c. **Existing verification tools**
+      - Test frameworks (Jest, Vitest, pytest, etc.)
+      - E2E tools (Playwright, Cypress, etc.)
+      - Dev server scripts in package.json
+
+   d. **Dev server configuration**
+      - How to start the dev server
+      - What URL it runs on
+      - What text indicates it's ready
+
+3. **Installed verification packages** (for web apps)
+   - Check if Playwright is installed (look in package.json dependencies/devDependencies)
+   - Check MCP configuration (.mcp.json) for browser automation tools
+   - For Python projects, check for playwright, pytest-playwright
+
+## Phase 2: Verification Tool Setup
+
+Based on what was detected in Phase 1, help the user set up appropriate verification tools.
+
+### For Web Applications
+
+1. **If browser automation tools are already installed/configured**, ask the user which one they want to use
+2. **If NO browser automation tools are detected**, ask if they want to install/configure one
+3. **If user chooses to install Playwright**, run the appropriate install command for their package manager
+4. **If user chooses an MCP-based option**, configure the appropriate entry in .mcp.json
+
+### For CLI Tools
+
+1. Check if asciinema is available
+2. Tmux is typically system-installed, just verify it's available
+
+### For API Services
+
+1. Check if HTTP testing tools are available (curl, httpie)
+
+## Phase 3: Interactive Q&A
+
+For each distinct project area, use AskUserQuestion to confirm:
+
+1. **Verifier name** — use simple format for single area (verifier-playwright, verifier-cli, verifier-api) or multi-area format (verifier-<project>-<type>). Name MUST include "verifier".
+
+2. **Project-specific questions** based on type (dev server command, URL, ready signal for web; entry point for CLI; server command and base URL for API).
+
+3. **Authentication & Login** — ask if auth is required and gather login details if needed.
+
+## Phase 4: Generate Verifier Skill
+
+Write the skill file to ` + "`.claude/skills/<verifier-name>/SKILL.md`" + ` with appropriate allowed-tools for the verifier type.
+
+## Phase 5: Confirm Creation
+
+After writing the skill file(s), inform the user where each skill was created and how the Verify agent discovers them.`
+
+// newInitVerifiersHandler creates the /init-verifiers prompt command handler.
+// Source: src/commands/init-verifiers.ts
+func newInitVerifiersHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			return PromptMsg{
+				Command: "/init-verifiers",
+				Text:    initVerifiersPromptTemplate,
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // T255: /ide — detect installed IDEs and extension status
 // Source: src/commands/ide/ide.tsx
 // ---------------------------------------------------------------------------
@@ -2673,6 +2774,15 @@ func (d *Dispatcher) registerDefaults() {
 		Type:        CommandTypeLocal,
 		Source:      "builtin",
 		Handler:     newIDEHandler(),
+	})
+
+	// T257: /init-verifiers — prompt-type command for creating verifier skills
+	d.RegisterCommand(CommandRegistration{
+		Name:        "init-verifiers",
+		Description: "Create verifier skill(s) for automated verification of code changes",
+		Type:        CommandTypePrompt,
+		Source:      "builtin",
+		Handler:     newInitVerifiersHandler(),
 	})
 
 	// T252: /heapdump — write heap profile (hidden)
