@@ -496,7 +496,6 @@ func main() {
 			slog.Debug("bridge: REPL bridge skipped (pre-flight check declined)")
 		}
 
-<<<<<<< HEAD
 		// T195+T196: Construct ReplBridge transport and register handle.
 		var replBridge *bridge.ReplBridge
 		if replHandle != nil {
