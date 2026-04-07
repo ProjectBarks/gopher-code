@@ -467,12 +467,27 @@ func main() {
 		}
 		if replHandle != nil {
 			slog.Debug("bridge: REPL bridge initialized", "org_uuid", replHandle.OrgUUID)
+
+			// T196: Wrap the low-level bridge in a ReplBridgeHandle and
+			// register it as the global singleton so tools, slash commands,
+			// and other out-of-tree callers can reach the bridge.
+			// The Bridge field may still be nil until T195+ wires core init;
+			// only register when a real bridge is available.
+			if replHandle.Bridge != nil {
+				rbh := bridge.NewReplBridgeHandle(replHandle.Bridge)
+				bridge.SetReplBridgeHandle(rbh)
+				defer rbh.Close()
+
+				slog.Debug("bridge: ReplBridgeHandle registered",
+					"session_id", rbh.BridgeSessionID(),
+					"compat_id", bridge.GetSelfBridgeCompatID(),
+				)
+			} else {
+				slog.Debug("bridge: REPL bridge init succeeded but core bridge not yet available (T195+)")
+			}
 		} else {
 			slog.Debug("bridge: REPL bridge skipped (pre-flight check declined)")
 		}
-
-		// TODO(T195+): Wire full bridge REPL session lifecycle.
-		_ = replHandle
 		_ = orchestrator
 		_ = tdm
 		_ = permCallbacks
