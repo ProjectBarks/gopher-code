@@ -2672,3 +2672,51 @@ func TestIDE_DetectJetBrains(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T259: /install-github-app
+// ---------------------------------------------------------------------------
+
+func TestInstallGitHubApp_Registered(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/install-github-app") {
+		t.Fatal("/install-github-app not registered")
+	}
+	reg := d.GetRegistration("/install-github-app")
+	if reg == nil {
+		t.Fatal("expected registration")
+	}
+	if reg.Type != CommandTypeLocal {
+		t.Errorf("expected local command, got %s", reg.Type)
+	}
+	if reg.Source != "builtin" {
+		t.Errorf("expected source=builtin, got %q", reg.Source)
+	}
+}
+
+func TestInstallGitHubApp_ReturnsMessage(t *testing.T) {
+	h := newInstallGitHubAppHandler()
+	msg := h("")()
+	m, ok := msg.(InstallGitHubAppMsg)
+	if !ok {
+		t.Fatalf("expected InstallGitHubAppMsg, got %T", msg)
+	}
+	if !strings.Contains(m.Message, "coming soon") {
+		t.Errorf("expected 'coming soon' in message, got %q", m.Message)
+	}
+	if !strings.Contains(m.Message, "https://github.com/apps/claude") {
+		t.Errorf("expected GitHub App URL in message, got %q", m.Message)
+	}
+}
+
+func TestInstallGitHubApp_DispatchReturnsMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/install-github-app")
+	if cmd == nil {
+		t.Fatal("expected non-nil command")
+	}
+	msg := cmd()
+	if _, ok := msg.(InstallGitHubAppMsg); !ok {
+		t.Fatalf("expected InstallGitHubAppMsg from dispatch, got %T", msg)
+	}
+}
