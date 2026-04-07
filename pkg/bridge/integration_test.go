@@ -1,7 +1,10 @@
 package bridge
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -179,5 +182,85 @@ func TestBridgeConfigToPollWorkflow(t *testing.T) {
 	}
 	if decoded.Type != ActivityToolStart || decoded.Summary != "Reading file" {
 		t.Fatalf("activity round-trip failed: %+v", decoded)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T178: Trusted device token integration — load/save/validate cycle
+// ---------------------------------------------------------------------------
+
+// TestTrustedDevice_LoadSaveValidateCycle exercises the full lifecycle of a
+// trusted device token: enroll (save) → load from cache → clear → re-load
+// from keyring → validate header injection.
+func TestTrustedDevice_LoadSaveValidateCycle(t *testing.T) {
+	kr := newMemKeyring()
+
+	// Enrollment server returns a device token.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/api/auth/trusted_devices" {
+			t.Errorf("expected /api/auth/trusted_devices, got %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(enrollmentResponse{
+			DeviceToken: "integration-token-xyz",
+			DeviceID:    "device-int-1",
+		})
+	}))
+	defer srv.Close()
+
+	deps := TrustedDeviceDeps{
+		Keyring:                kr,
+		GetFeatureValueBool:    gateOn,
+		CheckGateBlocking:      blockingGateOn,
+		GetAccessToken:         func() (string, bool) { return "oauth-test", true },
+		GetBaseAPIURL:          func() string { return srv.URL },
+		IsEssentialTrafficOnly: func() bool { return false },
+		Hostname:               "integration-host",
+		HTTPClient:             srv.Client(),
+	}
+	mgr := NewTrustedDeviceManager(deps)
+
+	// Step 1: No token yet — GetToken returns empty.
+	if tok := mgr.GetToken(); tok != "" {
+		t.Fatalf("expected empty token before enrollment, got %q", tok)
+	}
+
+	// Step 2: Enroll — saves token to keyring and clears cache.
+	mgr.Enroll(context.Background())
+
+	// Step 3: Load — GetToken returns the enrolled token from keyring.
+	tok := mgr.GetToken()
+	if tok != "integration-token-xyz" {
+		t.Fatalf("post-enroll GetToken: got %q, want %q", tok, "integration-token-xyz")
+	}
+
+	// Step 4: Validate header injection.
+	hdrKey, hdrVal := mgr.Header()
+	if hdrKey != "X-Trusted-Device-Token" || hdrVal != "integration-token-xyz" {
+		t.Fatalf("Header: got (%q, %q), want (%q, %q)",
+			hdrKey, hdrVal, "X-Trusted-Device-Token", "integration-token-xyz")
+	}
+
+	// Step 5: Clear cache — next GetToken should re-read from keyring.
+	mgr.ClearCache()
+	tok = mgr.GetToken()
+	if tok != "integration-token-xyz" {
+		t.Fatalf("after ClearCache: got %q, want %q", tok, "integration-token-xyz")
+	}
+
+	// Step 6: ClearToken — removes from keyring and cache.
+	mgr.ClearToken()
+	tok = mgr.GetToken()
+	if tok != "" {
+		t.Fatalf("after ClearToken: expected empty, got %q", tok)
+	}
+
+	// Step 7: Verify keyring is empty.
+	_, err := kr.Get(keyringService, keyringUser)
+	if err == nil {
+		t.Fatal("expected keyring to be empty after ClearToken")
 	}
 }
