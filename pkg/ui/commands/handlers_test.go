@@ -2934,3 +2934,38 @@ func TestKeybindings_DispatchReturnsMsg(t *testing.T) {
 		t.Fatalf("expected KeybindingsMsg, got %T", msg)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T262: /login
+// ---------------------------------------------------------------------------
+
+func TestLogin_ReturnsMessage(t *testing.T) {
+	h := newLoginHandler()
+	msg := h("")()
+	m, ok := msg.(LoginMsg)
+	if !ok {
+		t.Fatalf("expected LoginMsg, got %T", msg)
+	}
+	if !strings.Contains(m.Message, "claude auth login") {
+		t.Errorf("expected auth instruction in message, got %q", m.Message)
+	}
+}
+
+func TestLogin_RegisteredInDispatcher(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/login") {
+		t.Fatal("/login not registered")
+	}
+}
+
+func TestLogin_DispatchReturnsMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/login")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from dispatch")
+	}
+	msg := cmd()
+	if _, ok := msg.(LoginMsg); !ok {
+		t.Fatalf("expected LoginMsg, got %T", msg)
+	}
+}
