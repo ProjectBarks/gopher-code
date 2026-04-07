@@ -205,6 +205,8 @@ func main() {
 			if reason == "" {
 				reason = bridge.ErrBridgeNotAvailable
 			}
+			// T190: Log skip event with debug utils before exiting.
+			bridge.LogBridgeSkip(reason, "remote-control skipped: bridge not enabled", nil)
 			cliError(reason)
 		}
 
@@ -259,6 +261,14 @@ func main() {
 			"bridge_url": bridgeURL,
 			"authed":     fmt.Sprintf("%v", bridgeAuthed),
 		})
+
+		// T190: Use debug utils to safely log bridge config with secret redaction.
+		bridgeCfgDebug := bridge.DebugBody(map[string]any{
+			"bridge_url": bridgeURL,
+			"authed":     bridgeAuthed,
+			"token":      bridgeToken,
+		})
+		slog.Debug("bridge: remote-control config (redacted)", "config", bridgeCfgDebug)
 
 		fmt.Fprintf(os.Stderr, "Starting remote control session")
 		if rcName != "" {
