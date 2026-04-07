@@ -2242,7 +2242,10 @@ func TestFeedback_ShowsURL(t *testing.T) {
 		t.Fatalf("expected FeedbackMsg, got %T", msg)
 	}
 	if !strings.Contains(m.Message, "https://github.com/anthropics/claude-code/issues") {
-		t.Errorf("expected feedback URL, got %q", m.Message)
+		t.Errorf("expected feedback URL in message, got %q", m.Message)
+	}
+	if m.URL != feedbackURL {
+		t.Errorf("expected URL=%q, got %q", feedbackURL, m.URL)
 	}
 }
 

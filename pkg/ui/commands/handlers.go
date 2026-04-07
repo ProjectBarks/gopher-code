@@ -242,6 +242,8 @@ type FastModeMsg struct {
 // FeedbackMsg is returned when /feedback shows feedback URL.
 type FeedbackMsg struct {
 	Message string
+	URL     string
+	Opened  bool // true if browser was opened successfully
 }
 
 // FilesMsg is returned when /files lists files in context.
@@ -1831,13 +1833,43 @@ func newFastHandler(deps FastModeDeps) Handler {
 // Source: src/commands/feedback.ts
 // ---------------------------------------------------------------------------
 
+// feedbackURL is the URL for submitting feedback.
+const feedbackURL = "https://github.com/anthropics/claude-code/issues"
+
+// openBrowser attempts to open a URL in the default browser.
+func openBrowser(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "linux":
+		cmd = exec.Command("xdg-open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		return fmt.Errorf("unsupported platform %s", runtime.GOOS)
+	}
+	return cmd.Start()
+}
+
 // newFeedbackHandler creates the /feedback command handler.
-// Returns the feedback URL. Respects DISABLE_FEEDBACK_COMMAND env var.
+// Opens the feedback URL in the default browser. Falls back to displaying the URL.
+// Respects DISABLE_FEEDBACK_COMMAND env var.
 func newFeedbackHandler() Handler {
 	return func(args string) tea.Cmd {
 		return func() tea.Msg {
+			opened := false
+			if err := openBrowser(feedbackURL); err == nil {
+				opened = true
+			}
+			msg := "Submit feedback at " + feedbackURL
+			if opened {
+				msg = "Opened " + feedbackURL + " in your browser"
+			}
 			return FeedbackMsg{
-				Message: "Submit feedback at https://github.com/anthropics/claude-code/issues",
+				Message: msg,
+				URL:     feedbackURL,
+				Opened:  opened,
 			}
 		}
 	}
