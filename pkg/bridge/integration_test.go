@@ -407,6 +407,119 @@ func TestWorkSecretEncryptionRoundTrip(t *testing.T) {
 	}
 }
 
+// TestStatusMachineLifecycleIntegration exercises the full bridge status state
+// machine lifecycle: disconnected → connecting → registering → polling →
+// running → stopping → disconnected, plus error recovery, mirroring the
+// transitions the binary's remote-control session drives (T188).
+func TestStatusMachineLifecycleIntegration(t *testing.T) {
+	sm := NewStatusMachine()
+
+	// Track transitions via callback.
+	var transitions []string
+	var tmu sync.Mutex
+	sm.OnStatusChange(func(from, to BridgeStatus) {
+		tmu.Lock()
+		transitions = append(transitions, string(from)+"->"+string(to))
+		tmu.Unlock()
+	})
+
+	// Phase 1: Happy path — full lifecycle.
+	steps := []BridgeStatus{
+		StatusConnecting,
+		StatusRegistering,
+		StatusPolling,
+		StatusRunning,
+		StatusStopping,
+		StatusDisconnected,
+	}
+	for _, next := range steps {
+		if err := sm.Transition(next); err != nil {
+			t.Fatalf("Transition to %s: %v", next, err)
+		}
+	}
+	if sm.Status() != StatusDisconnected {
+		t.Fatalf("after full lifecycle: status = %s, want disconnected", sm.Status())
+	}
+
+	// Phase 2: Error recovery — connecting fails then retries.
+	if err := sm.Transition(StatusConnecting); err != nil {
+		t.Fatalf("reconnect: %v", err)
+	}
+	if err := sm.TransitionToError("timeout"); err != nil {
+		t.Fatalf("error transition: %v", err)
+	}
+	if sm.Status() != StatusError {
+		t.Fatalf("expected error, got %s", sm.Status())
+	}
+	if sm.ErrorReason() != "timeout" {
+		t.Errorf("ErrorReason = %q, want %q", sm.ErrorReason(), "timeout")
+	}
+	// Recover by reconnecting.
+	if err := sm.Transition(StatusConnecting); err != nil {
+		t.Fatalf("recover from error: %v", err)
+	}
+	if sm.ErrorReason() != "" {
+		t.Errorf("ErrorReason should be cleared after leaving error, got %q", sm.ErrorReason())
+	}
+
+	// Phase 3: Verify illegal transition is rejected.
+	if err := sm.Transition(StatusRunning); err == nil {
+		t.Fatal("connecting -> running should be illegal")
+	}
+	if sm.Status() != StatusConnecting {
+		t.Fatalf("status should remain connecting after illegal transition, got %s", sm.Status())
+	}
+
+	// Phase 4: Display and status-info integration.
+	info := GetBridgeStatus(BridgeConnectionState{Connected: true, SessionActive: true})
+	if info.Color != ColorSuccess {
+		t.Errorf("active bridge color = %q, want success", info.Color)
+	}
+
+	// Verify callback count matches all successful transitions.
+	tmu.Lock()
+	defer tmu.Unlock()
+	// 6 happy-path + 3 error-recovery (connecting, error, connecting) = 9
+	if len(transitions) != 9 {
+		t.Errorf("expected 9 transitions, got %d: %v", len(transitions), transitions)
+	}
+}
+
+// TestStatusMachineConcurrentTransitions exercises the state machine under
+// concurrent access to verify thread safety (T188).
+func TestStatusMachineConcurrentTransitions(t *testing.T) {
+	sm := NewStatusMachine()
+
+	// Move to polling so we have multiple valid outgoing transitions.
+	sm.Transition(StatusConnecting)
+	sm.Transition(StatusRegistering)
+	sm.Transition(StatusPolling)
+
+	var wg sync.WaitGroup
+	// Attempt concurrent transitions; exactly one should win per round.
+	for i := 0; i < 50; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			sm.Transition(StatusRunning)
+		}()
+		go func() {
+			defer wg.Done()
+			sm.Transition(StatusError)
+		}()
+	}
+	wg.Wait()
+
+	// The machine must be in a valid state (not corrupted).
+	s := sm.Status()
+	switch s {
+	case StatusRunning, StatusError, StatusPolling:
+		// all acceptable outcomes
+	default:
+		t.Fatalf("unexpected state after concurrent transitions: %s", s)
+	}
+}
+
 // TestBridgeMessagingIntegration exercises message construction, JSON
 // serialization, enqueue, flush, and ack — the full outbound event lifecycle
 // that the binary's remote-control path relies on (T184).
