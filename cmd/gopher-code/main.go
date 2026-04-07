@@ -691,6 +691,40 @@ func main() {
 		}
 	}
 
+	// Handle "setup-token" subcommand before flag.Parse()
+	// Source: src/cli/handlers/util.tsx — setupTokenHandler
+	if len(os.Args) > 1 && os.Args[1] == "setup-token" {
+		if code := handlers.SetupToken(handlers.SetupTokenOpts{}); code != 0 {
+			cliError("setup-token failed")
+		}
+		cliOk("")
+	}
+
+	// Handle "doctor" subcommand before flag.Parse()
+	// Source: src/cli/handlers/util.tsx — doctorHandler
+	if len(os.Args) > 1 && os.Args[1] == "doctor" {
+		if code := handlers.Doctor(handlers.DoctorOpts{}); code != 0 {
+			cliError("doctor failed")
+		}
+		cliOk("")
+	}
+
+	// Handle "install" subcommand before flag.Parse()
+	// Source: src/cli/handlers/util.tsx — installHandler
+	if len(os.Args) > 1 && os.Args[1] == "install" {
+		installFlags := flag.NewFlagSet("install", flag.ExitOnError)
+		force := installFlags.Bool("force", false, "Force install")
+		_ = installFlags.Parse(os.Args[2:])
+		target := installFlags.Arg(0)
+		if code := handlers.Install(handlers.InstallOpts{
+			Target: target,
+			Force:  *force,
+		}); code != 0 {
+			cliError("install failed")
+		}
+		cliOk("")
+	}
+
 	flag.Parse()
 
 	// Handle --version
