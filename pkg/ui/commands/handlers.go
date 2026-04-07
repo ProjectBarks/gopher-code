@@ -194,6 +194,11 @@ type MCPStatusMsg struct {
 	Message string
 }
 
+// OutputStyleMsg is returned when /output-style deprecation is invoked.
+type OutputStyleMsg struct {
+	Message string
+}
+
 // MovedToPluginMsg informs the user a command moved to a plugin.
 type MovedToPluginMsg struct {
 	Command    string
@@ -2798,15 +2803,11 @@ func newLogoutHandler() Handler {
 
 // ---------------------------------------------------------------------------
 // T266: /mobile — generate QR pairing URL for mobile companion
-// Source: src/commands/mobile.ts
 // ---------------------------------------------------------------------------
 
-// newMobileHandler creates the /mobile command handler.
-// It generates a pairing URL that can later be rendered as a QR code.
 func newMobileHandler() Handler {
 	return func(args string) tea.Cmd {
 		return func() tea.Msg {
-			// Generate a short random pairing token.
 			const tokenLen = 16
 			const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 			token := make([]byte, tokenLen)
@@ -2818,6 +2819,20 @@ func newMobileHandler() Handler {
 			return MobileMsg{
 				Message: msg,
 				URL:     pairingURL,
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T268: /output-style — deprecation notice
+// ---------------------------------------------------------------------------
+
+func newOutputStyleHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			return OutputStyleMsg{
+				Message: "Output styles have been replaced by output-style plugins. Use /plugin to manage output styles.",
 			}
 		}
 	}
@@ -3303,12 +3318,22 @@ func (d *Dispatcher) registerDefaults() {
 		}),
 	})
 
-	// T266: /mobile — generate QR pairing URL for mobile companion
+	// T266: /mobile
 	d.RegisterCommand(CommandRegistration{
 		Name:        "mobile",
 		Description: "Generate mobile pairing URL",
 		Type:        CommandTypeLocal,
 		Source:      "builtin",
 		Handler:     newMobileHandler(),
+	})
+
+	// T268: /output-style (hidden deprecation)
+	d.RegisterCommand(CommandRegistration{
+		Name:        "output-style",
+		Description: "Output style management (deprecated)",
+		Type:        CommandTypeLocal,
+		IsHidden:    true,
+		Source:      "builtin",
+		Handler:     newOutputStyleHandler(),
 	})
 }
