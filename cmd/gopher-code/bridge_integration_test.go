@@ -208,6 +208,124 @@ func TestHybridTransport_DefaultSelectsV2(t *testing.T) {
 	}
 }
 
+// TestGetTransportForUrl_FactorySelectionIntegration exercises factory selection
+// for all three transport kinds from the binary package, verifying that the
+// exported types and URL patterns work end-to-end as wired in main.go.
+func TestGetTransportForUrl_FactorySelectionIntegration(t *testing.T) {
+	tests := []struct {
+		name      string
+		ccrV2     string
+		postV2    string
+		rawURL    string
+		wantKind  bridge.TransportKind
+		wantScheme string
+	}{
+		{
+			name:       "SSE via CCR_V2 with wss URL",
+			ccrV2:      "1",
+			postV2:     "",
+			rawURL:     "wss://api.example.com/v2/sessions/s1",
+			wantKind:   bridge.TransportKindSSE,
+			wantScheme: "https",
+		},
+		{
+			name:       "SSE via CCR_V2 with ws URL",
+			ccrV2:      "true",
+			postV2:     "",
+			rawURL:     "ws://localhost:8080/sessions/s2",
+			wantKind:   bridge.TransportKindSSE,
+			wantScheme: "http",
+		},
+		{
+			name:       "SSE via CCR_V2 with https URL passthrough",
+			ccrV2:      "1",
+			postV2:     "",
+			rawURL:     "https://api.example.com/sessions/s3",
+			wantKind:   bridge.TransportKindSSE,
+			wantScheme: "https",
+		},
+		{
+			name:       "Hybrid via POST_INGRESS_V2",
+			ccrV2:      "",
+			postV2:     "1",
+			rawURL:     "wss://api.example.com/v2/session_ingress/ws/s4",
+			wantKind:   bridge.TransportKindHybrid,
+			wantScheme: "wss",
+		},
+		{
+			name:       "WebSocket default with wss",
+			ccrV2:      "",
+			postV2:     "",
+			rawURL:     "wss://api.example.com/v2/session_ingress/ws/s5",
+			wantKind:   bridge.TransportKindWebSocket,
+			wantScheme: "wss",
+		},
+		{
+			name:       "WebSocket default with ws",
+			ccrV2:      "",
+			postV2:     "",
+			rawURL:     "ws://localhost:9090/sessions/s6",
+			wantKind:   bridge.TransportKindWebSocket,
+			wantScheme: "ws",
+		},
+		{
+			name:       "CCR_V2 takes priority over POST_INGRESS_V2",
+			ccrV2:      "1",
+			postV2:     "1",
+			rawURL:     "wss://api.example.com/sessions/s7",
+			wantKind:   bridge.TransportKindSSE,
+			wantScheme: "https",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CLAUDE_CODE_USE_CCR_V2", tc.ccrV2)
+			t.Setenv("CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2", tc.postV2)
+
+			sel, err := bridge.GetTransportForUrl(
+				tc.rawURL,
+				map[string]string{"Authorization": "Bearer test"},
+				"test-session",
+			)
+			if err != nil {
+				t.Fatalf("GetTransportForUrl error: %v", err)
+			}
+			if sel.Kind != tc.wantKind {
+				t.Errorf("Kind = %d, want %d", sel.Kind, tc.wantKind)
+			}
+			if sel.URL.Scheme != tc.wantScheme {
+				t.Errorf("Scheme = %q, want %q", sel.URL.Scheme, tc.wantScheme)
+			}
+			if sel.SessionID != "test-session" {
+				t.Errorf("SessionID = %q, want %q", sel.SessionID, "test-session")
+			}
+			if sel.Headers["Authorization"] != "Bearer test" {
+				t.Errorf("Authorization header not preserved")
+			}
+		})
+	}
+}
+
+// TestGetTransportForUrl_UnsupportedSchemeIntegration verifies that non-WS
+// schemes are rejected when CCR_V2 is not active.
+func TestGetTransportForUrl_UnsupportedSchemeIntegration(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_USE_CCR_V2", "")
+	t.Setenv("CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2", "")
+
+	_, err := bridge.GetTransportForUrl(
+		"https://api.example.com/sessions/s1",
+		nil,
+		"",
+	)
+	if err == nil {
+		t.Fatal("expected error for https scheme without CCR_V2")
+	}
+	if !strings.Contains(err.Error(), "Unsupported protocol") {
+		t.Errorf("error = %q, want to contain 'Unsupported protocol'", err.Error())
+	}
+}
+
 // TestCCRClient_IntegrationConstruct verifies CCRClient construction.
 func TestCCRClient_IntegrationConstruct(t *testing.T) {
 	sessionURL := "https://api.example.com/v1/code/sessions/test-session-id"
