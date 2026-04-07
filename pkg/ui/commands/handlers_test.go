@@ -2557,3 +2557,118 @@ func TestHooksHandler_Dispatch(t *testing.T) {
 		t.Fatalf("Expected HooksMsg, got %T", msg)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T255: /ide tests
+// ---------------------------------------------------------------------------
+
+func TestIDE_Registered(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/ide") {
+		t.Fatal("Should have /ide handler")
+	}
+	reg := d.GetRegistration("/ide")
+	if reg == nil {
+		t.Fatal("Should have registration for /ide")
+	}
+	if reg.Description != "Detect installed IDEs and extensions" {
+		t.Errorf("Unexpected description: %q", reg.Description)
+	}
+	if reg.Type != CommandTypeLocal {
+		t.Errorf("Expected CommandTypeLocal, got %v", reg.Type)
+	}
+}
+
+func TestIDE_ReturnsIDEMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/ide")
+	if cmd == nil {
+		t.Fatal("Expected non-nil command")
+	}
+	msg := cmd()
+	result, ok := msg.(IDEMsg)
+	if !ok {
+		t.Fatalf("Expected IDEMsg, got %T", msg)
+	}
+	if result.Message == "" {
+		t.Error("Expected non-empty message")
+	}
+	if !strings.Contains(result.Message, "IDE Detection Results") {
+		t.Errorf("Expected detection header in message, got %q", result.Message)
+	}
+}
+
+func TestIDE_WithMockDetector(t *testing.T) {
+	orig := ideDetector
+	defer func() { ideDetector = orig }()
+
+	ideDetector = func() []IDEInfo {
+		return []IDEInfo{
+			{Name: "VS Code", Path: "/usr/bin/code", Installed: true, Extension: "installed"},
+			{Name: "IntelliJ IDEA", Path: "/opt/idea", Installed: true, Extension: "not-installed"},
+		}
+	}
+
+	h := newIDEHandler()
+	msg := h("")()
+	result, ok := msg.(IDEMsg)
+	if !ok {
+		t.Fatalf("Expected IDEMsg, got %T", msg)
+	}
+	if len(result.IDEs) != 2 {
+		t.Fatalf("Expected 2 IDEs, got %d", len(result.IDEs))
+	}
+	if !strings.Contains(result.Message, "VS Code") {
+		t.Error("Expected VS Code in message")
+	}
+	if !strings.Contains(result.Message, "Claude extension installed") {
+		t.Error("Expected 'Claude extension installed' for VS Code")
+	}
+	if !strings.Contains(result.Message, "Claude extension not installed") {
+		t.Error("Expected 'Claude extension not installed' for IntelliJ")
+	}
+}
+
+func TestIDE_NoIDEsDetected(t *testing.T) {
+	orig := ideDetector
+	defer func() { ideDetector = orig }()
+
+	ideDetector = func() []IDEInfo {
+		return []IDEInfo{
+			{Name: "VS Code", Installed: false, Extension: "unknown"},
+		}
+	}
+
+	h := newIDEHandler()
+	msg := h("")()
+	result := msg.(IDEMsg)
+	if !strings.Contains(result.Message, "No supported IDEs detected") {
+		t.Errorf("Expected 'No supported IDEs detected' in message, got %q", result.Message)
+	}
+}
+
+func TestIDE_DetectVSCode(t *testing.T) {
+	// Just verify detectVSCode returns valid IDEInfo
+	info := detectVSCode()
+	if info.Name != "VS Code" {
+		t.Errorf("Expected name 'VS Code', got %q", info.Name)
+	}
+	// Extension should be one of the valid values
+	validExts := map[string]bool{"installed": true, "not-installed": true, "unknown": true}
+	if !validExts[info.Extension] {
+		t.Errorf("Unexpected extension status: %q", info.Extension)
+	}
+}
+
+func TestIDE_DetectJetBrains(t *testing.T) {
+	// Just verify detectJetBrains returns slice (may be empty on CI)
+	results := detectJetBrains()
+	for _, info := range results {
+		if info.Name == "" {
+			t.Error("Expected non-empty IDE name")
+		}
+		if !info.Installed {
+			t.Error("detectJetBrains should only return installed IDEs")
+		}
+	}
+}
