@@ -429,6 +429,12 @@ func main() {
 		}
 		defer bridge.ClearBridgePointer(rcCwd, bridgeDebug)
 
+		// T199: Construct CapacityWake so the poll loop can be woken early
+		// when a session ends and frees capacity.
+		rcCtx, rcCtxCancel := context.WithCancel(context.Background())
+		defer rcCtxCancel()
+		capacityWake := bridge.NewCapacityWake(rcCtx)
+
 		// T193: Construct the BridgeOrchestrator.
 		orchestrator := bridge.NewBridgeOrchestrator()
 		orchestrator.Config = rcCfg
@@ -436,6 +442,7 @@ func main() {
 		orchestrator.Logger = nil
 		orchestrator.Debug = bridgeDebug
 		orchestrator.PollConfig = pollCfg
+		orchestrator.CapacityWake = capacityWake
 		slog.Debug("bridge: orchestrator constructed",
 			"dir", rcCfg.Dir,
 			"max_sessions", rcCfg.MaxSessions,

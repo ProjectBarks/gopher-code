@@ -137,6 +137,7 @@ type BridgeOrchestrator struct {
 	Debug             *BridgeDebug
 	Backoff           BackoffConfig
 	PollConfig        *DynamicPollConfig
+	CapacityWake      *CapacityWake
 
 	// Now is an injectable clock for testing. Defaults to time.Now.
 	Now func() time.Time

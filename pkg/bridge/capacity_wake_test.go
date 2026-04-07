@@ -146,3 +146,28 @@ func TestCapacityWake_CleanupStopsGoroutine(t *testing.T) {
 		t.Fatal("cleanup should cancel the signal context")
 	}
 }
+
+func TestCapacityWake_OrchestratorIntegration(t *testing.T) {
+	t.Parallel()
+	// Verify the orchestrator accepts and stores a CapacityWake, and that
+	// wake signals propagate through the orchestrator's reference.
+	cw := NewCapacityWake(context.Background())
+	orch := NewBridgeOrchestrator()
+	orch.CapacityWake = cw
+
+	if orch.CapacityWake == nil {
+		t.Fatal("CapacityWake not set on orchestrator")
+	}
+
+	sig, cleanup := orch.CapacityWake.SignalWithCleanup()
+	defer cleanup()
+
+	orch.CapacityWake.Wake()
+
+	select {
+	case <-sig.Done():
+		// success — wake propagated through orchestrator
+	case <-time.After(2 * time.Second):
+		t.Fatal("orchestrator CapacityWake signal not cancelled after Wake()")
+	}
+}
