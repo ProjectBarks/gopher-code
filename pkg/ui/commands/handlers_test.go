@@ -3158,3 +3158,82 @@ func TestLogout_DispatchReturnsMsg(t *testing.T) {
 		t.Fatalf("expected LogoutMsg, got %T", msg)
 	}
 }
+
+func TestPermissions_DispatchReturnsMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/permissions")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	pm, ok := msg.(PermissionsMsg)
+	if !ok {
+		t.Fatalf("expected PermissionsMsg, got %T", msg)
+	}
+	if !strings.Contains(pm.Message, "Permission Rules") {
+		t.Errorf("expected header in output, got: %s", pm.Message)
+	}
+	if !strings.Contains(pm.Message, "Mode:") {
+		t.Errorf("expected mode line in output, got: %s", pm.Message)
+	}
+}
+
+func TestPermissions_WithRules(t *testing.T) {
+	d := NewDispatcher()
+	d.RegisterCommand(CommandRegistration{
+		Name:        "permissions-test",
+		Description: "Test permissions with rules",
+		Type:        CommandTypeLocal,
+		Source:      "test",
+		Handler: newPermissionsHandler(PermissionsDeps{
+			GetPermissionMode: func() string { return "acceptEdits" },
+			GetAllowRules: func() map[string][]string {
+				return map[string][]string{
+					"userSettings": {"Bash(npm test)", "Read"},
+				}
+			},
+			GetDenyRules: func() map[string][]string {
+				return map[string][]string{
+					"projectSettings": {"Bash(rm -rf)"},
+				}
+			},
+		}),
+	})
+	cmd := d.Dispatch("/permissions-test")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	pm, ok := msg.(PermissionsMsg)
+	if !ok {
+		t.Fatalf("expected PermissionsMsg, got %T", msg)
+	}
+	if !strings.Contains(pm.Message, "acceptEdits") {
+		t.Errorf("expected mode acceptEdits, got: %s", pm.Message)
+	}
+	if !strings.Contains(pm.Message, "Bash(npm test)") {
+		t.Errorf("expected allow rule in output, got: %s", pm.Message)
+	}
+	if !strings.Contains(pm.Message, "Bash(rm -rf)") {
+		t.Errorf("expected deny rule in output, got: %s", pm.Message)
+	}
+	if !strings.Contains(pm.Message, "Allowed:") {
+		t.Errorf("expected Allowed section header, got: %s", pm.Message)
+	}
+	if !strings.Contains(pm.Message, "Denied:") {
+		t.Errorf("expected Denied section header, got: %s", pm.Message)
+	}
+}
+
+func TestPermissions_NoRulesMessage(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/permissions")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	pm := msg.(PermissionsMsg)
+	if !strings.Contains(pm.Message, "No custom permission rules configured") {
+		t.Errorf("expected no-rules message, got: %s", pm.Message)
+	}
+}
