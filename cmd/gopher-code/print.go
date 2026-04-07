@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/projectbarks/gopher-code/internal/cli"
+	pkgcli "github.com/projectbarks/gopher-code/pkg/cli"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/provider"
 	"github.com/projectbarks/gopher-code/pkg/query"
@@ -210,11 +211,10 @@ func runHeadless(
 // Source: cli/print.ts — emitLoadError
 func emitError(cfg HeadlessConfig, err error) {
 	if cfg.OutputFormat == OutputStreamJSON {
-		data, _ := json.Marshal(map[string]interface{}{
+		fmt.Fprintln(cfg.Stdout, pkgcli.NdjsonSafeStringify(map[string]interface{}{
 			"type":  "error",
 			"error": err.Error(),
-		})
-		fmt.Fprintln(cfg.Stdout, string(data))
+		}))
 	} else {
 		fmt.Fprintf(cfg.Stderr, "Error: %v\n", err)
 	}
