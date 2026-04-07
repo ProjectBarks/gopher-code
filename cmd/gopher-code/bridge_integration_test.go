@@ -273,3 +273,51 @@ func TestSerialBatchUploader_MessagingIntegration(t *testing.T) {
 		t.Fatalf("expected 5 events uploaded, got %d", n)
 	}
 }
+
+// TestWebSocketTransport_SelectedByDefault verifies WebSocketTransport selection
+// when no CCR v2 or hybrid env vars are set.
+func TestWebSocketTransport_SelectedByDefault(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_USE_CCR_V2", "")
+	t.Setenv("CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2", "")
+
+	sel, err := bridge.GetTransportForUrl(
+		"wss://api.example.com/v2/session_ingress/ws/sess-abc",
+		map[string]string{"Authorization": "Bearer test-tok"},
+		"sess-abc",
+	)
+	if err != nil {
+		t.Fatalf("GetTransportForUrl error: %v", err)
+	}
+	if sel.Kind != bridge.TransportKindWebSocket {
+		t.Fatalf("expected TransportKindWebSocket, got %d", sel.Kind)
+	}
+
+	// Construct via the same path as main.go — NewWebSocketTransport + V1 adapter.
+	ws := bridge.NewWebSocketTransport(bridge.WebSocketTransportOpts{
+		URL:       sel.URL,
+		Headers:   sel.Headers,
+		SessionID: sel.SessionID,
+		IsBridge:  true,
+		AutoReconnect: func() *bool { b := false; return &b }(),
+	})
+	transport := bridge.NewV1ReplTransport(ws)
+
+	// Before Connect: state is idle, not connected.
+	if transport.IsConnected() {
+		t.Fatal("expected IsConnected=false before Connect()")
+	}
+	if lab := transport.StateLabel(); lab != "idle" {
+		t.Fatalf("expected state label 'idle', got %q", lab)
+	}
+
+	// DroppedBatchCount should be 0.
+	if cnt := transport.DroppedBatchCount(); cnt != 0 {
+		t.Fatalf("expected DroppedBatchCount=0, got %d", cnt)
+	}
+
+	// Close should be safe even without connecting.
+	transport.Close()
+	if lab := transport.StateLabel(); lab != "closed" {
+		t.Fatalf("expected state label 'closed' after Close(), got %q", lab)
+	}
+}

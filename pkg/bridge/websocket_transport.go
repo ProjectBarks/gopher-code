@@ -305,6 +305,29 @@ func (t *WebSocketTransport) Write(message StdoutMessage) error {
 	return nil
 }
 
+// WriteBatch sends multiple messages through the WebSocket sequentially.
+func (t *WebSocketTransport) WriteBatch(msgs []StdoutMessage) error {
+	for _, msg := range msgs {
+		if err := t.Write(msg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// IsConnectedStatus reports whether the transport is connected.
+// This is an alias for IsConnected that satisfies the V1TransportDelegate interface.
+func (t *WebSocketTransport) IsConnectedStatus() bool {
+	return t.IsConnected()
+}
+
+// DroppedBatchCount returns the number of dropped batches. WebSocketTransport
+// does not drop batches (messages are buffered for replay), so this always
+// returns 0.
+func (t *WebSocketTransport) DroppedBatchCount() int64 {
+	return 0
+}
+
 // Close tears down the transport.
 func (t *WebSocketTransport) Close() {
 	t.mu.Lock()

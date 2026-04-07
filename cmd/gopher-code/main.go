@@ -579,6 +579,21 @@ func main() {
 				})
 				replTransport = bridge.NewV1ReplTransport(hybrid)
 				slog.Debug("bridge: selected HybridTransport (v1)")
+			} else if transportErr == nil && transportSel.Kind == bridge.TransportKindWebSocket {
+				// T217: WebSocketTransport — full-duplex WS reads + WS writes.
+				ws := bridge.NewWebSocketTransport(bridge.WebSocketTransportOpts{
+					URL:       transportSel.URL,
+					Headers:   transportSel.Headers,
+					SessionID: transportSel.SessionID,
+					IsBridge:  true,
+					RefreshHeaders: func() map[string]string {
+						tok, _ := bridgeDeps.GetAccessToken()
+						return map[string]string{"Authorization": "Bearer " + tok}
+					},
+					Logger: func(msg string) { bridgeDebug.LogStatus(msg, nil) },
+				})
+				replTransport = bridge.NewV1ReplTransport(ws)
+				slog.Debug("bridge: selected WebSocketTransport (v1)")
 			} else {
 				// Default: v2 SSE+CCR transport.
 				replTransport = bridge.NewV2ReplTransport(bridge.V2TransportOpts{
