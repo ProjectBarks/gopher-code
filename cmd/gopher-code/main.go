@@ -401,7 +401,41 @@ func main() {
 			)
 		}
 
-		// TODO(T195+): Wire full bridge REPL init once bridge core is implemented.
+		// T194: Run the REPL bridge pre-flight checks and init sequence.
+		// InitReplBridge validates enablement, OAuth, policy, cross-process
+		// backoff, and org UUID before returning a handle for the session.
+		replHandle, replErr := bridge.InitReplBridge(bridge.InitReplDeps{
+			IsBridgeEnabledBlocking: func() (bool, error) { return bridge.IsBridgeEnabled(), nil },
+			GetBridgeAccessToken:    bridgeDeps.GetAccessToken,
+			GetBridgeTokenOverride:  func() (string, bool) { return os.Getenv("CLAUDE_BRIDGE_OAUTH_TOKEN"), os.Getenv("CLAUDE_BRIDGE_OAUTH_TOKEN") != "" },
+			WaitForPolicyLimitsToLoad: func() error { return nil }, // TODO: wire real policy loader
+			IsPolicyAllowed:         func(key string) bool { return true }, // TODO: wire real policy check
+			GetGlobalConfig:         func() bridge.GlobalBridgeConfig { return bridge.GlobalBridgeConfig{} },
+			SaveGlobalConfig:        func(cfg bridge.GlobalBridgeConfig) {},
+			GetOAuthTokens:          func() *bridge.OAuthTokens { return nil },
+			CheckAndRefreshOAuthToken: func() error { return nil },
+			GetOrganizationUUID:     func() (string, error) { return "", nil }, // TODO: wire real org UUID
+			LogDebug:                func(msg string) { bridgeDebug.LogStatus(msg, nil) },
+		}, &bridge.InitBridgeOptions{
+			InitialName: rcName,
+			OnStateChange: func(state bridge.BridgeState, detail string) {
+				slog.Debug("bridge: repl state change", "state", state, "detail", detail)
+				_ = bridgeStatus.Transition(bridge.StatusConnecting)
+			},
+		})
+		if replErr != nil {
+			cliErrorf("bridge REPL init failed: %v", replErr)
+		}
+		if replHandle != nil {
+			slog.Debug("bridge: REPL bridge initialized",
+				"org_uuid", replHandle.OrgUUID,
+			)
+		} else {
+			slog.Debug("bridge: REPL bridge skipped (pre-flight check declined)")
+		}
+
+		// TODO(T195+): Wire full bridge REPL session lifecycle once bridge core is implemented.
+		_ = replHandle
 		_ = rcCfg
 		_ = pollCfg
 		_ = tdm
