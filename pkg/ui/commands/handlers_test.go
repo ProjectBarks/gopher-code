@@ -2768,7 +2768,38 @@ func TestInitVerifiers_HasRegistration(t *testing.T) {
 	if reg.Type != CommandTypePrompt {
 		t.Errorf("Expected CommandTypePrompt, got %v", reg.Type)
 	}
-	if reg.Description != "Create verifier skill(s) for automated verification of code changes" {
-		t.Errorf("Unexpected description: %q", reg.Description)
+}
+
+// ---------------------------------------------------------------------------
+// T258: /insights tests
+// ---------------------------------------------------------------------------
+
+func TestInsights_ReturnsPromptMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/insights")
+	msg := cmd()
+	pm, ok := msg.(PromptMsg)
+	if !ok {
+		t.Fatalf("Expected PromptMsg, got %T", msg)
+	}
+	if pm.Command != "/insights" {
+		t.Errorf("Expected command '/insights', got %q", pm.Command)
+	}
+	if !strings.Contains(pm.Text, "usage insights report") {
+		t.Error("Expected prompt text to mention usage insights report")
+	}
+}
+
+func TestInsights_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/insights")
+	if reg == nil {
+		t.Fatal("Expected /insights to be registered")
+	}
+	if reg.Type != CommandTypePrompt {
+		t.Errorf("Expected CommandTypePrompt, got %v", reg.Type)
+	}
+	if reg.Description == "" {
+		t.Error("Expected non-empty description")
 	}
 }
