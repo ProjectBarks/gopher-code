@@ -337,6 +337,15 @@ func main() {
 		})
 		defer bridgeMessaging.Close()
 
+		// T185: Register inbound message parser so the bridge session can
+		// extract user content from polled/WebSocket messages. The parser
+		// handles both plain-string and content-block payloads, normalizing
+		// image blocks from mobile clients that use camelCase "mediaType".
+		parseInbound := bridge.ExtractInboundMessageFields
+		slog.Debug("bridge: inbound message parser registered",
+			"parser", fmt.Sprintf("%T", parseInbound),
+		)
+
 		// T179: If a work secret is provided via env, decode and validate it
 		// during bridge session init so we fail fast on malformed secrets.
 		if wsEnv := os.Getenv("CLAUDE_CODE_WORK_SECRET"); wsEnv != "" {
@@ -357,6 +366,7 @@ func main() {
 		_ = pollCfg
 		_ = tdm
 		_ = bridgeMessaging
+		_ = parseInbound
 		cliOk("")
 	}
 

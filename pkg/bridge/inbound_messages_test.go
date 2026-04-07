@@ -391,3 +391,83 @@ func TestExtractInboundMessageFields_NormalizesImageBlocks(t *testing.T) {
 		t.Errorf("media_type = %q, want image/jpeg", imgBlock.Source.MediaType)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Integration: table-driven round-trip from raw JSON to typed InboundFields
+// ---------------------------------------------------------------------------
+
+func TestExtractInboundMessageFields_Integration(t *testing.T) {
+	tests := []struct {
+		name      string
+		json      string
+		wantNil   bool
+		wantErr   bool
+		wantStr   string
+		wantUUID  string
+		wantBlock int // expected len(ContentBlocks); -1 = don't check
+	}{
+		{
+			name:     "string content with uuid",
+			json:     `{"type":"user","message":{"content":"run tests"},"uuid":"u1"}`,
+			wantStr:  "run tests",
+			wantUUID: "u1",
+		},
+		{
+			name:      "text block array",
+			json:      `{"type":"user","message":{"content":[{"type":"text","text":"a"},{"type":"text","text":"b"}]}}`,
+			wantBlock: 2,
+		},
+		{
+			name:    "assistant message skipped",
+			json:    `{"type":"assistant","message":{"content":"ignored"}}`,
+			wantNil: true,
+		},
+		{
+			name:    "empty string content skipped",
+			json:    `{"type":"user","message":{"content":""}}`,
+			wantNil: true,
+		},
+		{
+			name:    "null message field skipped",
+			json:    `{"type":"user","message":null}`,
+			wantNil: true,
+		},
+		{
+			name:    "boolean content errors",
+			json:    `{"type":"user","message":{"content":true}}`,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fields, err := ExtractInboundMessageFields([]byte(tt.json))
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantNil {
+				if fields != nil {
+					t.Fatalf("expected nil, got %+v", fields)
+				}
+				return
+			}
+			if fields == nil {
+				t.Fatal("expected non-nil fields")
+			}
+			if tt.wantStr != "" && fields.ContentString != tt.wantStr {
+				t.Errorf("content = %q, want %q", fields.ContentString, tt.wantStr)
+			}
+			if tt.wantUUID != "" && fields.UUID != tt.wantUUID {
+				t.Errorf("uuid = %q, want %q", fields.UUID, tt.wantUUID)
+			}
+			if tt.wantBlock >= 0 && len(fields.ContentBlocks) != tt.wantBlock {
+				t.Errorf("len(blocks) = %d, want %d", len(fields.ContentBlocks), tt.wantBlock)
+			}
+		})
+	}
+}
