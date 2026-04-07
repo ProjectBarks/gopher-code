@@ -13,6 +13,7 @@ import (
 
 	"github.com/projectbarks/gopher-code/internal/cli"
 	"github.com/projectbarks/gopher-code/pkg/auth"
+	"github.com/projectbarks/gopher-code/pkg/bridge"
 	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/config"
 	"github.com/projectbarks/gopher-code/pkg/hooks"
@@ -164,9 +165,21 @@ func main() {
 			fmt.Fprintf(os.Stderr, " %q", rcName)
 		}
 		fmt.Fprintln(os.Stderr, "...")
+
+		// Build initial bridge config from CLI context.
+		// This wires the bridge types into the binary dependency tree (T169).
+		rcCwd, _ := os.Getwd()
+		rcCfg := bridge.NewRemoteControlConfig(rcCwd, rcName)
+		slog.Debug("bridge: remote-control config",
+			"dir", rcCfg.Dir,
+			"spawn_mode", rcCfg.SpawnMode,
+			"max_sessions", rcCfg.MaxSessions,
+			"worker_type", rcCfg.WorkerType,
+		)
+
 		// TODO(T195+): Wire full bridge REPL init once bridge core is implemented.
-		// For now, exit cleanly after printing the intent.
-		_ = rcName
+		// For now, exit cleanly after printing the config.
+		_ = rcCfg
 		cliOk("")
 	}
 
