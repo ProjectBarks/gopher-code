@@ -623,11 +623,45 @@ func main() {
 	}
 
 	// Handle "agents" subcommand before flag.Parse()
-	// Source: src/cli.ts — `claude agents` lists configured agents.
 	if len(os.Args) > 1 && os.Args[1] == "agents" {
 		agentsCwd, _ := os.Getwd()
 		handlers.AgentsHandler(os.Stdout, agentsCwd)
 		cliOk("")
+	}
+
+	// Handle "auth" subcommand before flag.Parse()
+	if len(os.Args) > 1 && os.Args[1] == "auth" {
+		sub := ""
+		if len(os.Args) > 2 {
+			sub = os.Args[2]
+		}
+		switch sub {
+		case "login":
+			loginFlags := flag.NewFlagSet("auth login", flag.ExitOnError)
+			email := loginFlags.String("email", "", "Email for login")
+			sso := loginFlags.Bool("sso", false, "Use SSO login")
+			console := loginFlags.Bool("console", false, "Use Anthropic Console OAuth scopes")
+			claudeAI := loginFlags.Bool("claudeai", false, "Use claude.ai OAuth scopes")
+			_ = loginFlags.Parse(os.Args[3:])
+			code := handlers.AuthLogin(handlers.AuthLoginOpts{
+				Email:    *email,
+				SSO:      *sso,
+				Console:  *console,
+				ClaudeAI: *claudeAI,
+			}, nil)
+			os.Exit(code)
+		case "status":
+			statusFlags := flag.NewFlagSet("auth status", flag.ExitOnError)
+			jsonOut := statusFlags.Bool("json", false, "Output as JSON")
+			_ = statusFlags.Parse(os.Args[3:])
+			code := handlers.AuthStatus(handlers.AuthStatusOpts{JSON: *jsonOut})
+			os.Exit(code)
+		case "logout":
+			code := handlers.AuthLogout(handlers.AuthLogoutOpts{})
+			os.Exit(code)
+		default:
+			cliErrorf("Unknown auth subcommand: %q (use login, status, logout)", sub)
+		}
 	}
 
 	flag.Parse()
