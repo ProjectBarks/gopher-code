@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/projectbarks/gopher-code/cmd/gopher-code/handlers"
 	"github.com/projectbarks/gopher-code/internal/cli"
 	"github.com/projectbarks/gopher-code/pkg/auth"
 	"github.com/projectbarks/gopher-code/pkg/bridge"
@@ -587,6 +588,14 @@ func main() {
 		default:
 			cliErrorf("Unknown shell: %s (use bash, zsh, fish)", shell)
 		}
+		cliOk("")
+	}
+
+	// Handle "agents" subcommand before flag.Parse()
+	// Source: src/cli.ts — `claude agents` lists configured agents.
+	if len(os.Args) > 1 && os.Args[1] == "agents" {
+		agentsCwd, _ := os.Getwd()
+		handlers.AgentsHandler(os.Stdout, agentsCwd)
 		cliOk("")
 	}
 
