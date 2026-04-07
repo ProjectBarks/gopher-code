@@ -489,6 +489,7 @@ func main() {
 			slog.Debug("bridge: REPL bridge skipped (pre-flight check declined)")
 		}
 
+<<<<<<< HEAD
 		// T195+T196: Construct ReplBridge transport and register handle.
 		var replBridge *bridge.ReplBridge
 		if replHandle != nil {
@@ -545,6 +546,11 @@ func main() {
 			})
 			replTransport.Connect()
 			defer replTransport.Close()
+		}
+
+		// T198: Wire FlushGate into the bridge REPL lifecycle.
+		if replBridge != nil {
+			slog.Debug("bridge: flush gate available", "active", replBridge.IsFlushActive())
 		}
 
 		_ = replBridge
