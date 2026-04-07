@@ -337,6 +337,19 @@ func main() {
 		})
 		defer bridgeMessaging.Close()
 
+		// T186: Construct inbound attachment deps so the remote-control session
+		// can resolve file_attachments on inbound bridge messages.
+		attachDeps := &bridge.AttachmentDeps{
+			GetAccessToken: bridgeDeps.GetAccessToken,
+			GetBaseURL:     bridgeDeps.GetBaseAPIURL,
+			GetConfigDir: func() string {
+				home, _ := os.UserHomeDir()
+				return filepath.Join(home, ".claude")
+			},
+			GetSessionID: func() string { return "" }, // resolved per-session at runtime
+		}
+		_ = attachDeps // used by orchestrator once bridge REPL processes inbound messages
+
 		// T179: If a work secret is provided via env, decode and validate it
 		// during bridge session init so we fail fast on malformed secrets.
 		if wsEnv := os.Getenv("CLAUDE_CODE_WORK_SECRET"); wsEnv != "" {
