@@ -347,8 +347,8 @@ func TestRunHeadless_StreamJSON_InputFormat(t *testing.T) {
 	reg := tools.NewRegistry()
 	orch := tools.NewOrchestrator(reg)
 
-	// Provide stream-json input lines
-	input := `{"type":"user","text":"hello from stream"}` + "\n"
+	// Provide stream-json input lines (StructuredIO SDK protocol format)
+	input := `{"type":"user","message":{"role":"user","content":"hello from stream"}}` + "\n"
 	code, out, _ := captureHeadless(ctx, sess, prov, reg, orch, HeadlessConfig{
 		OutputFormat: OutputStreamJSON,
 		InputFormat:  "stream-json",
@@ -361,6 +361,83 @@ func TestRunHeadless_StreamJSON_InputFormat(t *testing.T) {
 	}
 	if !strings.Contains(out, "stream-reply") {
 		t.Errorf("expected output to contain 'stream-reply', got %q", out)
+	}
+}
+
+// --- StructuredIO integration tests ------------------------------------------
+
+func TestRunHeadless_StreamJSON_StructuredIO_SkipsKeepAlive(t *testing.T) {
+	ctx := context.Background()
+	sess := newTestSession()
+	prov := &stubProvider{text: "structured-reply"}
+	reg := tools.NewRegistry()
+	orch := tools.NewOrchestrator(reg)
+
+	// Mix keep_alive messages (should be silently ignored by StructuredIO)
+	// with a real user message.
+	input := `{"type":"keep_alive"}` + "\n" +
+		`{"type":"user","message":{"role":"user","content":"real prompt"}}` + "\n" +
+		`{"type":"keep_alive"}` + "\n"
+
+	code, out, errOut := captureHeadless(ctx, sess, prov, reg, orch, HeadlessConfig{
+		OutputFormat: OutputStreamJSON,
+		InputFormat:  "stream-json",
+		Verbose:      true,
+		Stdin:        strings.NewReader(input),
+	}, nil)
+
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr: %s", code, errOut)
+	}
+	if !strings.Contains(out, "structured-reply") {
+		t.Errorf("expected output to contain 'structured-reply', got %q", out)
+	}
+
+	// Verify only the real user message made it into the session.
+	userMsgCount := 0
+	for _, m := range sess.Messages {
+		if m.Role == message.RoleUser {
+			userMsgCount++
+		}
+	}
+	if userMsgCount != 1 {
+		t.Errorf("expected exactly 1 user message in session, got %d", userMsgCount)
+	}
+}
+
+func TestRunHeadless_StreamJSON_StructuredIO_MultipleUserMessages(t *testing.T) {
+	ctx := context.Background()
+	sess := newTestSession()
+	prov := &stubProvider{text: "multi-reply"}
+	reg := tools.NewRegistry()
+	orch := tools.NewOrchestrator(reg)
+
+	input := `{"type":"user","message":{"role":"user","content":"first"}}` + "\n" +
+		`{"type":"user","message":{"role":"user","content":"second"}}` + "\n"
+
+	code, out, errOut := captureHeadless(ctx, sess, prov, reg, orch, HeadlessConfig{
+		OutputFormat: OutputStreamJSON,
+		InputFormat:  "stream-json",
+		Verbose:      true,
+		Stdin:        strings.NewReader(input),
+	}, nil)
+
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d; stderr: %s", code, errOut)
+	}
+	if !strings.Contains(out, "multi-reply") {
+		t.Errorf("expected output to contain 'multi-reply', got %q", out)
+	}
+
+	// Both user messages should be in the session.
+	userMsgCount := 0
+	for _, m := range sess.Messages {
+		if m.Role == message.RoleUser {
+			userMsgCount++
+		}
+	}
+	if userMsgCount != 2 {
+		t.Errorf("expected 2 user messages in session, got %d", userMsgCount)
 	}
 }
 
