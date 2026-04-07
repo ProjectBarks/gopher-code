@@ -318,6 +318,14 @@ func main() {
 		})
 		_ = sessionClient // used by orchestrator once bridge REPL is wired
 
+		// T183: Construct a CodeSessionClient so the bridge session can
+		// create code sessions and fetch remote credentials via the
+		// code-session API (/v1/code/sessions).
+		codeSessionClient := bridge.NewCodeSessionClient(bridge.CodeSessionClientConfig{
+			OnDebug: func(msg string) { slog.Debug(msg) },
+		})
+		_ = codeSessionClient
+
 		// T179: If a work secret is provided via env, decode and validate it
 		// during bridge session init so we fail fast on malformed secrets.
 		if wsEnv := os.Getenv("CLAUDE_CODE_WORK_SECRET"); wsEnv != "" {
