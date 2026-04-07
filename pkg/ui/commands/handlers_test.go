@@ -3158,3 +3158,41 @@ func TestLogout_DispatchReturnsMsg(t *testing.T) {
 		t.Fatalf("expected LogoutMsg, got %T", msg)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T269: /passes
+// ---------------------------------------------------------------------------
+
+func TestPasses_ShowsURL(t *testing.T) {
+	h := newPassesHandler()
+	msg := h("")()
+	m, ok := msg.(PassesMsg)
+	if !ok {
+		t.Fatalf("expected PassesMsg, got %T", msg)
+	}
+	if !strings.Contains(m.Message, passesReferralURL) {
+		t.Errorf("expected referral URL in message, got %q", m.Message)
+	}
+	if m.URL != passesReferralURL {
+		t.Errorf("expected URL=%q, got %q", passesReferralURL, m.URL)
+	}
+}
+
+func TestPasses_RegisteredInDispatcher(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/passes") {
+		t.Fatal("/passes not registered")
+	}
+}
+
+func TestPasses_DispatchReturnsMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/passes")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from dispatch")
+	}
+	msg := cmd()
+	if _, ok := msg.(PassesMsg); !ok {
+		t.Fatalf("expected PassesMsg, got %T", msg)
+	}
+}

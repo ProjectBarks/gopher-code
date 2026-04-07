@@ -287,6 +287,13 @@ type KeybindingsMsg struct {
 	Message string
 }
 
+// PassesMsg is returned when /passes shows the referral URL.
+type PassesMsg struct {
+	Message string
+	URL     string
+	Opened  bool // true if browser was opened successfully
+}
+
 // InstallSlackAppMsg is returned when /install-slack-app opens the Slack app install URL.
 type MemoryMsg struct {
 	Message string
@@ -2117,6 +2124,36 @@ func newInstallSlackAppHandler() Handler {
 }
 
 // ---------------------------------------------------------------------------
+// T269: /passes — open the Claude passes/referral page
+// Source: src/commands/passes.ts
+// ---------------------------------------------------------------------------
+
+// passesReferralURL is the URL for the Claude passes referral page.
+const passesReferralURL = "https://claude.ai/referrals"
+
+// newPassesHandler creates the /passes command handler.
+// Opens the Claude passes/referral URL in the default browser. Falls back to displaying the URL.
+func newPassesHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			opened := false
+			if err := openBrowser(passesReferralURL); err == nil {
+				opened = true
+			}
+			msg := "Share Claude Code — refer friends at " + passesReferralURL
+			if opened {
+				msg = "Opened " + passesReferralURL + " in your browser"
+			}
+			return PassesMsg{
+				Message: msg,
+				URL:     passesReferralURL,
+				Opened:  opened,
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // T261: /keybindings — display current keybinding configuration
 // Source: src/commands/keybindings/
 // ---------------------------------------------------------------------------
@@ -3222,5 +3259,15 @@ func (d *Dispatcher) registerDefaults() {
 		Handler: newMemoryHandler(MemoryDeps{
 			CWD: func() string { return "" },
 		}),
+	})
+
+	// T269: /passes — open the Claude passes/referral page
+	d.RegisterCommand(CommandRegistration{
+		Name:         "passes",
+		Description:  "Share Claude Code with friends via referral",
+		Type:         CommandTypeLocal,
+		Availability: []CommandAvailability{AvailabilityClaudeAI},
+		Source:       "builtin",
+		Handler:      newPassesHandler(),
 	})
 }
