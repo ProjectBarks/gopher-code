@@ -1,0 +1,123 @@
+package bridge
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+
+	"github.com/projectbarks/gopher-code/pkg/analytics"
+)
+
+// TestDebugIntegration_LevelsAndBuffer verifies that a BridgeDebug instance
+// correctly filters messages at different levels and retains them in the
+// circular buffer. This exercises the end-to-end path from typed log methods
+// through the ring buffer and slog backend.
+func TestDebugIntegration_LevelsAndBuffer(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewBridgeDebug(LogLevelInfo, 32, testLogger(&buf))
+
+	// Debug-level messages should be filtered out at Info threshold.
+	d.LogAPI("GET", "/health", 200)
+
+	// Info-level messages should pass through.
+	d.LogStatus("bridge ready", map[string]string{"env": "test"})
+	d.LogTransition("idle", "polling", "timer")
+	d.LogSession("sess-42", "created")
+
+	// Error-level messages should pass through.
+	d.LogError("connection lost", nil)
+
+	entries := d.Entries()
+	if len(entries) != 4 {
+		t.Fatalf("expected 4 entries (1 debug filtered), got %d", len(entries))
+	}
+
+	// Verify chronological order and levels.
+	wantLevels := []LogLevel{LogLevelInfo, LogLevelInfo, LogLevelInfo, LogLevelError}
+	for i, e := range entries {
+		if e.Level != wantLevels[i] {
+			t.Errorf("entry %d: level=%s, want %s", i, e.Level, wantLevels[i])
+		}
+	}
+
+	// Verify slog backend received the messages.
+	slogOut := buf.String()
+	if !strings.Contains(slogOut, "[bridge]") {
+		t.Error("slog output missing [bridge] prefix")
+	}
+	if !strings.Contains(slogOut, "bridge ready") {
+		t.Error("slog output missing 'bridge ready'")
+	}
+
+	// Now change level to Error and verify Info is filtered.
+	d.SetLevel(LogLevelError)
+	d.LogStatus("should be filtered", nil)
+	d.LogError("visible error", nil)
+
+	entries = d.Entries()
+	if len(entries) != 5 {
+		t.Fatalf("expected 5 entries after level change, got %d", len(entries))
+	}
+	if entries[4].Message != "visible error" {
+		t.Errorf("last entry: got %q, want 'visible error'", entries[4].Message)
+	}
+
+	// Change back to Debug — everything should pass.
+	d.SetLevel(LogLevelDebug)
+	d.LogAPI("POST", "/poll", 200)
+
+	entries = d.Entries()
+	if len(entries) != 6 {
+		t.Fatalf("expected 6 entries after debug level, got %d", len(entries))
+	}
+	if !strings.Contains(entries[5].Message, "API POST /poll") {
+		t.Errorf("last entry: got %q", entries[5].Message)
+	}
+}
+
+// TestDebugIntegration_GlobalSingleton verifies SetGlobalBridgeDebug /
+// GlobalBridgeDebug round-trip and that LogBridgeSkip uses it.
+func TestDebugIntegration_GlobalSingleton(t *testing.T) {
+	// Clean slate.
+	ResetGlobalBridgeDebugForTesting()
+	defer ResetGlobalBridgeDebugForTesting()
+
+	// Before setting global, LogBridgeSkip should not panic.
+	analytics.ResetForTesting()
+	rec := &eventRecorder{}
+	analytics.AttachSink(rec)
+	defer analytics.ResetForTesting()
+
+	LogBridgeSkip("test_no_global", "debug msg without global", nil)
+	if len(rec.events) != 1 {
+		t.Fatalf("expected 1 analytics event, got %d", len(rec.events))
+	}
+
+	// Now set a global and verify LogBridgeSkip writes to it.
+	d := NewBridgeDebug(LogLevelDebug, 16, testLogger(&bytes.Buffer{}))
+	SetGlobalBridgeDebug(d)
+
+	LogBridgeSkip("test_with_global", "debug msg with global", nil)
+
+	entries := d.Entries()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 debug entry, got %d", len(entries))
+	}
+	if entries[0].Message != "debug msg with global" {
+		t.Errorf("entry message: %q", entries[0].Message)
+	}
+	if entries[0].Attrs["skip_reason"] != "test_with_global" {
+		t.Errorf("entry attrs: %v", entries[0].Attrs)
+	}
+}
+
+// TestDebugIntegration_GlobalNilSafe verifies GlobalBridgeDebug returns nil
+// when unset.
+func TestDebugIntegration_GlobalNilSafe(t *testing.T) {
+	ResetGlobalBridgeDebugForTesting()
+	defer ResetGlobalBridgeDebugForTesting()
+
+	if d := GlobalBridgeDebug(); d != nil {
+		t.Error("expected nil global debug, got non-nil")
+	}
+}

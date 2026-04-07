@@ -167,9 +167,14 @@ func DescribeHTTPError(err error) string {
 
 // LogBridgeSkip logs a bridge init skip event with an optional debug message
 // and the "tengu_bridge_repl_skipped" analytics event.
+// If a global BridgeDebug has been set via SetGlobalBridgeDebug, the debugMsg
+// is also emitted at info level through the bridge debug logger (T189).
 func LogBridgeSkip(reason string, debugMsg string, v2 *bool) {
-	// debugMsg logging is intentionally deferred to a later task (T189)
-	// when the bridge debug logging system is implemented.
+	if debugMsg != "" {
+		if d := GlobalBridgeDebug(); d != nil {
+			d.LogStatus(debugMsg, map[string]string{"skip_reason": reason})
+		}
+	}
 	meta := analytics.EventMetadata{"reason": reason}
 	if v2 != nil {
 		meta["v2"] = *v2
