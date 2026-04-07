@@ -326,6 +326,17 @@ func main() {
 		})
 		_ = codeSessionClient
 
+		// T184: Construct BridgeMessaging for outbound event buffering and
+		// delivery during the remote-control session. The SendFunc is a
+		// placeholder until the full bridge transport is wired (T195+).
+		bridgeMessaging := bridge.NewBridgeMessaging(bridge.BridgeMessagingConfig{
+			Send: func(_ context.Context, batch []bridge.BridgeEvent) error {
+				slog.Debug("bridge: messaging flush", "batch_size", len(batch))
+				return nil
+			},
+		})
+		defer bridgeMessaging.Close()
+
 		// T179: If a work secret is provided via env, decode and validate it
 		// during bridge session init so we fail fast on malformed secrets.
 		if wsEnv := os.Getenv("CLAUDE_CODE_WORK_SECRET"); wsEnv != "" {
@@ -345,6 +356,7 @@ func main() {
 		_ = rcCfg
 		_ = pollCfg
 		_ = tdm
+		_ = bridgeMessaging
 		cliOk("")
 	}
 
