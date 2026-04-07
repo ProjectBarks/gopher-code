@@ -155,6 +155,20 @@ type BridgeConfig struct {
 	SessionTimeoutMS   *int      `json:"session_timeout_ms,omitempty"`
 }
 
+// NewRemoteControlConfig builds a BridgeConfig with sensible defaults for a
+// `claude remote-control` invocation. Later tasks will populate auth/URL
+// fields from the credential store and environment.
+func NewRemoteControlConfig(dir string, machineName string) BridgeConfig {
+	return BridgeConfig{
+		Dir:            dir,
+		MachineName:    machineName,
+		MaxSessions:    1,
+		SpawnMode:      SpawnModeSingleSession,
+		WorkerType:     string(WorkerTypeClaudeCode),
+		SessionTimeoutMS: func() *int { v := DefaultSessionTimeoutMS; return &v }(),
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Permission event
 // ---------------------------------------------------------------------------
