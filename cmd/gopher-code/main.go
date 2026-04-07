@@ -603,6 +603,27 @@ func main() {
 		cliOk("")
 	}
 
+	// Handle "auto-mode" subcommand before flag.Parse()
+	// Source: src/cli.ts — `claude auto-mode` dispatches to handlers in
+	// cmd/gopher-code/handlers/auto_mode.go.
+	if len(os.Args) > 1 && os.Args[1] == "auto-mode" {
+		sub := ""
+		if len(os.Args) > 2 {
+			sub = os.Args[2]
+		}
+		switch sub {
+		case "", "config":
+			// Print effective auto-mode config (user overrides merged with defaults).
+			// TODO: wire real user config from settings once config loading is available.
+			handlers.AutoModeConfigHandler(nil)
+		case "defaults":
+			handlers.AutoModeDefaultsHandler()
+		default:
+			cliErrorf("Unknown auto-mode subcommand: %s (use defaults, config)", sub)
+		}
+		cliOk("")
+	}
+
 	// Handle "completion" subcommand before flag.Parse()
 	if len(os.Args) > 1 && os.Args[1] == "completion" {
 		shell := "bash"
