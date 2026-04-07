@@ -163,15 +163,13 @@ func TestDispatcherNotACommand(t *testing.T) {
 }
 
 func TestDispatcherModelWithoutArgs(t *testing.T) {
+	// T267: /model with no args now shows the current model instead of returning an error.
 	d := NewDispatcher()
 	cmd := d.Dispatch("/model")
 	msg := cmd()
-	result, ok := msg.(CommandResult)
+	_, ok := msg.(ModelShowMsg)
 	if !ok {
-		t.Fatalf("Expected CommandResult, got %T", msg)
-	}
-	if result.Error == nil {
-		t.Error("Expected error for /model without args")
+		t.Fatalf("Expected ModelShowMsg, got %T", msg)
 	}
 }
 
@@ -3156,5 +3154,99 @@ func TestLogout_DispatchReturnsMsg(t *testing.T) {
 	msg := cmd()
 	if _, ok := msg.(LogoutMsg); !ok {
 		t.Fatalf("expected LogoutMsg, got %T", msg)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T267: /model picker command tests
+// ---------------------------------------------------------------------------
+
+func TestModel_SwitchWithArg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/model sonnet")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	sm, ok := msg.(ModelSwitchMsg)
+	if !ok {
+		t.Fatalf("expected ModelSwitchMsg, got %T", msg)
+	}
+	if sm.Model != "sonnet" {
+		t.Errorf("expected model 'sonnet', got %q", sm.Model)
+	}
+}
+
+func TestModel_SwitchOpus(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/model opus")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	sm, ok := msg.(ModelSwitchMsg)
+	if !ok {
+		t.Fatalf("expected ModelSwitchMsg, got %T", msg)
+	}
+	if sm.Model != "opus" {
+		t.Errorf("expected model 'opus', got %q", sm.Model)
+	}
+}
+
+func TestModel_NoArgsShowsCurrent(t *testing.T) {
+	d := NewDispatcher()
+	// Override the default registration with one that has a known current model.
+	d.RegisterCommand(CommandRegistration{
+		Name:         "model",
+		Description:  "Show or switch the current model",
+		Type:         CommandTypeLocal,
+		ArgumentHint: "[model-name]",
+		Immediate:    true,
+		Source:       "builtin",
+		Handler: newModelHandler(ModelState{
+			CurrentModel: func() string { return "claude-sonnet-4-20250514" },
+		}),
+	})
+	cmd := d.Dispatch("/model")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	sm, ok := msg.(ModelShowMsg)
+	if !ok {
+		t.Fatalf("expected ModelShowMsg, got %T", msg)
+	}
+	if !strings.Contains(sm.Message, "claude-sonnet-4-20250514") {
+		t.Errorf("expected message to contain current model name, got %q", sm.Message)
+	}
+}
+
+func TestModel_NoArgsDefaultUnknown(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/model")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	sm, ok := msg.(ModelShowMsg)
+	if !ok {
+		t.Fatalf("expected ModelShowMsg, got %T", msg)
+	}
+	if !strings.Contains(sm.Message, "(unknown)") {
+		t.Errorf("expected message to contain '(unknown)', got %q", sm.Message)
+	}
+}
+
+func TestModel_Registration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/model")
+	if reg == nil {
+		t.Fatal("expected /model to have a full registration")
+	}
+	if reg.ArgumentHint != "[model-name]" {
+		t.Errorf("expected argument hint '[model-name]', got %q", reg.ArgumentHint)
+	}
+	if reg.Description == "" {
+		t.Error("expected non-empty description")
 	}
 }
