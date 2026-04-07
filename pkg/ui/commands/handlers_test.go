@@ -2672,3 +2672,40 @@ func TestIDE_DetectJetBrains(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T258: /insights tests
+// ---------------------------------------------------------------------------
+
+func TestInsights_ReturnsPromptMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/insights")
+	msg := cmd()
+	pm, ok := msg.(PromptMsg)
+	if !ok {
+		t.Fatalf("Expected PromptMsg, got %T", msg)
+	}
+	if pm.Command != "/insights" {
+		t.Errorf("Expected command '/insights', got %q", pm.Command)
+	}
+	if !strings.Contains(pm.Text, "usage insights report") {
+		t.Error("Expected prompt text to mention usage insights report")
+	}
+}
+
+func TestInsights_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/insights")
+	if reg == nil {
+		t.Fatal("Expected /insights to be registered")
+	}
+	if reg.Type != CommandTypePrompt {
+		t.Errorf("Expected CommandTypePrompt, got %v", reg.Type)
+	}
+	if reg.Description == "" {
+		t.Error("Expected non-empty description")
+	}
+	if reg.ArgumentHint != "[time period]" {
+		t.Errorf("Expected argument hint '[time period]', got %q", reg.ArgumentHint)
+	}
+}

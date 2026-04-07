@@ -2099,6 +2099,26 @@ func newHooksHandler(deps HooksDeps) Handler {
 }
 
 // ---------------------------------------------------------------------------
+// T258: /insights — generate usage report (stub)
+// Source: src/commands/insights.ts (~3200 LOC — full implementation separate)
+// ---------------------------------------------------------------------------
+
+// newInsightsHandler creates the /insights command handler (stub).
+// The full implementation will generate detailed usage reports with token
+// consumption, cost breakdowns, and session analytics. For now this returns
+// a prompt message indicating the feature is not yet implemented.
+func newInsightsHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			return PromptMsg{
+				Command: "/insights",
+				Text:    "Generate a usage insights report. Note: the /insights command is not yet fully implemented — detailed analytics will be available in a future release.",
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // T255: /ide — detect installed IDEs and extension status
 // Source: src/commands/ide/ide.tsx
 // ---------------------------------------------------------------------------
@@ -2695,5 +2715,15 @@ func (d *Dispatcher) registerDefaults() {
 			GetHooks:     func() []hooks.IndividualHookConfig { return nil },
 			GetToolNames: func() []string { return nil },
 		}),
+	})
+
+	// T258: /insights — generate usage report (stub)
+	d.RegisterCommand(CommandRegistration{
+		Name:         "insights",
+		Description:  "Generate usage report and insights",
+		Type:         CommandTypePrompt,
+		ArgumentHint: "[time period]",
+		Source:       "builtin",
+		Handler:      newInsightsHandler(),
 	})
 }
