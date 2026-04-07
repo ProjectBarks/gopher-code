@@ -565,7 +565,28 @@ func main() {
 				slog.Debug("bridge: transport selection failed, falling back to v2", "error", transportErr)
 			}
 
-			if transportErr == nil && transportSel.Kind == bridge.TransportKindHybrid {
+			if transportErr == nil && transportSel.Kind == bridge.TransportKindSSE {
+				// T215: SSETransport — SSE reads + HTTP POST writes.
+				sseTransport, sseErr := bridge.NewSSETransport(bridge.SSETransportOpts{
+					URL:       transportSel.URL.String(),
+					Headers:   transportSel.Headers,
+					SessionID: transportSel.SessionID,
+					GetAuthHeaders: func() map[string]string {
+						tok, _ := bridgeDeps.GetAccessToken()
+						if tok == "" {
+							return nil
+						}
+						return map[string]string{"Authorization": "Bearer " + tok}
+					},
+					Logger: func(msg string) { bridgeDebug.LogStatus(msg, nil) },
+				})
+				if sseErr != nil {
+					slog.Debug("bridge: SSETransport construction failed, falling back to v2", "error", sseErr)
+				} else {
+					replTransport = bridge.NewSSEReplTransport(sseTransport)
+					slog.Debug("bridge: selected SSETransport")
+				}
+			} else if transportErr == nil && transportSel.Kind == bridge.TransportKindHybrid {
 				// T213: HybridTransport — WS reads + HTTP POST writes.
 				hybrid := bridge.NewHybridTransport(bridge.HybridTransportOpts{
 					URL:       transportSel.URL,
@@ -579,7 +600,9 @@ func main() {
 				})
 				replTransport = bridge.NewV1ReplTransport(hybrid)
 				slog.Debug("bridge: selected HybridTransport (v1)")
-			} else {
+			}
+
+			if replTransport == nil {
 				// Default: v2 SSE+CCR transport.
 				replTransport = bridge.NewV2ReplTransport(bridge.V2TransportOpts{
 					SessionURL:   bridgeURL,

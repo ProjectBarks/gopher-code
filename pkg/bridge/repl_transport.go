@@ -611,3 +611,75 @@ func (t *v1ReplTransport) ReportState(SessionState)       {}
 func (t *v1ReplTransport) ReportMetadata(map[string]any)  {}
 func (t *v1ReplTransport) ReportDelivery(string, string)  {}
 func (t *v1ReplTransport) Flush() error                   { return nil }
+
+// ---------------------------------------------------------------------------
+// SSE adapter — wraps SSETransport in the ReplBridgeTransport interface
+// ---------------------------------------------------------------------------
+
+type sseReplTransport struct {
+	delegate    *SSETransport
+	mu          sync.Mutex
+	onConnectCb func()
+}
+
+// NewSSEReplTransport wraps an SSETransport in the ReplBridgeTransport interface.
+func NewSSEReplTransport(delegate *SSETransport) ReplBridgeTransport {
+	return &sseReplTransport{delegate: delegate}
+}
+
+func (t *sseReplTransport) WriteMessage(ctx context.Context, msg StdoutMessage) error {
+	return t.delegate.Write(ctx, msg)
+}
+
+func (t *sseReplTransport) WriteBatch(ctx context.Context, msgs []StdoutMessage) error {
+	for _, m := range msgs {
+		if err := t.delegate.Write(ctx, m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *sseReplTransport) Close() { t.delegate.Close() }
+
+func (t *sseReplTransport) IsConnected() bool { return t.delegate.IsConnected() }
+
+func (t *sseReplTransport) StateLabel() string {
+	if t.delegate.IsClosed() {
+		return "closed"
+	}
+	if t.delegate.IsConnected() {
+		return "connected"
+	}
+	return "connecting"
+}
+
+func (t *sseReplTransport) SetOnData(cb func(string)) { t.delegate.SetOnData(cb) }
+
+func (t *sseReplTransport) SetOnClose(cb func(int)) { t.delegate.SetOnClose(cb) }
+
+func (t *sseReplTransport) SetOnConnect(cb func()) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.onConnectCb = cb
+}
+
+func (t *sseReplTransport) Connect() {
+	go func() {
+		t.delegate.Connect(context.Background())
+		// Fire onConnect once the SSE stream is established.
+		t.mu.Lock()
+		cb := t.onConnectCb
+		t.mu.Unlock()
+		if cb != nil {
+			cb()
+		}
+	}()
+}
+
+func (t *sseReplTransport) LastSequenceNum() int64         { return t.delegate.GetLastSequenceNum() }
+func (t *sseReplTransport) DroppedBatchCount() int64       { return 0 }
+func (t *sseReplTransport) ReportState(SessionState)       {}
+func (t *sseReplTransport) ReportMetadata(map[string]any)  {}
+func (t *sseReplTransport) ReportDelivery(string, string)  {}
+func (t *sseReplTransport) Flush() error                   { return nil }

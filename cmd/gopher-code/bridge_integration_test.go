@@ -190,6 +190,87 @@ func TestHybridTransport_SelectedByEnv(t *testing.T) {
 	}
 }
 
+// TestSSETransport_SelectedByEnv verifies SSETransport selection via CCR v2 env var.
+func TestSSETransport_SelectedByEnv(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_USE_CCR_V2", "1")
+	t.Setenv("CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2", "")
+
+	sel, err := bridge.GetTransportForUrl(
+		"wss://api.example.com/v2/session_ingress/ws/sess-abc",
+		map[string]string{"Authorization": "Bearer test-tok"},
+		"sess-abc",
+	)
+	if err != nil {
+		t.Fatalf("GetTransportForUrl error: %v", err)
+	}
+	if sel.Kind != bridge.TransportKindSSE {
+		t.Fatalf("expected TransportKindSSE, got %d", sel.Kind)
+	}
+
+	// Construct SSETransport from the selection — mirrors main.go wiring.
+	sseTransport, sseErr := bridge.NewSSETransport(bridge.SSETransportOpts{
+		URL:       sel.URL.String(),
+		Headers:   sel.Headers,
+		SessionID: sel.SessionID,
+		GetAuthHeaders: func() map[string]string {
+			return map[string]string{"Authorization": "Bearer test-tok"}
+		},
+	})
+	if sseErr != nil {
+		t.Fatalf("NewSSETransport failed: %v", sseErr)
+	}
+
+	transport := bridge.NewSSEReplTransport(sseTransport)
+
+	// Verify state labels before connect.
+	if transport.IsConnected() {
+		t.Fatal("expected not connected before Connect()")
+	}
+	if label := transport.StateLabel(); label != "connecting" {
+		t.Fatalf("expected state label 'connecting', got %q", label)
+	}
+
+	// Close without connecting — should not panic.
+	transport.Close()
+	if label := transport.StateLabel(); label != "closed" {
+		t.Fatalf("expected state label 'closed' after Close(), got %q", label)
+	}
+	if transport.IsConnected() {
+		t.Fatal("expected not connected after Close()")
+	}
+
+	// DroppedBatchCount and LastSequenceNum should return zero values.
+	if n := transport.DroppedBatchCount(); n != 0 {
+		t.Fatalf("expected DroppedBatchCount=0, got %d", n)
+	}
+	if n := transport.LastSequenceNum(); n != 0 {
+		t.Fatalf("expected LastSequenceNum=0, got %d", n)
+	}
+}
+
+// TestSSETransport_URLConversion verifies SSE URL derivation from WS URL.
+func TestSSETransport_URLConversion(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_USE_CCR_V2", "1")
+
+	sel, err := bridge.GetTransportForUrl(
+		"wss://api.example.com/v1/code/sessions/sess-123",
+		nil,
+		"sess-123",
+	)
+	if err != nil {
+		t.Fatalf("GetTransportForUrl error: %v", err)
+	}
+	if sel.Kind != bridge.TransportKindSSE {
+		t.Fatalf("expected TransportKindSSE, got %d", sel.Kind)
+	}
+
+	got := sel.URL.String()
+	want := "https://api.example.com/v1/code/sessions/sess-123/worker/events/stream"
+	if got != want {
+		t.Fatalf("URL = %q, want %q", got, want)
+	}
+}
+
 // TestHybridTransport_DefaultSelectsV2 verifies default is not Hybrid.
 func TestHybridTransport_DefaultSelectsV2(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_USE_CCR_V2", "")
