@@ -664,22 +664,28 @@ func main() {
 			console := loginFlags.Bool("console", false, "Use Anthropic Console OAuth scopes")
 			claudeAI := loginFlags.Bool("claudeai", false, "Use claude.ai OAuth scopes")
 			_ = loginFlags.Parse(os.Args[3:])
-			code := handlers.AuthLogin(handlers.AuthLoginOpts{
+			if code := handlers.AuthLogin(handlers.AuthLoginOpts{
 				Email:    *email,
 				SSO:      *sso,
 				Console:  *console,
 				ClaudeAI: *claudeAI,
-			}, nil)
-			os.Exit(code)
+			}, nil); code != 0 {
+				cliError("auth login failed")
+			}
+			cliOk("")
 		case "status":
 			statusFlags := flag.NewFlagSet("auth status", flag.ExitOnError)
 			jsonOut := statusFlags.Bool("json", false, "Output as JSON")
 			_ = statusFlags.Parse(os.Args[3:])
-			code := handlers.AuthStatus(handlers.AuthStatusOpts{JSON: *jsonOut})
-			os.Exit(code)
+			if code := handlers.AuthStatus(handlers.AuthStatusOpts{JSON: *jsonOut}); code != 0 {
+				cliError("auth status check failed")
+			}
+			cliOk("")
 		case "logout":
-			code := handlers.AuthLogout(handlers.AuthLogoutOpts{})
-			os.Exit(code)
+			if code := handlers.AuthLogout(handlers.AuthLogoutOpts{}); code != 0 {
+				cliError("auth logout failed")
+			}
+			cliOk("")
 		default:
 			cliErrorf("Unknown auth subcommand: %q (use login, status, logout)", sub)
 		}
