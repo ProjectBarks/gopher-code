@@ -2672,3 +2672,41 @@ func TestIDE_DetectJetBrains(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T260: /install-slack-app
+// ---------------------------------------------------------------------------
+
+func TestInstallSlackApp_ShowsURL(t *testing.T) {
+	h := newInstallSlackAppHandler()
+	msg := h("")()
+	m, ok := msg.(InstallSlackAppMsg)
+	if !ok {
+		t.Fatalf("expected InstallSlackAppMsg, got %T", msg)
+	}
+	if !strings.Contains(m.Message, slackAppInstallURL) {
+		t.Errorf("expected install URL in message, got %q", m.Message)
+	}
+	if m.URL != slackAppInstallURL {
+		t.Errorf("expected URL=%q, got %q", slackAppInstallURL, m.URL)
+	}
+}
+
+func TestInstallSlackApp_RegisteredInDispatcher(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/install-slack-app") {
+		t.Fatal("/install-slack-app not registered")
+	}
+}
+
+func TestInstallSlackApp_DispatchReturnsMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/install-slack-app")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from dispatch")
+	}
+	msg := cmd()
+	if _, ok := msg.(InstallSlackAppMsg); !ok {
+		t.Fatalf("expected InstallSlackAppMsg, got %T", msg)
+	}
+}
