@@ -591,6 +591,36 @@ func main() {
 			"merged_connect_timeout", remoteBridgeCore.Config().ConnectTimeout(),
 		)
 
+		// T212: Construct CCRClient for the worker event protocol.
+		// The CCRClient posts events, heartbeats, and delivery ACKs to the
+		// CCR v2 backend. It is constructed here so it is reachable from the
+		// binary; actual Initialize() is deferred until a code session is live.
+		var ccrClient *bridge.CCRClient
+		if bridgeURL != "" {
+			sessionURL := bridgeURL + "/v1/code/sessions/pending"
+			var ccrErr error
+			ccrClient, ccrErr = bridge.NewCCRClient(sessionURL, bridge.CCRClientOpts{
+				GetAuthHeaders: func() map[string]string {
+					tok, ok := bridgeDeps.GetAccessToken()
+					if !ok || tok == "" {
+						return nil
+					}
+					return map[string]string{"Authorization": "Bearer " + tok}
+				},
+				UserAgent: "gopher-code/" + Version,
+				OnEpochMismatch: func() {
+					slog.Error("bridge: CCR epoch mismatch — newer worker superseded this session")
+				},
+			})
+			if ccrErr != nil {
+				slog.Warn("bridge: CCRClient construction failed", "error", ccrErr)
+			} else {
+				defer ccrClient.Close()
+				slog.Debug("bridge: CCRClient constructed", "session_url", sessionURL)
+			}
+		}
+
+		_ = ccrClient
 		_ = remoteBridgeCore
 		_ = replBridge
 		_ = replTransport

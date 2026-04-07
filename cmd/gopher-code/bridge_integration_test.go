@@ -154,3 +154,49 @@ func TestBridgeFeatureGates_CcrMirror(t *testing.T) {
 		t.Fatal("expected IsCcrMirrorEnabled=false in default build")
 	}
 }
+
+// TestCCRClient_IntegrationConstruct verifies that a CCRClient can be
+// constructed and closed from the binary using the same wiring pattern
+// as the remote-control subcommand (T212).
+func TestCCRClient_IntegrationConstruct(t *testing.T) {
+	sessionURL := "https://api.example.com/v1/code/sessions/test-session-id"
+	client, err := bridge.NewCCRClient(sessionURL, bridge.CCRClientOpts{
+		GetAuthHeaders: func() map[string]string {
+			return map[string]string{"Authorization": "Bearer test-token"}
+		},
+		UserAgent: "gopher-code/test",
+		OnEpochMismatch: func() {
+			t.Log("epoch mismatch callback fired")
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewCCRClient failed: %v", err)
+	}
+	defer client.Close()
+
+	// Verify accessors are reachable.
+	if epoch := client.WorkerEpoch(); epoch != 0 {
+		t.Fatalf("expected initial epoch 0, got %d", epoch)
+	}
+	if n := client.PendingEventCount(); n != 0 {
+		t.Fatalf("expected 0 pending events, got %d", n)
+	}
+	if n := client.PendingInternalEventCount(); n != 0 {
+		t.Fatalf("expected 0 pending internal events, got %d", n)
+	}
+
+	// Verify WriteEvent and WriteInternalEvent don't panic.
+	client.WriteEvent(map[string]any{"type": "test", "content": "hello"})
+	client.WriteInternalEvent("transcript", map[string]any{"data": "x"}, false, "")
+
+	if n := client.PendingEventCount(); n != 1 {
+		t.Fatalf("expected 1 pending event after WriteEvent, got %d", n)
+	}
+	if n := client.PendingInternalEventCount(); n != 1 {
+		t.Fatalf("expected 1 pending internal event after WriteInternalEvent, got %d", n)
+	}
+
+	// Close is idempotent and should not panic.
+	client.Close()
+	client.Close()
+}
