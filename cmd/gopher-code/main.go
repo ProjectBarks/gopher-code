@@ -270,6 +270,13 @@ func main() {
 		})
 		slog.Debug("bridge: remote-control config (redacted)", "config", bridgeCfgDebug)
 
+		// T191: Render bridge UI status banner.
+		fmt.Fprint(os.Stderr, bridge.RenderVerboseBanner(Version, bridge.BridgeConfig{
+			SpawnMode:   bridge.SpawnModeSameDir,
+			MaxSessions: 1,
+		}, ""))
+		fmt.Fprintln(os.Stderr, bridge.RenderConnectingLine(0, "", ""))
+
 		fmt.Fprintf(os.Stderr, "Starting remote control session")
 		if rcName != "" {
 			fmt.Fprintf(os.Stderr, " %q", rcName)
