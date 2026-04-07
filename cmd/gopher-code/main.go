@@ -235,8 +235,7 @@ func main() {
 		}
 		fmt.Fprintf(os.Stderr, " (bridge: %s, authed: %v)\n", bridgeURL, bridgeAuthed)
 
-		// Build initial bridge config from CLI context.
-		// This wires the bridge types into the binary dependency tree (T169).
+		// Build initial bridge config from CLI context (T169).
 		rcCwd, _ := os.Getwd()
 		rcCfg := bridge.NewRemoteControlConfig(rcCwd, rcName)
 		slog.Debug("bridge: remote-control config",
@@ -245,8 +244,11 @@ func main() {
 			"max_sessions", rcCfg.MaxSessions,
 			"worker_type", rcCfg.WorkerType,
 		)
+
+		// T173: Construct the BridgeAPIClient for the orchestrator/REPL bridge.
+		_ = bridge.NewBridgeAPIClientFromConfig(rcCfg, func() string { return "" }, nil)
+
 		// TODO(T195+): Wire full bridge REPL init once bridge core is implemented.
-		// For now, exit cleanly after printing the config.
 		_ = rcCfg
 		cliOk("")
 	}
