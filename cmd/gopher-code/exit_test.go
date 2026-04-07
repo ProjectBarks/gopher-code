@@ -100,16 +100,22 @@ func TestCLIErrorf(t *testing.T) {
 	}
 }
 
-// TestMainGo_NoDirectOsExit scans all non-test Go files for raw os.Exit calls.
-// All exit paths must use cliError / cliErrorf / cliOk instead.
+// TestMainGo_NoDirectOsExit scans all non-test Go files for raw os.Exit and
+// log.Fatal calls. All exit paths must use cliError / cliErrorf / cliOk instead.
 // The only allowed file for os.Exit is exit.go (which defines exitFunc).
 func TestMainGo_NoDirectOsExit(t *testing.T) {
 	// Locate the package directory from this test file.
 	_, thisFile, _, _ := runtime.Caller(0)
 	pkgDir := filepath.Dir(thisFile)
 
-	// Pattern matches os.Exit( but not inside comments or the exitFunc var declaration.
-	osExitRe := regexp.MustCompile(`\bos\.Exit\(`)
+	// Patterns that indicate a direct process exit bypassing cliError.
+	forbidden := []struct {
+		re   *regexp.Regexp
+		desc string
+	}{
+		{regexp.MustCompile(`\bos\.Exit\(`), "os.Exit"},
+		{regexp.MustCompile(`\blog\.Fatal`), "log.Fatal/log.Fatalf/log.Fatalln"},
+	}
 
 	entries, err := os.ReadDir(pkgDir)
 	if err != nil {
@@ -133,8 +139,10 @@ func TestMainGo_NoDirectOsExit(t *testing.T) {
 			if strings.HasPrefix(trimmed, "//") {
 				continue
 			}
-			if osExitRe.MatchString(line) {
-				t.Errorf("%s:%d: found direct os.Exit call — use cliError/cliErrorf/cliOk instead:\n  %s", name, i+1, trimmed)
+			for _, f := range forbidden {
+				if f.re.MatchString(line) {
+					t.Errorf("%s:%d: found direct %s call — use cliError/cliErrorf/cliOk instead:\n  %s", name, i+1, f.desc, trimmed)
+				}
 			}
 		}
 	}
