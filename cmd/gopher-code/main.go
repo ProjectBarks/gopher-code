@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -688,6 +689,132 @@ func main() {
 			cliOk("")
 		default:
 			cliErrorf("Unknown auth subcommand: %q (use login, status, logout)", sub)
+		}
+	}
+
+	// Handle "mcp" subcommand before flag.Parse()
+	// Source: src/cli/handlers/mcp.tsx — dispatches to 7 sub-subcommands:
+	//   list, get, add, add-json, remove, reset-choices, serve
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		sub := ""
+		if len(os.Args) > 2 {
+			sub = os.Args[2]
+		}
+		mcpCwd, _ := os.Getwd()
+		h := handlers.NewMCPHandler(mcpCwd)
+
+		switch sub {
+		case "list":
+			if err := h.List(); err != nil {
+				cliErrorf("mcp list: %v", err)
+			}
+			cliOk("")
+
+		case "get":
+			if len(os.Args) < 4 {
+				cliError("usage: claude mcp get <server-name>")
+			}
+			if err := h.Get(os.Args[3]); err != nil {
+				cliErrorf("mcp get: %v", err)
+			}
+			cliOk("")
+
+		case "add":
+			// `claude mcp add <name> -- <command> [args...]`
+			// Builds a stdio server config from positional args.
+			mcpAddFlags := flag.NewFlagSet("mcp add", flag.ExitOnError)
+			scope := mcpAddFlags.String("s", "local", "Config scope: local, project, user")
+			flag.StringVar(scope, "scope", "local", "Config scope: local, project, user")
+			envPairs := mcpAddFlags.String("e", "", "Environment variables (KEY=VAL,KEY=VAL)")
+			flag.StringVar(envPairs, "env", "", "Environment variables (KEY=VAL,KEY=VAL)")
+			headerPairs := mcpAddFlags.String("header", "", "Headers (Key:Val,Key:Val)")
+			_ = mcpAddFlags.Parse(os.Args[3:])
+			addArgs := mcpAddFlags.Args()
+			if len(addArgs) < 2 {
+				cliError("usage: claude mcp add <name> <command> [args...] [-s scope] [-e KEY=VAL]")
+			}
+			name := addArgs[0]
+			command := addArgs[1]
+			var cmdArgs []string
+			if len(addArgs) > 2 {
+				cmdArgs = addArgs[2:]
+			}
+
+			// Parse env vars
+			envMap := make(map[string]string)
+			if *envPairs != "" {
+				for _, pair := range strings.Split(*envPairs, ",") {
+					parts := strings.SplitN(pair, "=", 2)
+					if len(parts) == 2 {
+						envMap[parts[0]] = parts[1]
+					}
+				}
+			}
+
+			// Parse headers
+			headerMap := make(map[string]string)
+			if *headerPairs != "" {
+				for _, pair := range strings.Split(*headerPairs, ",") {
+					parts := strings.SplitN(pair, ":", 2)
+					if len(parts) == 2 {
+						headerMap[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+					}
+				}
+			}
+
+			cfg := mcp.ServerConfig{
+				Command: command,
+				Args:    cmdArgs,
+				Env:     envMap,
+				Headers: headerMap,
+			}
+			cfgJSON, _ := json.Marshal(cfg)
+			if err := h.AddJSON(name, string(cfgJSON), *scope); err != nil {
+				cliErrorf("mcp add: %v", err)
+			}
+			cliOk("")
+
+		case "add-json":
+			// `claude mcp add-json <name> '<json>' [-s scope]`
+			mcpAddJSONFlags := flag.NewFlagSet("mcp add-json", flag.ExitOnError)
+			scope := mcpAddJSONFlags.String("s", "local", "Config scope: local, project, user")
+			flag.StringVar(scope, "scope", "local", "Config scope: local, project, user")
+			_ = mcpAddJSONFlags.Parse(os.Args[3:])
+			ajArgs := mcpAddJSONFlags.Args()
+			if len(ajArgs) < 2 {
+				cliError("usage: claude mcp add-json <name> '<json-config>' [-s scope]")
+			}
+			if err := h.AddJSON(ajArgs[0], ajArgs[1], *scope); err != nil {
+				cliErrorf("mcp add-json: %v", err)
+			}
+			cliOk("")
+
+		case "remove":
+			mcpRemoveFlags := flag.NewFlagSet("mcp remove", flag.ExitOnError)
+			scope := mcpRemoveFlags.String("s", "", "Config scope: local, project, user")
+			flag.StringVar(scope, "scope", "", "Config scope: local, project, user")
+			_ = mcpRemoveFlags.Parse(os.Args[3:])
+			rmArgs := mcpRemoveFlags.Args()
+			if len(rmArgs) < 1 {
+				cliError("usage: claude mcp remove <server-name> [-s scope]")
+			}
+			if err := h.Remove(rmArgs[0], *scope); err != nil {
+				cliErrorf("mcp remove: %v", err)
+			}
+			cliOk("")
+
+		case "reset-choices":
+			if err := h.ResetChoices(); err != nil {
+				cliErrorf("mcp reset-choices: %v", err)
+			}
+			cliOk("")
+
+		case "serve":
+			// T487: MCP server mode — not yet implemented.
+			cliError("claude mcp serve is not yet implemented")
+
+		default:
+			cliErrorf("Unknown mcp subcommand: %q (use list, get, add, add-json, remove, reset-choices, serve)", sub)
 		}
 	}
 
