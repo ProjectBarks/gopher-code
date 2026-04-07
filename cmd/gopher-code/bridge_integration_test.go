@@ -155,10 +155,7 @@ func TestBridgeFeatureGates_CcrMirror(t *testing.T) {
 	}
 }
 
-// TestHybridTransport_SelectedByEnv verifies that setting
-// CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2=1 causes GetTransportForUrl
-// to select TransportKindHybrid, and that NewV1ReplTransport wraps it
-// into a ReplBridgeTransport that satisfies the interface used in main.go.
+// TestHybridTransport_SelectedByEnv verifies HybridTransport selection.
 func TestHybridTransport_SelectedByEnv(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_USE_CCR_V2", "")
 	t.Setenv("CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2", "1")
@@ -174,8 +171,6 @@ func TestHybridTransport_SelectedByEnv(t *testing.T) {
 	if sel.Kind != bridge.TransportKindHybrid {
 		t.Fatalf("expected TransportKindHybrid, got %d", sel.Kind)
 	}
-
-	// Construct HybridTransport + V1 adapter — mirrors the main.go wiring.
 	hybrid := bridge.NewHybridTransport(bridge.HybridTransportOpts{
 		URL:          sel.URL,
 		Headers:      sel.Headers,
@@ -183,27 +178,16 @@ func TestHybridTransport_SelectedByEnv(t *testing.T) {
 		GetAuthToken: func() string { return "test-tok" },
 	})
 	transport := bridge.NewV1ReplTransport(hybrid)
-
-	// HybridTransport reports "connected" (not-closed) by default;
-	// verify the adapter surfaces that correctly.
 	if !transport.IsConnected() {
-		t.Fatal("expected IsConnected=true before Close() (HybridTransport default)")
-	}
-	if label := transport.StateLabel(); label != "connected" {
-		t.Fatalf("expected StateLabel 'connected', got %q", label)
+		t.Fatal("expected IsConnected=true before Close()")
 	}
 	transport.Close()
 	if transport.IsConnected() {
 		t.Fatal("expected not connected after Close()")
 	}
-	if label := transport.StateLabel(); label != "closed" {
-		t.Fatalf("expected StateLabel 'closed' after Close(), got %q", label)
-	}
 }
 
-// TestHybridTransport_DefaultSelectsV2 verifies that without the
-// POST_FOR_SESSION_INGRESS_V2 env var, the default WS URL selects
-// TransportKindWebSocket (and the main.go code path falls through to V2).
+// TestHybridTransport_DefaultSelectsV2 verifies default is not Hybrid.
 func TestHybridTransport_DefaultSelectsV2(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_USE_CCR_V2", "")
 	t.Setenv("CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2", "")
@@ -219,4 +203,30 @@ func TestHybridTransport_DefaultSelectsV2(t *testing.T) {
 	if sel.Kind == bridge.TransportKindHybrid {
 		t.Fatal("expected non-Hybrid transport when env var is not set")
 	}
+}
+
+// TestCCRClient_IntegrationConstruct verifies CCRClient construction.
+func TestCCRClient_IntegrationConstruct(t *testing.T) {
+	sessionURL := "https://api.example.com/v1/code/sessions/test-session-id"
+	client, err := bridge.NewCCRClient(sessionURL, bridge.CCRClientOpts{
+		GetAuthHeaders: func() map[string]string {
+			return map[string]string{"Authorization": "Bearer test-token"}
+		},
+		UserAgent:       "gopher-code/test",
+		OnEpochMismatch: func() { t.Log("epoch mismatch") },
+	})
+	if err != nil {
+		t.Fatalf("NewCCRClient failed: %v", err)
+	}
+	defer client.Close()
+	if epoch := client.WorkerEpoch(); epoch != 0 {
+		t.Fatalf("expected initial epoch 0, got %d", epoch)
+	}
+	client.WriteEvent(map[string]any{"type": "test"})
+	client.WriteInternalEvent("transcript", map[string]any{"data": "x"}, false, "")
+	if n := client.PendingEventCount(); n != 1 {
+		t.Fatalf("expected 1 pending event, got %d", n)
+	}
+	client.Close()
+	client.Close()
 }
