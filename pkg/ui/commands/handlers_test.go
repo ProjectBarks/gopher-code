@@ -3158,3 +3158,66 @@ func TestLogout_DispatchReturnsMsg(t *testing.T) {
 		t.Fatalf("expected LogoutMsg, got %T", msg)
 	}
 }
+
+// T266: /mobile — mobile QR pairing
+// ---------------------------------------------------------------------------
+
+func TestMobile_ReturnsPairingURL(t *testing.T) {
+	h := newMobileHandler()
+	msg := h("")()
+	m, ok := msg.(MobileMsg)
+	if !ok {
+		t.Fatalf("expected MobileMsg, got %T", msg)
+	}
+	if m.URL == "" {
+		t.Fatal("expected non-empty pairing URL")
+	}
+	if !strings.Contains(m.URL, "https://claude.ai/mobile/pair?token=") {
+		t.Errorf("unexpected URL format: %s", m.URL)
+	}
+	if !strings.Contains(m.Message, m.URL) {
+		t.Errorf("message should contain the URL")
+	}
+}
+
+func TestMobile_TokenIsRandom(t *testing.T) {
+	h := newMobileHandler()
+	m1 := h("")().(MobileMsg)
+	m2 := h("")().(MobileMsg)
+	if m1.URL == m2.URL {
+		t.Error("expected different tokens on successive calls")
+	}
+}
+
+func TestMobile_RegisteredInDispatcher(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/mobile") {
+		t.Fatal("/mobile not registered")
+	}
+}
+
+func TestMobile_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/mobile")
+	if reg == nil {
+		t.Fatal("expected registration for mobile")
+	}
+	if reg.Type != CommandTypeLocal {
+		t.Errorf("expected CommandTypeLocal, got %v", reg.Type)
+	}
+	if reg.Description == "" {
+		t.Error("expected non-empty description")
+	}
+}
+
+func TestMobile_DispatchReturnsMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/mobile")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	if _, ok := msg.(MobileMsg); !ok {
+		t.Fatalf("expected MobileMsg, got %T", msg)
+	}
+}

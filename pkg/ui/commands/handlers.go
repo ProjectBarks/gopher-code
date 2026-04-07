@@ -172,6 +172,12 @@ type AgentsMsg struct {
 	Message string
 }
 
+// MobileMsg is returned when /mobile generates a pairing URL.
+type MobileMsg struct {
+	Message string
+	URL     string
+}
+
 // MCPStatusMsg is returned when /mcp lists configured MCP servers.
 type MCPStatusMsg struct {
 	Message string
@@ -2748,6 +2754,33 @@ func newLogoutHandler() Handler {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// T266: /mobile — generate QR pairing URL for mobile companion
+// Source: src/commands/mobile.ts
+// ---------------------------------------------------------------------------
+
+// newMobileHandler creates the /mobile command handler.
+// It generates a pairing URL that can later be rendered as a QR code.
+func newMobileHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			// Generate a short random pairing token.
+			const tokenLen = 16
+			const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+			token := make([]byte, tokenLen)
+			for i := range token {
+				token[i] = charset[rand.Intn(len(charset))]
+			}
+			pairingURL := fmt.Sprintf("https://claude.ai/mobile/pair?token=%s", string(token))
+			msg := fmt.Sprintf("Mobile pairing URL:\n\n  %s\n\nOpen this URL on your mobile device to pair.", pairingURL)
+			return MobileMsg{
+				Message: msg,
+				URL:     pairingURL,
+			}
+		}
+	}
+}
+
 func (d *Dispatcher) registerDefaults() {
 	d.Register("/model", func(args string) tea.Cmd {
 		if args == "" {
@@ -3222,5 +3255,14 @@ func (d *Dispatcher) registerDefaults() {
 		Handler: newMemoryHandler(MemoryDeps{
 			CWD: func() string { return "" },
 		}),
+	})
+
+	// T266: /mobile — generate QR pairing URL for mobile companion
+	d.RegisterCommand(CommandRegistration{
+		Name:        "mobile",
+		Description: "Generate mobile pairing URL",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler:     newMobileHandler(),
 	})
 }
