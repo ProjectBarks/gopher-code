@@ -158,7 +158,6 @@ func TestBridgeFeatureGates_CcrMirror(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 // TestHybridTransport_SelectedByEnv verifies HybridTransport selection.
 func TestHybridTransport_SelectedByEnv(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_USE_CCR_V2", "")
