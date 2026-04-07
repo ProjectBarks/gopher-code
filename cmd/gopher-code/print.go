@@ -1,11 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -150,17 +149,22 @@ func runHeadless(
 
 	// Ingest prompt(s)
 	if cfg.InputFormat == "stream-json" {
-		scanner := bufio.NewScanner(cfg.Stdin)
-		for scanner.Scan() {
-			line := scanner.Text()
-			var msg struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			}
-			if json.Unmarshal([]byte(line), &msg) == nil && msg.Text != "" {
-				sess.PushMessage(message.UserMessage(msg.Text))
+		sio, err := pkgcli.NewStructuredIO(pkgcli.StructuredIOConfig{
+			Input:  cfg.Stdin,
+			Output: cfg.Stdout,
+			Logger: slog.Default(),
+		})
+		if err != nil {
+			fmt.Fprintf(cfg.Stderr, "Error: %v\n", err)
+			cliError("")
+			return
+		}
+		for msg := range sio.Messages() {
+			if msg.Type == "user" && msg.Message != nil && msg.Message.Content != "" {
+				sess.PushMessage(message.UserMessage(msg.Message.Content))
 			}
 		}
+		sio.Close()
 	} else {
 		prompt, errMsg := readPrompt(args, cfg.Stdin)
 		if errMsg != "" {
