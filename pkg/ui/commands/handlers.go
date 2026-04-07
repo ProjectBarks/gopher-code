@@ -251,6 +251,21 @@ type FilesMsg struct {
 	Message string
 }
 
+// IDEMsg is returned when /ide detects installed IDEs and extension status.
+type IDEMsg struct {
+	IDEs    []IDEInfo
+	Message string
+	Error   error
+}
+
+// IDEInfo describes a detected IDE installation.
+type IDEInfo struct {
+	Name      string
+	Path      string
+	Installed bool
+	Extension string // "installed", "not-installed", or "unknown"
+}
+
 // HeapdumpMsg is returned when /heapdump writes a heap profile.
 type HeapdumpMsg struct {
 	Path    string
@@ -1905,6 +1920,195 @@ func newFilesHandler(deps FilesDeps) Handler {
 }
 
 // ---------------------------------------------------------------------------
+// T255: /ide — detect installed IDEs and extension status
+// Source: src/commands/ide/ide.tsx
+// ---------------------------------------------------------------------------
+
+// ideDetector is a function that returns detected IDE info. Package-level var
+// so tests can replace it.
+var ideDetector func() []IDEInfo = detectIDEs
+
+// detectIDEs scans for VS Code and JetBrains IDE installations.
+func detectIDEs() []IDEInfo {
+	var results []IDEInfo
+
+	// VS Code detection
+	vsInfo := detectVSCode()
+	results = append(results, vsInfo)
+
+	// JetBrains detection
+	jbInfo := detectJetBrains()
+	results = append(results, jbInfo...)
+
+	return results
+}
+
+// detectVSCode checks for VS Code installation and Claude extension.
+func detectVSCode() IDEInfo {
+	info := IDEInfo{
+		Name:      "VS Code",
+		Extension: "unknown",
+	}
+
+	// Check common VS Code binary locations
+	codePath, err := exec.LookPath("code")
+	if err == nil {
+		info.Installed = true
+		info.Path = codePath
+		// Check for Claude extension
+		out, err := exec.Command("code", "--list-extensions").CombinedOutput()
+		if err == nil {
+			extensions := string(out)
+			if strings.Contains(strings.ToLower(extensions), "claude") ||
+				strings.Contains(strings.ToLower(extensions), "anthropic") {
+				info.Extension = "installed"
+			} else {
+				info.Extension = "not-installed"
+			}
+		}
+		return info
+	}
+
+	// Platform-specific fallback paths
+	switch runtime.GOOS {
+	case "darwin":
+		if _, err := os.Stat("/Applications/Visual Studio Code.app"); err == nil {
+			info.Installed = true
+			info.Path = "/Applications/Visual Studio Code.app"
+		}
+	case "linux":
+		for _, p := range []string{"/usr/bin/code", "/snap/bin/code", "/usr/share/code/code"} {
+			if _, err := os.Stat(p); err == nil {
+				info.Installed = true
+				info.Path = p
+				break
+			}
+		}
+	case "windows":
+		localAppData := os.Getenv("LOCALAPPDATA")
+		if localAppData != "" {
+			p := filepath.Join(localAppData, "Programs", "Microsoft VS Code", "Code.exe")
+			if _, err := os.Stat(p); err == nil {
+				info.Installed = true
+				info.Path = p
+			}
+		}
+	}
+
+	return info
+}
+
+// jetbrainsIDEDef describes a JetBrains IDE to search for.
+type jetbrainsIDEDef struct {
+	name       string
+	darwinApp  string
+	linuxPaths []string
+}
+
+// knownJetBrainsIDEs lists the JetBrains IDEs we detect.
+var knownJetBrainsIDEs = []jetbrainsIDEDef{
+	{
+		name:       "IntelliJ IDEA",
+		darwinApp:  "IntelliJ IDEA.app",
+		linuxPaths: []string{"/opt/idea", "/snap/intellij-idea-ultimate/current", "/snap/intellij-idea-community/current"},
+	},
+	{
+		name:       "WebStorm",
+		darwinApp:  "WebStorm.app",
+		linuxPaths: []string{"/opt/webstorm", "/snap/webstorm/current"},
+	},
+	{
+		name:       "PyCharm",
+		darwinApp:  "PyCharm.app",
+		linuxPaths: []string{"/opt/pycharm", "/snap/pycharm-professional/current", "/snap/pycharm-community/current"},
+	},
+	{
+		name:       "GoLand",
+		darwinApp:  "GoLand.app",
+		linuxPaths: []string{"/opt/goland", "/snap/goland/current"},
+	},
+}
+
+// detectJetBrains checks for JetBrains IDE installations.
+func detectJetBrains() []IDEInfo {
+	var results []IDEInfo
+	for _, def := range knownJetBrainsIDEs {
+		info := IDEInfo{
+			Name:      def.name,
+			Extension: "unknown",
+		}
+		switch runtime.GOOS {
+		case "darwin":
+			apps := filepath.Join("/Applications", def.darwinApp)
+			if _, err := os.Stat(apps); err == nil {
+				info.Installed = true
+				info.Path = apps
+			}
+			// Also check ~/Applications
+			if home, err := os.UserHomeDir(); err == nil {
+				userApps := filepath.Join(home, "Applications", def.darwinApp)
+				if _, err := os.Stat(userApps); err == nil {
+					info.Installed = true
+					info.Path = userApps
+				}
+			}
+		case "linux":
+			for _, p := range def.linuxPaths {
+				if _, err := os.Stat(p); err == nil {
+					info.Installed = true
+					info.Path = p
+					break
+				}
+			}
+		}
+		if info.Installed {
+			results = append(results, info)
+		}
+	}
+	return results
+}
+
+// newIDEHandler creates the /ide command handler.
+func newIDEHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			ides := ideDetector()
+
+			var lines []string
+			lines = append(lines, "IDE Detection Results:")
+			lines = append(lines, "")
+
+			installedCount := 0
+			for _, ide := range ides {
+				if ide.Installed {
+					installedCount++
+					extStatus := ide.Extension
+					if extStatus == "unknown" {
+						extStatus = "extension status unknown"
+					} else if extStatus == "installed" {
+						extStatus = "Claude extension installed"
+					} else {
+						extStatus = "Claude extension not installed"
+					}
+					lines = append(lines, fmt.Sprintf("  ✓ %s (%s) — %s", ide.Name, ide.Path, extStatus))
+				}
+			}
+
+			if installedCount == 0 {
+				lines = append(lines, "  No supported IDEs detected.")
+				lines = append(lines, "")
+				lines = append(lines, "Supported IDEs: VS Code, IntelliJ IDEA, WebStorm, PyCharm, GoLand")
+			}
+
+			return IDEMsg{
+				IDEs:    ides,
+				Message: strings.Join(lines, "\n"),
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // T252: /heapdump — write heap profile (hidden)
 // Source: src/commands/heapdump.ts
 // ---------------------------------------------------------------------------
@@ -2272,6 +2476,15 @@ func (d *Dispatcher) registerDefaults() {
 		Handler: newFilesHandler(FilesDeps{
 			GetFiles: func() []string { return nil },
 		}),
+	})
+
+	// T255: /ide — detect installed IDEs and extension status
+	d.RegisterCommand(CommandRegistration{
+		Name:        "ide",
+		Description: "Detect installed IDEs and extensions",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler:     newIDEHandler(),
 	})
 
 	// T252: /heapdump — write heap profile (hidden)
