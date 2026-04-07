@@ -245,11 +245,28 @@ func main() {
 			"worker_type", rcCfg.WorkerType,
 		)
 
+		// T178: Initialize TrustedDeviceManager so the bridge session can
+		// inject X-Trusted-Device-Token headers into API requests.
+		tdm := bridge.NewTrustedDeviceManager(bridge.TrustedDeviceDeps{
+			GetFeatureValueBool: func(key string, defaultVal bool) bool { return defaultVal },
+			CheckGateBlocking:   func(key string) (bool, error) { return false, nil },
+			GetAccessToken:      bridgeDeps.GetAccessToken,
+			GetBaseAPIURL:       bridgeDeps.GetBaseAPIURL,
+			IsEssentialTrafficOnly: func() bool { return false },
+		})
+		// Pre-load any existing trusted device token into the in-memory cache
+		// so subsequent bridge API calls can inject the header without keyring
+		// latency on the hot path.
+		if tok := tdm.GetToken(); tok != "" {
+			slog.Debug("bridge: trusted device token loaded", "len", len(tok))
+		}
+
 		// T173: Construct the BridgeAPIClient for the orchestrator/REPL bridge.
 		_ = bridge.NewBridgeAPIClientFromConfig(rcCfg, func() string { return "" }, nil)
 
 		// TODO(T195+): Wire full bridge REPL init once bridge core is implemented.
 		_ = rcCfg
+		_ = tdm
 		cliOk("")
 	}
 
