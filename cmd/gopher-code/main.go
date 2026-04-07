@@ -650,6 +650,90 @@ func main() {
 		cliOk("")
 	}
 
+	// Handle "plugin" subcommand before flag.Parse()
+	// Source: src/cli.ts — `claude plugin` CLI subcommand family.
+	if len(os.Args) > 1 && os.Args[1] == "plugin" {
+		pluginCwd, _ := os.Getwd()
+		ph := handlers.NewPluginHandler(pluginCwd)
+		sub := ""
+		if len(os.Args) > 2 {
+			sub = os.Args[2]
+		}
+		switch sub {
+		case "list", "ls", "":
+			if err := ph.List(); err != nil {
+				cliErrorf("plugin list: %v", err)
+			}
+			cliOk("")
+		case "install", "add":
+			pluginFlags := flag.NewFlagSet("plugin install", flag.ExitOnError)
+			scope := pluginFlags.String("scope", "user", "Install scope: user, project, local")
+			_ = pluginFlags.Parse(os.Args[3:])
+			source := pluginFlags.Arg(0)
+			if source == "" {
+				cliError("plugin install requires a source argument")
+			}
+			if err := ph.Install(source, *scope); err != nil {
+				cliErrorf("plugin install: %v", err)
+			}
+			cliOk("")
+		case "uninstall", "remove", "rm":
+			pluginFlags := flag.NewFlagSet("plugin uninstall", flag.ExitOnError)
+			scope := pluginFlags.String("scope", "", "Uninstall scope: user, project, local")
+			_ = pluginFlags.Parse(os.Args[3:])
+			name := pluginFlags.Arg(0)
+			if name == "" {
+				cliError("plugin uninstall requires a plugin name")
+			}
+			if err := ph.Uninstall(name, *scope); err != nil {
+				cliErrorf("plugin uninstall: %v", err)
+			}
+			cliOk("")
+		case "enable":
+			pluginFlags := flag.NewFlagSet("plugin enable", flag.ExitOnError)
+			scope := pluginFlags.String("scope", "", "Scope: user, project, local")
+			_ = pluginFlags.Parse(os.Args[3:])
+			name := pluginFlags.Arg(0)
+			if name == "" {
+				cliError("plugin enable requires a plugin name")
+			}
+			if err := ph.Enable(name, *scope); err != nil {
+				cliErrorf("plugin enable: %v", err)
+			}
+			cliOk("")
+		case "disable":
+			pluginFlags := flag.NewFlagSet("plugin disable", flag.ExitOnError)
+			scope := pluginFlags.String("scope", "", "Scope: user, project, local")
+			_ = pluginFlags.Parse(os.Args[3:])
+			name := pluginFlags.Arg(0)
+			if name == "" {
+				cliError("plugin disable requires a plugin name")
+			}
+			if err := ph.Disable(name, *scope); err != nil {
+				cliErrorf("plugin disable: %v", err)
+			}
+			cliOk("")
+		case "validate":
+			path := ""
+			if len(os.Args) > 3 {
+				path = os.Args[3]
+			}
+			if path == "" {
+				cliError("plugin validate requires a path argument")
+			}
+			result, err := ph.Validate(path)
+			if err != nil {
+				cliErrorf("plugin validate: %v", err)
+			}
+			if !result.Success {
+				cliError("")
+			}
+			cliOk("")
+		default:
+			cliErrorf("Unknown plugin subcommand: %q (use list, install, uninstall, enable, disable, validate)", sub)
+		}
+	}
+
 	// Handle "auth" subcommand before flag.Parse()
 	if len(os.Args) > 1 && os.Args[1] == "auth" {
 		sub := ""
