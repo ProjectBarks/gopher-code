@@ -632,6 +632,12 @@ func (c *CCRClient) ReportMetadata(metadata map[string]any) {
 	}, "PUT metadata", 10*time.Second)
 }
 
+// PutWorker sends a raw body map via PUT /worker. Returns true on success.
+// This is the low-level entry point used by WorkerStateUploader.
+func (c *CCRClient) PutWorker(body map[string]any) bool {
+	return c.request("PUT", "/worker", body, "PUT worker", 10*time.Second).OK
+}
+
 // ReportDelivery enqueues a delivery ACK for batch posting.
 func (c *CCRClient) ReportDelivery(eventID string, status DeliveryStatus) {
 	c.mu.Lock()
