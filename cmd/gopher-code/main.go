@@ -516,17 +516,39 @@ func main() {
 				},
 			})
 			replHandle.Bridge = replBridge
-			// T196: Register handle globally for crash-recovery access.
 			rbh := bridge.NewReplBridgeHandle(replBridge)
 			bridge.SetReplBridgeHandle(rbh)
 			defer rbh.Close()
-			slog.Debug("bridge: ReplBridge transport constructed",
-				"session_id", replBridge.SessionID(),
-				"state", replBridge.State(),
-			)
+		}
+
+		// T197: Wire SSE/HTTP transport.
+		var replTransport bridge.ReplBridgeTransport
+		if replHandle != nil && bridgeURL != "" {
+			replTransport = bridge.NewV2ReplTransport(bridge.V2TransportOpts{
+				SessionURL:   bridgeURL,
+				IngressToken: bridgeToken,
+				SessionID:    replHandle.OrgUUID,
+				GetAuthToken: func() string {
+					tok, _ := bridgeDeps.GetAccessToken()
+					return tok
+				},
+				Logger: func(msg string) { bridgeDebug.LogStatus(msg, nil) },
+			})
+			replTransport.SetOnData(func(data string) {
+				slog.Debug("bridge: transport inbound data", "len", len(data))
+			})
+			replTransport.SetOnClose(func(closeCode int) {
+				slog.Debug("bridge: transport closed", "close_code", closeCode)
+			})
+			replTransport.SetOnConnect(func() {
+				slog.Debug("bridge: transport connected")
+			})
+			replTransport.Connect()
+			defer replTransport.Close()
 		}
 
 		_ = replBridge
+		_ = replTransport
 		_ = orchestrator
 		_ = tdm
 		_ = permCallbacks
