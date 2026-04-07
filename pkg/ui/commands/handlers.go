@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"regexp"
 	"runtime"
 	"runtime/pprof"
@@ -22,6 +23,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/keybindings"
 	appcontext "github.com/projectbarks/gopher-code/pkg/context"
 	"github.com/projectbarks/gopher-code/pkg/hooks"
+	"github.com/projectbarks/gopher-code/pkg/mcp"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/session"
 )
@@ -167,6 +169,11 @@ type LogoutMsg struct {
 
 // AgentsMsg is returned when /agents lists agent configurations.
 type AgentsMsg struct {
+	Message string
+}
+
+// MCPStatusMsg is returned when /mcp lists configured MCP servers.
+type MCPStatusMsg struct {
 	Message string
 }
 
@@ -870,6 +877,55 @@ func newAgentsHandler(getAgents func() []AgentConfig) Handler {
 				b.WriteString(fmt.Sprintf("  - %s: %s\n", a.Name, a.Description))
 			}
 			return AgentsMsg{Message: strings.TrimRight(b.String(), "\n")}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T264: /mcp — list configured MCP servers and status
+// Source: src/commands/mcp.tsx
+// ---------------------------------------------------------------------------
+
+// newMCPHandler returns a handler that lists configured MCP servers and their
+// status. It accepts an optional getCWD override for testing; when nil it
+// falls back to os.Getwd.
+func newMCPHandler(getCWD func() string) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			cwd := ""
+			if getCWD != nil {
+				cwd = getCWD()
+			} else {
+				cwd, _ = os.Getwd()
+			}
+
+			merged := mcp.LoadMergedConfig(cwd)
+
+			if len(merged.Servers) == 0 {
+				return MCPStatusMsg{Message: "No MCP servers configured."}
+			}
+
+			// Collect names and sort for deterministic output.
+			names := merged.ServerNames()
+			sort.Strings(names)
+
+			var b strings.Builder
+			b.WriteString(fmt.Sprintf("MCP servers (%d configured):\n", len(names)))
+			for _, name := range names {
+				cfg := merged.Servers[name]
+				transport := string(cfg.Type)
+				if transport == "" {
+					if cfg.Command != "" {
+						transport = "stdio"
+					} else if cfg.URL != "" {
+						transport = "remote"
+					} else {
+						transport = "unknown"
+					}
+				}
+				b.WriteString(fmt.Sprintf("  ● %s  [%s, %s]\n", name, cfg.Scope, transport))
+			}
+			return MCPStatusMsg{Message: strings.TrimRight(b.String(), "\n")}
 		}
 	}
 }
@@ -3091,5 +3147,14 @@ func (d *Dispatcher) registerDefaults() {
 		Immediate:   true,
 		Source:      "builtin",
 		Handler:     newLogoutHandler(),
+	})
+
+	// T264: /mcp — list configured MCP servers and status
+	d.RegisterCommand(CommandRegistration{
+		Name:        "mcp",
+		Description: "Show configured MCP servers and status",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler:     newMCPHandler(nil),
 	})
 }
