@@ -418,29 +418,39 @@ func main() {
 			)
 		}
 
-		// T192: Write bridge pointer so crash-recovery and --continue can
-		// locate this remote-control session. Clear on clean exit.
+		// T192: Write bridge pointer for crash-recovery / --continue.
 		bridgePtr := bridge.BridgePointer{
-			SessionID:     "", // populated after RegisterBridgeEnvironment (T195+)
-			EnvironmentID: "", // populated after RegisterBridgeEnvironment (T195+)
+			SessionID:     "",
+			EnvironmentID: "",
 			Source:        bridge.PointerSourceREPL,
 		}
-		// Best-effort write; fields are empty until registration completes but
-		// the pointer file is created so the directory is warm for later refresh.
 		if bridgePtr.SessionID != "" && bridgePtr.EnvironmentID != "" {
 			_ = bridge.WriteBridgePointer(rcCwd, bridgePtr, bridgeDebug)
 		}
 		defer bridge.ClearBridgePointer(rcCwd, bridgeDebug)
 
+		// T193: Construct the BridgeOrchestrator.
+		orchestrator := bridge.NewBridgeOrchestrator()
+		orchestrator.Config = rcCfg
+		orchestrator.API = apiClient
+		orchestrator.Logger = nil
+		orchestrator.Debug = bridgeDebug
+		orchestrator.PollConfig = pollCfg
+		slog.Debug("bridge: orchestrator constructed",
+			"dir", rcCfg.Dir,
+			"max_sessions", rcCfg.MaxSessions,
+			"spawn_mode", rcCfg.SpawnMode,
+		)
+
 		// TODO(T195+): Wire full bridge REPL init once bridge core is implemented.
-		_ = rcCfg
-		_ = pollCfg
+		// The orchestrator.Start(ctx) call will be wired here once the
+		// SessionSpawner, full BridgeLogger, and transport are ready.
+		_ = orchestrator
 		_ = tdm
 		_ = permCallbacks
 		_ = bridgeStatus
 		_ = bridgeMessaging
 		_ = parseInbound
-		_ = bridgeDebug
 		_ = bridgePtr
 		cliOk("")
 	}
