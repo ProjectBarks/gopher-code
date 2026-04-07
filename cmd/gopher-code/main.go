@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/projectbarks/gopher-code/cmd/gopher-code/handlers"
 	"github.com/projectbarks/gopher-code/internal/cli"
@@ -376,12 +377,33 @@ func main() {
 			return nil
 		}
 
-		// T184: Construct BridgeMessaging for outbound event buffering and
-		// delivery during the remote-control session. The SendFunc is a
-		// placeholder until the full bridge transport is wired (T195+).
-		bridgeMessaging := bridge.NewBridgeMessaging(bridge.BridgeMessagingConfig{
+		// T214: Construct SerialBatchEventUploader for outbound event delivery
+		// with batching, retry, backpressure, and exponential backoff. The
+		// uploader is wired as the Send backend for BridgeMessaging below.
+		eventUploader := bridge.NewSerialBatchEventUploader(bridge.SerialBatchUploaderConfig[bridge.BridgeEvent]{
+			MaxBatchSize:           100,
+			MaxQueueSize:           1000,
+			MaxConsecutiveFailures: 5,
+			BaseDelay:              500 * time.Millisecond,
+			MaxDelay:               30 * time.Second,
+			Jitter:                 100 * time.Millisecond,
 			Send: func(_ context.Context, batch []bridge.BridgeEvent) error {
-				slog.Debug("bridge: messaging flush", "batch_size", len(batch))
+				slog.Debug("bridge: serial batch upload", "batch_size", len(batch))
+				return nil // placeholder until full bridge transport is wired (T195+)
+			},
+			OnBatchDropped: func(batchSize int, failures int) {
+				slog.Warn("bridge: batch dropped after max failures",
+					"batch_size", batchSize, "failures", failures)
+			},
+		})
+		defer eventUploader.Close()
+
+		// T184: Construct BridgeMessaging for outbound event buffering and
+		// delivery during the remote-control session. Uses the
+		// SerialBatchEventUploader as the send backend (T214).
+		bridgeMessaging := bridge.NewBridgeMessaging(bridge.BridgeMessagingConfig{
+			Send: func(ctx context.Context, batch []bridge.BridgeEvent) error {
+				eventUploader.Enqueue(batch...)
 				return nil
 			},
 		})

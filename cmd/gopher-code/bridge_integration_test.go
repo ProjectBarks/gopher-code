@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/projectbarks/gopher-code/pkg/auth"
 	"github.com/projectbarks/gopher-code/pkg/bridge"
@@ -155,6 +158,7 @@ func TestBridgeFeatureGates_CcrMirror(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 // TestHybridTransport_SelectedByEnv verifies HybridTransport selection.
 func TestHybridTransport_SelectedByEnv(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_USE_CCR_V2", "")
@@ -229,4 +233,44 @@ func TestCCRClient_IntegrationConstruct(t *testing.T) {
 	}
 	client.Close()
 	client.Close()
+}
+
+// TestSerialBatchUploader_MessagingIntegration verifies uploader + messaging wiring.
+func TestSerialBatchUploader_MessagingIntegration(t *testing.T) {
+	var uploaded atomic.Int64
+	uploader := bridge.NewSerialBatchEventUploader(bridge.SerialBatchUploaderConfig[bridge.BridgeEvent]{
+		MaxBatchSize:           10,
+		MaxQueueSize:           100,
+		MaxConsecutiveFailures: 3,
+		BaseDelay:              time.Millisecond,
+		MaxDelay:               10 * time.Millisecond,
+		Jitter:                 time.Millisecond,
+		Send: func(_ context.Context, batch []bridge.BridgeEvent) error {
+			uploaded.Add(int64(len(batch)))
+			return nil
+		},
+	})
+	defer uploader.Close()
+
+	messaging := bridge.NewBridgeMessaging(bridge.BridgeMessagingConfig{
+		Send: func(ctx context.Context, batch []bridge.BridgeEvent) error {
+			uploader.Enqueue(batch...)
+			return nil
+		},
+	})
+	defer messaging.Close()
+
+	ctx := context.Background()
+	for i := 0; i < 5; i++ {
+		if err := messaging.Enqueue(ctx, bridge.BridgeEvent{Type: "test"}); err != nil {
+			t.Fatalf("Enqueue failed: %v", err)
+		}
+	}
+	if err := messaging.Flush(ctx); err != nil {
+		t.Fatalf("Flush failed: %v", err)
+	}
+	uploader.Flush()
+	if n := uploaded.Load(); n != 5 {
+		t.Fatalf("expected 5 events uploaded, got %d", n)
+	}
 }
