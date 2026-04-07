@@ -2660,6 +2660,62 @@ func TestIDE_DetectVSCode(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// T256: /init tests
+// ---------------------------------------------------------------------------
+
+func TestInit_ReturnsPromptMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/init")
+	msg := cmd()
+	pm, ok := msg.(PromptMsg)
+	if !ok {
+		t.Fatalf("Expected PromptMsg, got %T", msg)
+	}
+	if pm.Command != "/init" {
+		t.Errorf("Expected command '/init', got %q", pm.Command)
+	}
+	for _, want := range []string{
+		"Please analyze this codebase and create a CLAUDE.md file",
+		"Commands that will be commonly used",
+		"High-level code architecture and structure",
+		"If there's already a CLAUDE.md, suggest improvements",
+		"# CLAUDE.md",
+	} {
+		if !strings.Contains(pm.Text, want) {
+			t.Errorf("Prompt should contain %q", want)
+		}
+	}
+}
+
+func TestInit_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/init")
+	if reg == nil {
+		t.Fatal("Should have registration for /init")
+	}
+	if reg.Type != CommandTypePrompt {
+		t.Errorf("Expected CommandTypePrompt, got %v", reg.Type)
+	}
+	if reg.Description != "Initialize a new CLAUDE.md file with codebase documentation" {
+		t.Errorf("Unexpected description: %q", reg.Description)
+	}
+}
+
+func TestInit_PromptContainsNoGenericAdvice(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/init")
+	msg := cmd()
+	pm := msg.(PromptMsg)
+	// The prompt itself instructs the model NOT to include generic advice
+	if !strings.Contains(pm.Text, "do not repeat yourself") {
+		t.Error("Prompt should instruct model not to repeat itself")
+	}
+	if !strings.Contains(pm.Text, "Don't include generic development practices") {
+		t.Error("Prompt should instruct model to skip generic practices")
+	}
+}
+
 func TestIDE_DetectJetBrains(t *testing.T) {
 	// Just verify detectJetBrains returns slice (may be empty on CI)
 	results := detectJetBrains()
