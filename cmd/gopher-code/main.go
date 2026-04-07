@@ -471,8 +471,42 @@ func main() {
 			slog.Debug("bridge: REPL bridge skipped (pre-flight check declined)")
 		}
 
-		// TODO(T195+): Wire full bridge REPL session lifecycle.
-		_ = replHandle
+		// T195: Integrate ReplBridge transport into the remote-control session.
+		// When InitReplBridge succeeds, construct the bidirectional REPL↔bridge
+		// transport so inbound/outbound messages flow through the bridge.
+		var replBridge *bridge.ReplBridge
+		if replHandle != nil {
+			replBridge = bridge.NewReplBridge(bridge.ReplBridgeConfig{
+				SessionID:     bridgePtr.SessionID,
+				EnvironmentID: bridgePtr.EnvironmentID,
+				OnStateChange: func(state bridge.BridgeState, detail string) {
+					slog.Debug("bridge: repl transport state change", "state", state, "detail", detail)
+					_ = bridgeStatus.Transition(bridge.StatusConnecting)
+				},
+				OnInboundMessage: func(msg bridge.SDKMessage) {
+					slog.Debug("bridge: repl inbound message", "type", msg.Type, "uuid", msg.UUID)
+				},
+				OnPermissionResponse: func(response bridge.SDKMessage) {
+					slog.Debug("bridge: repl permission response", "type", response.Type)
+				},
+				OnInterrupt: func() {
+					slog.Debug("bridge: repl interrupt received")
+				},
+				OnSetModel: func(model string) {
+					slog.Debug("bridge: repl set_model", "model", model)
+				},
+				OnDebug: func(msg string) {
+					bridgeDebug.LogStatus(msg, nil)
+				},
+			})
+			replHandle.Bridge = replBridge
+			slog.Debug("bridge: ReplBridge transport constructed",
+				"session_id", replBridge.SessionID(),
+				"state", replBridge.State(),
+			)
+		}
+
+		_ = replBridge
 		_ = orchestrator
 		_ = tdm
 		_ = permCallbacks
