@@ -3071,11 +3071,79 @@ func TestMCP_DispatchReturnsMsg(t *testing.T) {
 	d := NewDispatcher()
 	cmd := d.Dispatch("/mcp")
 	if cmd == nil {
-		t.Fatal("expected non-nil cmd from dispatch")
+		t.Fatal("expected non-nil cmd")
 	}
 	msg := cmd()
 	if _, ok := msg.(MCPStatusMsg); !ok {
 		t.Fatalf("expected MCPStatusMsg, got %T", msg)
+	}
+}
+
+// T265: /memory
+// ---------------------------------------------------------------------------
+
+func TestMemory_NoFile(t *testing.T) {
+	tmp := t.TempDir()
+	h := newMemoryHandler(MemoryDeps{CWD: func() string { return tmp }})
+	msg := h("")()
+	m, ok := msg.(MemoryMsg)
+	if !ok {
+		t.Fatalf("expected MemoryMsg, got %T", msg)
+	}
+	if !strings.Contains(m.Message, "No CLAUDE.md found") {
+		t.Errorf("expected no-file message, got %q", m.Message)
+	}
+}
+
+func TestMemory_WithFile(t *testing.T) {
+	tmp := t.TempDir()
+	content := "# Project Memory\nSome notes here."
+	if err := os.WriteFile(filepath.Join(tmp, "CLAUDE.md"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	h := newMemoryHandler(MemoryDeps{CWD: func() string { return tmp }})
+	msg := h("")()
+	m, ok := msg.(MemoryMsg)
+	if !ok {
+		t.Fatalf("expected MemoryMsg, got %T", msg)
+	}
+	if !strings.Contains(m.Message, "# Project Memory") {
+		t.Errorf("expected file content, got %q", m.Message)
+	}
+	if !strings.Contains(m.Message, "CLAUDE.md") {
+		t.Errorf("expected path in header, got %q", m.Message)
+	}
+}
+
+func TestMemory_EmptyFile(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "CLAUDE.md"), []byte("  \n  "), 0644); err != nil {
+		t.Fatal(err)
+	}
+	h := newMemoryHandler(MemoryDeps{CWD: func() string { return tmp }})
+	msg := h("")()
+	m := msg.(MemoryMsg)
+	if !strings.Contains(m.Message, "No CLAUDE.md found") {
+		t.Errorf("expected no-file message for empty file, got %q", m.Message)
+	}
+}
+
+func TestMemory_RegisteredInDispatcher(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/memory") {
+		t.Fatal("/memory not registered")
+	}
+}
+
+func TestMemory_DispatchReturnsMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/memory")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from dispatch")
+	}
+	msg := cmd()
+	if _, ok := msg.(MemoryMsg); !ok {
+		t.Fatalf("expected MemoryMsg, got %T", msg)
 	}
 }
 
