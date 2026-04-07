@@ -13,6 +13,7 @@ import (
 
 	"github.com/projectbarks/gopher-code/internal/cli"
 	"github.com/projectbarks/gopher-code/pkg/auth"
+	"github.com/projectbarks/gopher-code/pkg/bridge"
 	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/config"
 	"github.com/projectbarks/gopher-code/pkg/hooks"
@@ -154,6 +155,14 @@ func main() {
 	// Source: src/cli.ts — `claude remote-control` CLI subcommand dispatches
 	// to the bridge REPL initializer (pkg/bridge/init_repl.go).
 	if len(os.Args) > 1 && os.Args[1] == "remote-control" {
+		// T171: Load envless bridge config and run the version gate before
+		// any expensive initialization. In production this config comes from
+		// GrowthBook; for now use the validated default.
+		envlessCfg := bridge.DefaultEnvLessBridgeConfig
+		if versionErr := bridge.CheckEnvLessBridgeMinVersion(envlessCfg, Version); versionErr != "" {
+			cliError(versionErr)
+		}
+
 		// Extract optional session name from remaining args.
 		rcName := ""
 		if len(os.Args) > 2 {
