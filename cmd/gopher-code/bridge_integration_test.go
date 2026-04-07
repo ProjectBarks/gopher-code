@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/projectbarks/gopher-code/pkg/auth"
 	"github.com/projectbarks/gopher-code/pkg/bridge"
@@ -152,5 +155,56 @@ func TestBridgeFeatureGates_CcrMirror(t *testing.T) {
 
 	if bridge.IsCcrMirrorEnabled() {
 		t.Fatal("expected IsCcrMirrorEnabled=false in default build")
+	}
+}
+
+// TestSerialBatchUploader_MessagingIntegration verifies that a
+// SerialBatchEventUploader[BridgeEvent] can serve as the Send backend for
+// BridgeMessaging — the same wiring used in the remote-control path (T214).
+func TestSerialBatchUploader_MessagingIntegration(t *testing.T) {
+	var uploaded atomic.Int64
+
+	// Build uploader with a fast-completing Send func.
+	uploader := bridge.NewSerialBatchEventUploader(bridge.SerialBatchUploaderConfig[bridge.BridgeEvent]{
+		MaxBatchSize:           10,
+		MaxQueueSize:           100,
+		MaxConsecutiveFailures: 3,
+		BaseDelay:              time.Millisecond,
+		MaxDelay:               10 * time.Millisecond,
+		Jitter:                 time.Millisecond,
+		Send: func(_ context.Context, batch []bridge.BridgeEvent) error {
+			uploaded.Add(int64(len(batch)))
+			return nil
+		},
+	})
+	defer uploader.Close()
+
+	// Wire it into BridgeMessaging the same way main.go does.
+	messaging := bridge.NewBridgeMessaging(bridge.BridgeMessagingConfig{
+		Send: func(ctx context.Context, batch []bridge.BridgeEvent) error {
+			uploader.Enqueue(batch...)
+			return nil
+		},
+	})
+	defer messaging.Close()
+
+	// Enqueue several events via BridgeMessaging.
+	ctx := context.Background()
+	for i := 0; i < 5; i++ {
+		if err := messaging.Enqueue(ctx, bridge.BridgeEvent{Type: "test"}); err != nil {
+			t.Fatalf("Enqueue failed: %v", err)
+		}
+	}
+
+	// Flush messaging so events reach the uploader.
+	if err := messaging.Flush(ctx); err != nil {
+		t.Fatalf("Flush failed: %v", err)
+	}
+
+	// Flush the uploader so Send is invoked.
+	uploader.Flush()
+
+	if n := uploaded.Load(); n != 5 {
+		t.Fatalf("expected 5 events uploaded, got %d", n)
 	}
 }
