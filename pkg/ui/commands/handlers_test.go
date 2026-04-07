@@ -3158,3 +3158,64 @@ func TestLogout_DispatchReturnsMsg(t *testing.T) {
 		t.Fatalf("expected LogoutMsg, got %T", msg)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T268: /output-style — deprecation notice
+// ---------------------------------------------------------------------------
+
+func TestOutputStyle_RegisteredInDispatcher(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/output-style") {
+		t.Fatal("/output-style not registered")
+	}
+}
+
+func TestOutputStyle_IsHidden(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/output-style")
+	if reg == nil {
+		t.Fatal("/output-style should have a registration")
+	}
+	if !reg.IsHidden {
+		t.Error("/output-style should be hidden")
+	}
+}
+
+func TestOutputStyle_ReturnsDeprecationMsg(t *testing.T) {
+	h := newOutputStyleHandler()
+	cmd := h("")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	m, ok := msg.(OutputStyleMsg)
+	if !ok {
+		t.Fatalf("expected OutputStyleMsg, got %T", msg)
+	}
+	if !strings.Contains(m.Message, "replaced by output-style plugins") {
+		t.Errorf("expected deprecation message, got %q", m.Message)
+	}
+	if !strings.Contains(m.Message, "/plugin") {
+		t.Errorf("expected /plugin reference in message, got %q", m.Message)
+	}
+}
+
+func TestOutputStyle_DispatchReturnsMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/output-style")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	if _, ok := msg.(OutputStyleMsg); !ok {
+		t.Fatalf("expected OutputStyleMsg, got %T", msg)
+	}
+}
+
+func TestOutputStyle_NotInHelpText(t *testing.T) {
+	d := NewDispatcher()
+	helpText := d.HelpText()
+	if strings.Contains(helpText, "/output-style") {
+		t.Error("HelpText should not list hidden command /output-style")
+	}
+}

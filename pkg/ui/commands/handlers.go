@@ -177,6 +177,11 @@ type MCPStatusMsg struct {
 	Message string
 }
 
+// OutputStyleMsg is returned when /output-style deprecation is invoked.
+type OutputStyleMsg struct {
+	Message string
+}
+
 // MovedToPluginMsg informs the user a command moved to a plugin.
 type MovedToPluginMsg struct {
 	Command    string
@@ -2748,6 +2753,20 @@ func newLogoutHandler() Handler {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// T268: /output-style — deprecation notice
+// ---------------------------------------------------------------------------
+
+func newOutputStyleHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			return OutputStyleMsg{
+				Message: "Output styles have been replaced by output-style plugins. Use /plugin to manage output styles.",
+			}
+		}
+	}
+}
+
 func (d *Dispatcher) registerDefaults() {
 	d.Register("/model", func(args string) tea.Cmd {
 		if args == "" {
@@ -3222,5 +3241,15 @@ func (d *Dispatcher) registerDefaults() {
 		Handler: newMemoryHandler(MemoryDeps{
 			CWD: func() string { return "" },
 		}),
+	})
+
+	// T268: /output-style — deprecation notice (hidden)
+	d.RegisterCommand(CommandRegistration{
+		Name:        "output-style",
+		Description: "Output style management (deprecated)",
+		Type:        CommandTypeLocal,
+		IsHidden:    true,
+		Source:      "builtin",
+		Handler:     newOutputStyleHandler(),
 	})
 }
