@@ -2927,11 +2927,40 @@ func TestKeybindings_DispatchReturnsMsg(t *testing.T) {
 	d := NewDispatcher()
 	cmd := d.Dispatch("/keybindings")
 	if cmd == nil {
-		t.Fatal("expected non-nil cmd from dispatch")
+		t.Fatal("expected non-nil cmd")
 	}
 	msg := cmd()
 	if _, ok := msg.(KeybindingsMsg); !ok {
 		t.Fatalf("expected KeybindingsMsg, got %T", msg)
+	}
+}
+
+// T263: /logout
+// ---------------------------------------------------------------------------
+
+func TestLogout_RegisteredInDispatcher(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/logout") {
+		t.Fatal("/logout not registered")
+	}
+}
+
+func TestLogout_ReturnsLogoutMsg(t *testing.T) {
+	h := newLogoutHandler()
+	cmd := h("")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	m, ok := msg.(LogoutMsg)
+	if !ok {
+		t.Fatalf("expected LogoutMsg, got %T", msg)
+	}
+	if m.Error != nil {
+		t.Fatalf("unexpected error: %v", m.Error)
+	}
+	if !strings.Contains(m.Message, "Logged out") {
+		t.Errorf("expected confirmation message, got %q", m.Message)
 	}
 }
 
@@ -2967,5 +2996,17 @@ func TestLogin_DispatchReturnsMsg(t *testing.T) {
 	msg := cmd()
 	if _, ok := msg.(LoginMsg); !ok {
 		t.Fatalf("expected LoginMsg, got %T", msg)
+	}
+}
+
+func TestLogout_DispatchReturnsMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/logout")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	if _, ok := msg.(LogoutMsg); !ok {
+		t.Fatalf("expected LogoutMsg, got %T", msg)
 	}
 }
