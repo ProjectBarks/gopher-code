@@ -472,3 +472,76 @@ func TestEndpoints_RejectUnsafeIDs(t *testing.T) {
 		t.Error("SendPermissionResponseEvent should reject unsafe sessionId")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// NewBridgeAPIClientFromConfig integration test
+// ---------------------------------------------------------------------------
+
+func TestNewBridgeAPIClientFromConfig_Integration(t *testing.T) {
+	// Verify the convenience constructor produces a working client that is
+	// reachable through the same code path used by cmd/gopher-code/main.go.
+	cfg := BridgeConfig{
+		Dir:           "/tmp/test",
+		APIBaseURL:    "https://api.anthropic.com",
+		MaxSessions:   SpawnSessionsDefault,
+		SpawnMode:     SpawnModeSingleSession,
+		WorkerType:    string(WorkerTypeClaudeCode),
+		MachineName:   "test-machine",
+	}
+
+	var debugMsgs []string
+	client := NewBridgeAPIClientFromConfig(cfg, func() string {
+		return "test-token"
+	}, func(msg string) {
+		debugMsgs = append(debugMsgs, msg)
+	})
+
+	if client == nil {
+		t.Fatal("NewBridgeAPIClientFromConfig returned nil")
+	}
+
+	// The client must satisfy the BridgeAPIClient interface — invoke a method
+	// that performs local validation only (no network call). ValidateBridgeID
+	// rejects the empty string, so PollForWork("", ...) must return an error.
+	_, err := client.PollForWork("", "secret", nil)
+	if err == nil {
+		t.Fatal("expected error for empty environmentId, got nil")
+	}
+	if !strings.Contains(err.Error(), "Invalid") {
+		t.Errorf("expected validation error, got: %s", err)
+	}
+
+	// Also exercise via the orchestrator path to prove the types compose.
+	orch := NewBridgeOrchestrator()
+	orch.API = client
+	orch.Config = cfg
+	if orch.API == nil {
+		t.Fatal("orchestrator API field is nil after assignment")
+	}
+
+	// Verify the client works against a real HTTP server.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"environment_id":     "env-123",
+			"environment_secret": "sec-456",
+		})
+	}))
+	defer ts.Close()
+
+	serverCfg := BridgeConfig{
+		Dir:        "/tmp/test",
+		APIBaseURL: ts.URL,
+	}
+	serverClient := NewBridgeAPIClientFromConfig(serverCfg, func() string {
+		return "tok"
+	}, nil)
+
+	resp, err := serverClient.RegisterBridgeEnvironment(serverCfg)
+	if err != nil {
+		t.Fatalf("RegisterBridgeEnvironment failed: %v", err)
+	}
+	if resp.EnvironmentID != "env-123" {
+		t.Errorf("EnvironmentID = %q, want %q", resp.EnvironmentID, "env-123")
+	}
+}

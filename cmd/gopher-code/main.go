@@ -13,6 +13,7 @@ import (
 
 	"github.com/projectbarks/gopher-code/internal/cli"
 	"github.com/projectbarks/gopher-code/pkg/auth"
+	"github.com/projectbarks/gopher-code/pkg/bridge"
 	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/config"
 	"github.com/projectbarks/gopher-code/pkg/hooks"
@@ -164,8 +165,21 @@ func main() {
 			fmt.Fprintf(os.Stderr, " %q", rcName)
 		}
 		fmt.Fprintln(os.Stderr, "...")
+
+		// T173: Construct the BridgeAPIClient so the bridge package is wired
+		// into the binary. This is used by the orchestrator and REPL bridge
+		// once the full init sequence is implemented (T195+).
+		wd, _ := os.Getwd()
+		bridgeCfg := bridge.BridgeConfig{
+			Dir:           wd,
+			APIBaseURL:    "https://api.anthropic.com",
+			MaxSessions:   bridge.SpawnSessionsDefault,
+			SpawnMode:     bridge.SpawnModeSingleSession,
+			WorkerType:    string(bridge.WorkerTypeClaudeCode),
+		}
+		_ = bridge.NewBridgeAPIClientFromConfig(bridgeCfg, func() string { return "" }, nil)
+
 		// TODO(T195+): Wire full bridge REPL init once bridge core is implemented.
-		// For now, exit cleanly after printing the intent.
 		_ = rcName
 		cliOk("")
 	}
