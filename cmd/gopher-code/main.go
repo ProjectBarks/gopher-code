@@ -237,10 +237,15 @@ func main() {
 				if bridge.IsJWTExpired(bridgeToken) {
 					cliError("bridge access token is expired; please re-authenticate")
 				}
+				// T182: Normalize session ID from JWT claims through the
+				// compat layer so infra-prefixed IDs (cse_*) are translated
+				// to the client-facing prefix (session_*) for downstream use.
+				compatSID := bridge.ToCompatSessionID(claims.SessionID)
 				slog.Debug("bridge: JWT validated",
 					"sub", claims.Sub,
 					"org_uuid", claims.OrgUUID,
 					"session_id", claims.SessionID,
+					"compat_session_id", compatSID,
 				)
 			}
 		}
@@ -623,9 +628,11 @@ func main() {
 	}
 
 	if sess == nil && *resume != "" {
-		loaded, err := session.Load(*resume)
+		// T182: Normalize resume ID through compat layer.
+		resumeID := bridge.ToInfraSessionID(*resume)
+		loaded, err := session.Load(resumeID)
 		if err != nil {
-			cliErrorf("Cannot resume session %s: %v", *resume, err)
+			cliErrorf("Cannot resume session %s: %v", resumeID, err)
 		}
 		sess = loaded
 		sess.CWD = *cwd
@@ -652,9 +659,11 @@ func main() {
 		sess = session.New(cfg, *cwd)
 	}
 
-	// Apply --session-id and --name overrides
+	// Apply --session-id and --name overrides.
+	// T182: Normalize through the compat layer so callers can pass either
+	// cse_* or session_* prefixed IDs and get consistent infra-format storage.
 	if *sessionID != "" {
-		sess.ID = *sessionID
+		sess.ID = bridge.ToInfraSessionID(*sessionID)
 	}
 	if *sessionName != "" {
 		sess.Name = *sessionName

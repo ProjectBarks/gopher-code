@@ -55,13 +55,35 @@ func TestToInfraSessionID(t *testing.T) {
 // Round-trip
 // ---------------------------------------------------------------------------
 
-func TestSessionIDRoundTrip(t *testing.T) {
+func TestSessionIDRoundTrip_InfraToCompatToInfra(t *testing.T) {
 	resetCseShimGate()
 	id := "cse_uuid-goes-here"
 	compat := ToCompatSessionID(id)
 	back := ToInfraSessionID(compat)
 	if back != id {
 		t.Errorf("round trip failed: %q -> %q -> %q", id, compat, back)
+	}
+}
+
+func TestSessionIDRoundTrip_CompatToInfraToCompat(t *testing.T) {
+	resetCseShimGate()
+	id := "session_uuid-goes-here"
+	infra := ToInfraSessionID(id)
+	back := ToCompatSessionID(infra)
+	if back != id {
+		t.Errorf("round trip failed: %q -> %q -> %q", id, infra, back)
+	}
+}
+
+// ToInfraSessionID is NOT gated — verify it works even when gate is disabled.
+func TestToInfraSessionID_IgnoresGate(t *testing.T) {
+	SetCseShimGate(func() bool { return false })
+	defer resetCseShimGate()
+
+	got := ToInfraSessionID("session_abc123")
+	want := "cse_abc123"
+	if got != want {
+		t.Errorf("ToInfraSessionID should ignore gate; got %q, want %q", got, want)
 	}
 }
 
