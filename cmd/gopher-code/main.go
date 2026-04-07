@@ -471,6 +471,17 @@ func main() {
 			slog.Debug("bridge: REPL bridge skipped (pre-flight check declined)")
 		}
 
+		// T198: Wire FlushGate into the bridge REPL lifecycle.
+		// When replHandle carries a live Bridge, the flush gate is used to
+		// queue outbound messages during initial history flush so they don't
+		// interleave with historical messages. StartFlush/EndFlush are called
+		// by the orchestrator at flush boundaries (T195+).
+		if replHandle != nil && replHandle.Bridge != nil {
+			slog.Debug("bridge: flush gate available on REPL bridge",
+				"active", replHandle.Bridge.IsFlushActive(),
+			)
+		}
+
 		// TODO(T195+): Wire full bridge REPL session lifecycle.
 		_ = replHandle
 		_ = orchestrator

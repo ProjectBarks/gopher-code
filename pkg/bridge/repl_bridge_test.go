@@ -531,3 +531,122 @@ func TestReplBridge_PollConstants(t *testing.T) {
 		t.Errorf("PollErrorGiveUpMS: expected 900000, got %d", PollErrorGiveUpMS)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Flush gate integration
+// ---------------------------------------------------------------------------
+
+func TestReplBridge_FlushGate_QueuesDuringFlush(t *testing.T) {
+	rb := NewReplBridge(ReplBridgeConfig{SessionID: "sess-fg"})
+
+	// Initially not active.
+	if rb.IsFlushActive() {
+		t.Fatal("flush gate should be inactive on new bridge")
+	}
+
+	// Start flush — messages should be queued, not sent to outbound channel.
+	rb.StartFlush()
+	if !rb.IsFlushActive() {
+		t.Fatal("flush gate should be active after StartFlush")
+	}
+
+	// Write 3 messages while flush is active.
+	for i := 0; i < 3; i++ {
+		rb.WriteMessage(SDKMessage{
+			Type: "assistant",
+			UUID: "fg-" + string(rune('a'+i)),
+		})
+	}
+
+	// Outbound channel should be empty — messages are gated.
+	select {
+	case <-rb.OutboundMessages():
+		t.Fatal("expected no outbound messages while flush gate is active")
+	default:
+		// Good.
+	}
+
+	// End flush — queued messages should drain to outbound channel.
+	drained := rb.EndFlush()
+	if drained != 3 {
+		t.Errorf("expected 3 drained messages, got %d", drained)
+	}
+	if rb.IsFlushActive() {
+		t.Fatal("flush gate should be inactive after EndFlush")
+	}
+
+	// All 3 messages should now be on the outbound channel.
+	for i := 0; i < 3; i++ {
+		select {
+		case msg := <-rb.OutboundMessages():
+			if msg.Type != "assistant" {
+				t.Errorf("drained[%d]: expected type=assistant, got %s", i, msg.Type)
+			}
+			if msg.SessionID != "sess-fg" {
+				t.Errorf("drained[%d]: expected session_id=sess-fg, got %s", i, msg.SessionID)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("drained[%d]: timed out waiting for message", i)
+		}
+	}
+
+	rb.Teardown()
+}
+
+func TestReplBridge_FlushGate_PassthroughWhenInactive(t *testing.T) {
+	rb := NewReplBridge(ReplBridgeConfig{SessionID: "sess-fg2"})
+
+	// Write without starting flush — should go directly to outbound.
+	rb.WriteMessage(SDKMessage{Type: "user", UUID: "direct-1"})
+
+	select {
+	case msg := <-rb.OutboundMessages():
+		if msg.UUID != "direct-1" {
+			t.Errorf("expected uuid=direct-1, got %s", msg.UUID)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for direct outbound message")
+	}
+
+	rb.Teardown()
+}
+
+func TestReplBridge_FlushGate_DropOnTeardown(t *testing.T) {
+	rb := NewReplBridge(ReplBridgeConfig{SessionID: "sess-fg3"})
+
+	rb.StartFlush()
+	rb.WriteMessage(SDKMessage{Type: "user", UUID: "drop-1"})
+	rb.WriteMessage(SDKMessage{Type: "user", UUID: "drop-2"})
+
+	// Teardown should drop flush-gated messages.
+	rb.Teardown()
+
+	if rb.IsFlushActive() {
+		t.Error("flush gate should be inactive after teardown")
+	}
+}
+
+func TestReplBridge_FlushGate_DropFlush(t *testing.T) {
+	rb := NewReplBridge(ReplBridgeConfig{SessionID: "sess-fg4"})
+
+	rb.StartFlush()
+	rb.WriteMessage(SDKMessage{Type: "user", UUID: "d-1"})
+	rb.WriteMessage(SDKMessage{Type: "user", UUID: "d-2"})
+
+	dropped := rb.DropFlush()
+	if dropped != 2 {
+		t.Errorf("expected 2 dropped, got %d", dropped)
+	}
+	if rb.IsFlushActive() {
+		t.Error("flush gate should be inactive after DropFlush")
+	}
+
+	// Outbound should be empty.
+	select {
+	case <-rb.OutboundMessages():
+		t.Fatal("expected no outbound messages after DropFlush")
+	default:
+	}
+
+	rb.Teardown()
+}

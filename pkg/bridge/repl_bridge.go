@@ -162,6 +162,11 @@ type ReplBridge struct {
 	// recentInboundUUIDs deduplicates re-delivered inbound prompts.
 	recentInboundUUIDs *BoundedUUIDSet
 
+	// flushGate gates outbound writes during initial history flush.
+	// When active, new outbound messages are queued and drained once
+	// the flush completes. Protected by mu.
+	flushGate FlushGate[SDKMessage]
+
 	// userMessageDone latches true when OnUserMessage returns true.
 	userMessageDone atomic.Bool
 
@@ -394,6 +399,15 @@ func (rb *ReplBridge) WriteMessage(msg SDKMessage) {
 	// Stamp session ID.
 	msg.SessionID = rb.cfg.SessionID
 
+	// If the flush gate is active, queue the message for later drain.
+	rb.mu.Lock()
+	if rb.flushGate.Enqueue(msg) {
+		rb.mu.Unlock()
+		rb.cfg.debug("[bridge:repl] Flush gate active, queued outbound message")
+		return
+	}
+	rb.mu.Unlock()
+
 	// Non-blocking enqueue.
 	select {
 	case rb.outbound <- msg:
@@ -470,6 +484,59 @@ func (rb *ReplBridge) SetSSESequenceNum(n int) {
 }
 
 // ---------------------------------------------------------------------------
+// Flush gate — gates outbound writes during initial history flush
+// Source: src/bridge/replBridge.ts — flushGate lifecycle
+// ---------------------------------------------------------------------------
+
+// StartFlush activates the flush gate. While active, outbound messages are
+// queued instead of being written to the outbound channel. Call EndFlush to
+// drain the queued messages after the history flush completes.
+func (rb *ReplBridge) StartFlush() {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	rb.flushGate.Start()
+	rb.cfg.debug("[bridge:repl] Flush gate started")
+}
+
+// EndFlush ends the flush gate and drains all queued messages into the
+// outbound channel. Returns the number of messages drained.
+func (rb *ReplBridge) EndFlush() int {
+	rb.mu.Lock()
+	queued := rb.flushGate.End()
+	rb.mu.Unlock()
+
+	for _, msg := range queued {
+		select {
+		case rb.outbound <- msg:
+		default:
+			rb.cfg.debug("[bridge:repl] Outbound queue full during flush drain, dropping message")
+		}
+	}
+
+	rb.cfg.debug(fmt.Sprintf("[bridge:repl] Flush gate ended, drained %d messages", len(queued)))
+	return len(queued)
+}
+
+// DropFlush discards all queued flush messages (e.g. on transport close).
+// Returns the number of messages dropped.
+func (rb *ReplBridge) DropFlush() int {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	count := rb.flushGate.Drop()
+	if count > 0 {
+		rb.cfg.debug(fmt.Sprintf("[bridge:repl] Flush gate dropped %d messages", count))
+	}
+	return count
+}
+
+// IsFlushActive reports whether the flush gate is currently active.
+func (rb *ReplBridge) IsFlushActive() bool {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	return rb.flushGate.Active()
+}
+
+// ---------------------------------------------------------------------------
 // Teardown
 // ---------------------------------------------------------------------------
 
@@ -479,6 +546,14 @@ func (rb *ReplBridge) SetSSESequenceNum(n int) {
 func (rb *ReplBridge) Teardown() {
 	rb.teardownOnce.Do(func() {
 		rb.cfg.debug("[bridge:repl] Teardown starting")
+
+		// Drop any flush-gated messages — the transport is going away.
+		rb.mu.Lock()
+		dropped := rb.flushGate.Drop()
+		rb.mu.Unlock()
+		if dropped > 0 {
+			rb.cfg.debug(fmt.Sprintf("[bridge:repl] Teardown dropped %d flush-gated messages", dropped))
+		}
 
 		// Cancel the bridge context to stop background goroutines.
 		rb.cancel()
