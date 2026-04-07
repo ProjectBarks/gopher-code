@@ -2887,3 +2887,84 @@ func TestInstallSlackApp_DispatchReturnsMsg(t *testing.T) {
 		t.Fatalf("expected InstallSlackAppMsg, got %T", msg)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T264: /mcp — MCP server management
+// ---------------------------------------------------------------------------
+
+func TestMCP_NoServers(t *testing.T) {
+	// Point to an empty temp dir so no config files are found.
+	dir := t.TempDir()
+	h := newMCPHandler(func() string { return dir })
+	msg := h("")()
+	m, ok := msg.(MCPStatusMsg)
+	if !ok {
+		t.Fatalf("expected MCPStatusMsg, got %T", msg)
+	}
+	if !strings.Contains(m.Message, "No MCP servers configured") {
+		t.Errorf("expected 'No MCP servers configured', got %q", m.Message)
+	}
+}
+
+func TestMCP_ListsConfiguredServers(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a .mcp.json with two servers.
+	mcpJSON := `{
+		"mcpServers": {
+			"my-server": {"command": "node", "args": ["server.js"]},
+			"remote-api": {"type": "sse", "url": "https://example.com/mcp"}
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(mcpJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := newMCPHandler(func() string { return dir })
+	msg := h("")()
+	m, ok := msg.(MCPStatusMsg)
+	if !ok {
+		t.Fatalf("expected MCPStatusMsg, got %T", msg)
+	}
+	if !strings.Contains(m.Message, "2 configured") {
+		t.Errorf("expected '2 configured', got %q", m.Message)
+	}
+	if !strings.Contains(m.Message, "my-server") {
+		t.Errorf("expected 'my-server' in output, got %q", m.Message)
+	}
+	if !strings.Contains(m.Message, "remote-api") {
+		t.Errorf("expected 'remote-api' in output, got %q", m.Message)
+	}
+	if !strings.Contains(m.Message, "project") {
+		t.Errorf("expected scope 'project' in output, got %q", m.Message)
+	}
+}
+
+func TestMCP_RegisteredInDispatcher(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/mcp") {
+		t.Fatal("/mcp not registered")
+	}
+	reg := d.GetRegistration("/mcp")
+	if reg == nil {
+		t.Fatal("expected registration for /mcp")
+	}
+	if reg.Type != CommandTypeLocal {
+		t.Errorf("expected CommandTypeLocal, got %v", reg.Type)
+	}
+	if reg.Description != "Show configured MCP servers and status" {
+		t.Errorf("unexpected description: %q", reg.Description)
+	}
+}
+
+func TestMCP_DispatchReturnsMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/mcp")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from dispatch")
+	}
+	msg := cmd()
+	if _, ok := msg.(MCPStatusMsg); !ok {
+		t.Fatalf("expected MCPStatusMsg, got %T", msg)
+	}
+}
