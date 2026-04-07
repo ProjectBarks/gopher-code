@@ -13,6 +13,7 @@ import (
 
 	"github.com/projectbarks/gopher-code/internal/cli"
 	"github.com/projectbarks/gopher-code/pkg/auth"
+	"github.com/projectbarks/gopher-code/pkg/bridge"
 	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/config"
 	"github.com/projectbarks/gopher-code/pkg/hooks"
@@ -47,6 +48,35 @@ func resolveModelAlias(model string) string {
 		return resolved
 	}
 	return model
+}
+
+// initBridgeDeps registers the default bridge dependency bundle so the bridge
+// enablement checks (IsBridgeEnabled, GetBridgeDisabledReason, etc.) are
+// available throughout the process lifetime.
+// Source: src/bridge/bridgeEnabled.ts — wired during CLI bootstrap.
+func initBridgeDeps() {
+	bridge.SetBridgeDeps(&bridge.BridgeDeps{
+		// Build features — disabled by default; set via build tags or env in
+		// production builds that ship with bridge support.
+		BridgeMode:     false,
+		CCRAutoConnect: false,
+		CCRMirror:      false,
+
+		// Auth stubs — return safe defaults until real auth is wired.
+		IsClaudeAISubscriber: func() bool { return false },
+		HasProfileScope:      func() bool { return false },
+		GetOAuthAccountInfo:  func() *bridge.OAuthAccountInfo { return nil },
+
+		// GrowthBook stubs — return defaults until real GrowthBook is wired.
+		GetFeatureValueBool: func(key string, defaultVal bool) bool { return defaultVal },
+		CheckGateBlocking:   func(key string) (bool, error) { return false, nil },
+		GetDynamicConfig: func(key string, defaults map[string]string) map[string]string {
+			return defaults
+		},
+
+		Version:  Version,
+		SemverLT: func(a, b string) bool { return a < b },
+	})
 }
 
 func main() {
@@ -150,10 +180,31 @@ func main() {
 	// Permission mode
 	permModeFlag := flag.String("permission-mode", "", "Permission mode: auto, interactive, deny")
 
+	// T172: Initialize bridge dependency bundle early so all bridge enablement
+	// checks are available before any subcommand dispatches.
+	initBridgeDeps()
+
 	// Handle "remote-control" subcommand before flag.Parse()
 	// Source: src/cli.ts — `claude remote-control` CLI subcommand dispatches
 	// to the bridge REPL initializer (pkg/bridge/init_repl.go).
 	if len(os.Args) > 1 && os.Args[1] == "remote-control" {
+		// Gate on bridge enablement unless forced via env var.
+		if !bridge.IsBridgeEnabled() && !bridge.IsBridgeForced() {
+			reason, err := bridge.GetBridgeDisabledReason()
+			if err != nil {
+				cliErrorf("Error checking Remote Control eligibility: %v", err)
+			}
+			if reason == "" {
+				reason = bridge.ErrBridgeNotAvailable
+			}
+			cliError(reason)
+		}
+
+		// Check minimum version requirement.
+		if msg := bridge.CheckBridgeMinVersion(); msg != "" {
+			cliError(msg)
+		}
+
 		// Extract optional session name from remaining args.
 		rcName := ""
 		if len(os.Args) > 2 {
