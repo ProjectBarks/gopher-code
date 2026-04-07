@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -2136,5 +2137,251 @@ func TestIsEffortLevel(t *testing.T) {
 	}
 	if isEffortLevel("banana") {
 		t.Error("'banana' should not be a valid effort level")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T248: /extra-usage
+// ---------------------------------------------------------------------------
+
+func TestExtraUsage_ClaudeAIUser(t *testing.T) {
+	h := newExtraUsageHandler(func() string { return "claude-ai" })
+	msg := h("")()
+	m, ok := msg.(ExtraUsageMsg)
+	if !ok {
+		t.Fatalf("expected ExtraUsageMsg, got %T", msg)
+	}
+	if m.Error != nil {
+		t.Fatalf("unexpected error: %v", m.Error)
+	}
+	if !strings.Contains(m.Message, "https://claude.ai/settings/billing") {
+		t.Errorf("expected billing URL, got %q", m.Message)
+	}
+}
+
+func TestExtraUsage_NonClaudeAIUser(t *testing.T) {
+	h := newExtraUsageHandler(func() string { return "console" })
+	msg := h("")()
+	m := msg.(ExtraUsageMsg)
+	if m.Error == nil {
+		t.Fatal("expected error for non-claude-ai user")
+	}
+}
+
+func TestExtraUsage_RegisteredInDispatcher(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/extra-usage") {
+		t.Fatal("/extra-usage not registered")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T249: /fast
+// ---------------------------------------------------------------------------
+
+func TestFast_ToggleOn(t *testing.T) {
+	var state bool
+	h := newFastHandler(FastModeDeps{
+		GetEnabled: func() bool { return state },
+		SetEnabled: func(b bool) { state = b },
+	})
+	msg := h("")()
+	m := msg.(FastModeMsg)
+	if m.Error != nil {
+		t.Fatalf("unexpected error: %v", m.Error)
+	}
+	if !m.Enabled || m.Message != "Fast mode enabled" {
+		t.Errorf("expected enabled, got %+v", m)
+	}
+	if !state {
+		t.Error("state should be true")
+	}
+}
+
+func TestFast_ExplicitOff(t *testing.T) {
+	var state bool = true
+	h := newFastHandler(FastModeDeps{
+		GetEnabled: func() bool { return state },
+		SetEnabled: func(b bool) { state = b },
+	})
+	msg := h("off")()
+	m := msg.(FastModeMsg)
+	if m.Enabled || m.Message != "Fast mode disabled" {
+		t.Errorf("expected disabled, got %+v", m)
+	}
+}
+
+func TestFast_InvalidArg(t *testing.T) {
+	h := newFastHandler(FastModeDeps{
+		GetEnabled: func() bool { return false },
+		SetEnabled: func(bool) {},
+	})
+	msg := h("banana")()
+	m := msg.(FastModeMsg)
+	if m.Error == nil {
+		t.Fatal("expected error for invalid arg")
+	}
+}
+
+func TestFast_RegisteredInDispatcher(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/fast") {
+		t.Fatal("/fast not registered")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T250: /feedback
+// ---------------------------------------------------------------------------
+
+func TestFeedback_ShowsURL(t *testing.T) {
+	h := newFeedbackHandler()
+	msg := h("")()
+	m, ok := msg.(FeedbackMsg)
+	if !ok {
+		t.Fatalf("expected FeedbackMsg, got %T", msg)
+	}
+	if !strings.Contains(m.Message, "https://github.com/anthropics/claude-code/issues") {
+		t.Errorf("expected feedback URL, got %q", m.Message)
+	}
+}
+
+func TestFeedback_DisabledByEnv(t *testing.T) {
+	t.Setenv("DISABLE_FEEDBACK_COMMAND", "1")
+	d := NewDispatcher()
+	cmd := d.Dispatch("/feedback")
+	msg := cmd()
+	result, ok := msg.(CommandResult)
+	if !ok {
+		t.Fatalf("expected CommandResult (disabled), got %T", msg)
+	}
+	if result.Error == nil {
+		t.Fatal("expected disabled error")
+	}
+}
+
+func TestFeedback_RegisteredInDispatcher(t *testing.T) {
+	d := NewDispatcher()
+	if !d.HasHandler("/feedback") {
+		t.Fatal("/feedback not registered")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T251: /files
+// ---------------------------------------------------------------------------
+
+func TestFiles_NoFiles(t *testing.T) {
+	h := newFilesHandler(FilesDeps{GetFiles: func() []string { return nil }})
+	msg := h("")()
+	m := msg.(FilesMsg)
+	if m.Message != "No files in context" {
+		t.Errorf("expected 'No files in context', got %q", m.Message)
+	}
+}
+
+func TestFiles_WithFiles(t *testing.T) {
+	h := newFilesHandler(FilesDeps{GetFiles: func() []string { return []string{"a.go", "b.go"} }})
+	msg := h("")()
+	m := msg.(FilesMsg)
+	if !strings.HasPrefix(m.Message, "Files in context:\n") {
+		t.Errorf("expected 'Files in context:' header, got %q", m.Message)
+	}
+	if !strings.Contains(m.Message, "a.go") || !strings.Contains(m.Message, "b.go") {
+		t.Errorf("expected file names, got %q", m.Message)
+	}
+}
+
+func TestFiles_AntOnlyGate(t *testing.T) {
+	t.Setenv("USER_TYPE", "console")
+	d := NewDispatcher()
+	cmd := d.Dispatch("/files")
+	msg := cmd()
+	result, ok := msg.(CommandResult)
+	if !ok {
+		t.Fatalf("expected CommandResult (disabled), got %T", msg)
+	}
+	if result.Error == nil {
+		t.Fatal("expected disabled error for non-ant user")
+	}
+}
+
+func TestFiles_EnabledForAnt(t *testing.T) {
+	t.Setenv("USER_TYPE", "ant")
+	d := NewDispatcher()
+	reg := d.GetRegistration("/files")
+	if reg == nil {
+		t.Fatal("/files not registered")
+	}
+	if reg.IsEnabled != nil && !reg.IsEnabled() {
+		t.Fatal("/files should be enabled for ant users")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T252: /heapdump
+// ---------------------------------------------------------------------------
+
+func TestHeapdump_WritesProfile(t *testing.T) {
+	// Replace writeHeapProfile with a stub to avoid real profiling
+	orig := writeHeapProfile
+	defer func() { writeHeapProfile = orig }()
+	writeHeapProfile = func(w io.Writer) error {
+		_, err := w.Write([]byte("fake-heap"))
+		return err
+	}
+
+	h := newHeapdumpHandler()
+	msg := h("")()
+	m, ok := msg.(HeapdumpMsg)
+	if !ok {
+		t.Fatalf("expected HeapdumpMsg, got %T", msg)
+	}
+	if m.Error != nil {
+		t.Fatalf("unexpected error: %v", m.Error)
+	}
+	if m.Path == "" {
+		t.Fatal("expected non-empty path")
+	}
+	if !strings.Contains(m.Message, m.Path) {
+		t.Errorf("message should contain path, got %q", m.Message)
+	}
+	// Verify file was written
+	data, err := os.ReadFile(m.Path)
+	if err != nil {
+		t.Fatalf("cannot read heap dump: %v", err)
+	}
+	if string(data) != "fake-heap" {
+		t.Errorf("expected 'fake-heap', got %q", string(data))
+	}
+	os.Remove(m.Path)
+}
+
+func TestHeapdump_Hidden(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/heapdump")
+	if reg == nil {
+		t.Fatal("/heapdump not registered")
+	}
+	if !reg.IsHidden {
+		t.Error("/heapdump should be hidden")
+	}
+}
+
+func TestHeapdump_ProfileError(t *testing.T) {
+	orig := writeHeapProfile
+	defer func() { writeHeapProfile = orig }()
+	writeHeapProfile = func(w io.Writer) error {
+		return fmt.Errorf("pprof failure")
+	}
+
+	h := newHeapdumpHandler()
+	msg := h("")()
+	m := msg.(HeapdumpMsg)
+	if m.Error == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(m.Error.Error(), "pprof failure") {
+		t.Errorf("expected pprof failure message, got %q", m.Error.Error())
 	}
 }

@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -220,6 +222,36 @@ type ExportMsg struct {
 // ColorMsg is returned when /color sets or resets the prompt bar color.
 type ColorMsg struct {
 	Color   string
+	Message string
+	Error   error
+}
+
+// ExtraUsageMsg is returned when /extra-usage shows billing configuration info.
+type ExtraUsageMsg struct {
+	Message string
+	Error   error
+}
+
+// FastModeMsg is returned when /fast toggles fast mode.
+type FastModeMsg struct {
+	Enabled bool
+	Message string
+	Error   error
+}
+
+// FeedbackMsg is returned when /feedback shows feedback URL.
+type FeedbackMsg struct {
+	Message string
+}
+
+// FilesMsg is returned when /files lists files in context.
+type FilesMsg struct {
+	Message string
+}
+
+// HeapdumpMsg is returned when /heapdump writes a heap profile.
+type HeapdumpMsg struct {
+	Path    string
 	Message string
 	Error   error
 }
@@ -1733,6 +1765,142 @@ func newExportHandler(deps ExportDeps) Handler {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// T248: /extra-usage — billing configuration stub
+// Source: src/commands/extra-usage.ts
+// ---------------------------------------------------------------------------
+
+// newExtraUsageHandler creates the /extra-usage command handler.
+// For claude.ai users it shows the billing URL; for others it returns an error.
+func newExtraUsageHandler(getUserType func() string) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			ut := getUserType()
+			if ut != "claude-ai" {
+				return ExtraUsageMsg{
+					Error: fmt.Errorf("extra usage configuration is only available for Claude.ai users"),
+				}
+			}
+			return ExtraUsageMsg{
+				Message: "Configure extra usage at https://claude.ai/settings/billing",
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T249: /fast — toggle fast mode
+// Source: src/commands/fast.ts
+// ---------------------------------------------------------------------------
+
+// FastModeDeps holds state accessors for the /fast command.
+type FastModeDeps struct {
+	GetEnabled func() bool
+	SetEnabled func(bool)
+}
+
+// newFastHandler creates the /fast command handler.
+// Accepts optional on|off argument; no argument toggles.
+func newFastHandler(deps FastModeDeps) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			arg := strings.TrimSpace(strings.ToLower(args))
+			var enabled bool
+			switch arg {
+			case "on":
+				enabled = true
+			case "off":
+				enabled = false
+			case "":
+				enabled = !deps.GetEnabled()
+			default:
+				return FastModeMsg{Error: fmt.Errorf("usage: /fast [on|off]")}
+			}
+			deps.SetEnabled(enabled)
+			label := "disabled"
+			if enabled {
+				label = "enabled"
+			}
+			return FastModeMsg{Enabled: enabled, Message: fmt.Sprintf("Fast mode %s", label)}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T250: /feedback — submit feedback URL stub
+// Source: src/commands/feedback.ts
+// ---------------------------------------------------------------------------
+
+// newFeedbackHandler creates the /feedback command handler.
+// Returns the feedback URL. Respects DISABLE_FEEDBACK_COMMAND env var.
+func newFeedbackHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			return FeedbackMsg{
+				Message: "Submit feedback at https://github.com/anthropics/claude-code/issues",
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T251: /files — list files in context (ant-only)
+// Source: src/commands/files.ts
+// ---------------------------------------------------------------------------
+
+// FilesDeps holds state accessors for the /files command.
+type FilesDeps struct {
+	GetFiles func() []string
+}
+
+// newFilesHandler creates the /files command handler.
+// Lists files currently in the conversation context.
+func newFilesHandler(deps FilesDeps) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			files := deps.GetFiles()
+			if len(files) == 0 {
+				return FilesMsg{Message: "No files in context"}
+			}
+			var b strings.Builder
+			b.WriteString("Files in context:\n")
+			for _, f := range files {
+				b.WriteString("  " + f + "\n")
+			}
+			return FilesMsg{Message: strings.TrimRight(b.String(), "\n")}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T252: /heapdump — write heap profile (hidden)
+// Source: src/commands/heapdump.ts
+// ---------------------------------------------------------------------------
+
+// writeHeapProfile is the default heap profiler (wraps pprof.WriteHeapProfile).
+// It is a package-level var so tests can replace it.
+var writeHeapProfile func(w io.Writer) error = pprof.WriteHeapProfile
+
+// newHeapdumpHandler creates the /heapdump command handler.
+// Uses runtime/pprof to write a heap profile to a temp file.
+func newHeapdumpHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			path := filepath.Join(os.TempDir(), fmt.Sprintf("heapdump-%d.pb.gz", time.Now().UnixMilli()))
+			f, err := os.Create(path)
+			if err != nil {
+				return HeapdumpMsg{Error: fmt.Errorf("Failed: %s", err)}
+			}
+			defer f.Close()
+			if err := writeHeapProfile(f); err != nil {
+				os.Remove(path)
+				return HeapdumpMsg{Error: fmt.Errorf("Failed: %s", err)}
+			}
+			return HeapdumpMsg{Path: path, Message: fmt.Sprintf("Heap dump written to %s", path)}
+		}
+	}
+}
+
 func (d *Dispatcher) registerDefaults() {
 	d.Register("/model", func(args string) tea.Cmd {
 		if args == "" {
@@ -2023,5 +2191,64 @@ func (d *Dispatcher) registerDefaults() {
 		Handler: newExportHandler(ExportDeps{
 			GetMessages: func() []message.Message { return nil },
 		}),
+	})
+
+	// T248: /extra-usage — billing configuration stub
+	d.RegisterCommand(CommandRegistration{
+		Name:         "extra-usage",
+		Description:  "Configure extra usage billing",
+		Type:         CommandTypeLocal,
+		Availability: []CommandAvailability{AvailabilityClaudeAI},
+		Source:       "builtin",
+		Handler:      newExtraUsageHandler(func() string { return os.Getenv("USER_TYPE") }),
+	})
+
+	// T249: /fast — toggle fast mode
+	d.RegisterCommand(CommandRegistration{
+		Name:         "fast",
+		Description:  "Toggle fast mode",
+		Type:         CommandTypeLocal,
+		ArgumentHint: "[on|off]",
+		Source:       "builtin",
+		Handler: newFastHandler(FastModeDeps{
+			GetEnabled: func() bool { return false },
+			SetEnabled: func(bool) {},
+		}),
+	})
+
+	// T250: /feedback — submit feedback
+	d.RegisterCommand(CommandRegistration{
+		Name:        "feedback",
+		Description: "Submit feedback",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		IsEnabled: func() bool {
+			return os.Getenv("DISABLE_FEEDBACK_COMMAND") == ""
+		},
+		Handler: newFeedbackHandler(),
+	})
+
+	// T251: /files — list files in context (ant-only)
+	d.RegisterCommand(CommandRegistration{
+		Name:        "files",
+		Description: "List files in context",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		IsEnabled: func() bool {
+			return os.Getenv("USER_TYPE") == "ant"
+		},
+		Handler: newFilesHandler(FilesDeps{
+			GetFiles: func() []string { return nil },
+		}),
+	})
+
+	// T252: /heapdump — write heap profile (hidden)
+	d.RegisterCommand(CommandRegistration{
+		Name:        "heapdump",
+		Description: "Write heap profile",
+		Type:        CommandTypeLocal,
+		IsHidden:    true,
+		Source:      "builtin",
+		Handler:     newHeapdumpHandler(),
 	})
 }
