@@ -285,6 +285,18 @@ func main() {
 		// T173: Construct the BridgeAPIClient for the orchestrator/REPL bridge.
 		_ = bridge.NewBridgeAPIClientFromConfig(rcCfg, func() string { return "" }, nil)
 
+		// T180: Construct SessionClient for org-scoped session API calls.
+		// The orchestrator will use this to create/get/archive sessions via
+		// POST/GET /v1/sessions during the remote-control lifecycle.
+		sessionClient := bridge.NewSessionClient(bridge.SessionClientConfig{
+			BaseURL:        bridgeURL,
+			GetAccessToken: func() string { tok, _ := bridgeDeps.GetAccessToken(); return tok },
+			GetOrgUUID:     func() string { return "" }, // resolved at session-creation time
+			GetModel:       func() string { return "" }, // resolved at session-creation time
+			OnDebug:        func(msg string) { slog.Debug(msg) },
+		})
+		_ = sessionClient // used by orchestrator once bridge REPL is wired
+
 		// T179: If a work secret is provided via env, decode and validate it
 		// during bridge session init so we fail fast on malformed secrets.
 		if wsEnv := os.Getenv("CLAUDE_CODE_WORK_SECRET"); wsEnv != "" {

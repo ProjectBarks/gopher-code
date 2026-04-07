@@ -650,6 +650,84 @@ func TestCreateBridgeSession_GitContextShape(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Integration: SessionClient constructed as in main.go remote-control handler
+// ---------------------------------------------------------------------------
+
+func TestSessionClient_IntegrationWithBridgeDeps(t *testing.T) {
+	// Simulate the full create → get → archive lifecycle as wired in main.go.
+	var createCalled, getCalled, archiveCalled bool
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/sessions":
+			createCalled = true
+			w.WriteHeader(201)
+			json.NewEncoder(w).Encode(map[string]string{"id": "sess-integ-1"})
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/sessions/sess-integ-1"):
+			getCalled = true
+			w.WriteHeader(200)
+			json.NewEncoder(w).Encode(map[string]string{"environment_id": "env-1", "title": "Integ"})
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/archive"):
+			archiveCalled = true
+			w.WriteHeader(200)
+			w.Write([]byte("{}"))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.Error(w, "not found", 404)
+		}
+	}))
+	defer srv.Close()
+
+	// Construct SessionClient exactly as main.go does: bridgeURL from config,
+	// token from bridgeDeps.GetAccessToken, org/model resolved lazily.
+	bridgeURL := srv.URL
+	getAccessToken := func() (string, bool) { return "tok-integ", true }
+
+	sc := NewSessionClient(SessionClientConfig{
+		BaseURL:        bridgeURL,
+		GetAccessToken: func() string { tok, _ := getAccessToken(); return tok },
+		GetOrgUUID:     func() string { return "org-integ" },
+		GetModel:       func() string { return "claude-sonnet-4-20250514" },
+		OnDebug:        func(msg string) { t.Logf("debug: %s", msg) },
+	})
+
+	ctx := context.Background()
+
+	// 1. Create session
+	id, err := sc.CreateBridgeSession(ctx, CreateBridgeSessionOpts{
+		EnvironmentID: "env-1",
+		Events:        []SessionEvent{{Type: "text", Data: "start"}},
+		GitRepoURL:    "https://github.com/acme/proj",
+		Branch:        "main",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if id != "sess-integ-1" {
+		t.Fatalf("id = %q", id)
+	}
+
+	// 2. Get session
+	info, err := sc.GetBridgeSession(ctx, id)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if info.Title != "Integ" {
+		t.Errorf("title = %q", info.Title)
+	}
+
+	// 3. Archive session
+	if err := sc.ArchiveBridgeSession(ctx, id, nil); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+
+	if !createCalled || !getCalled || !archiveCalled {
+		t.Errorf("lifecycle incomplete: create=%v get=%v archive=%v", createCalled, getCalled, archiveCalled)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // CreateBridgeSession — empty git context produces empty arrays
 // ---------------------------------------------------------------------------
 
