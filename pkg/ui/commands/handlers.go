@@ -113,6 +113,17 @@ type ModelSwitchMsg struct {
 	Model string
 }
 
+// ModelShowMsg is returned when /model is called with no arguments to display the current model.
+type ModelShowMsg struct {
+	Message string
+}
+
+// ModelState holds the current model name for the /model command.
+type ModelState struct {
+	// CurrentModel returns the currently active model name.
+	CurrentModel func() string
+}
+
 // SessionSwitchMsg requests switching sessions.
 type SessionSwitchMsg struct{}
 
@@ -790,6 +801,37 @@ func newAddDirHandler(getWorkingDirs func() []string) Handler {
 				Message: msg,
 				Error:   err,
 			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T267: /model picker command
+// Source: src/commands/model.ts
+// ---------------------------------------------------------------------------
+
+// newModelHandler creates the /model command handler.
+// With no arguments it shows the current model; with an argument it switches.
+func newModelHandler(state ModelState) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			arg := strings.TrimSpace(args)
+
+			// No argument: show current model
+			if arg == "" {
+				cur := ""
+				if state.CurrentModel != nil {
+					cur = state.CurrentModel()
+				}
+				if cur == "" {
+					cur = "(unknown)"
+				}
+				return ModelShowMsg{
+					Message: fmt.Sprintf("Current model: %s\nUse \"/model <name>\" to switch (e.g. \"/model sonnet\", \"/model opus\").", cur),
+				}
+			}
+
+			return ModelSwitchMsg{Model: arg}
 		}
 	}
 }
@@ -2782,13 +2824,17 @@ func newMobileHandler() Handler {
 }
 
 func (d *Dispatcher) registerDefaults() {
-	d.Register("/model", func(args string) tea.Cmd {
-		if args == "" {
-			return func() tea.Msg {
-				return CommandResult{Command: "/model", Error: fmt.Errorf("usage: /model <name>")}
-			}
-		}
-		return func() tea.Msg { return ModelSwitchMsg{Model: args} }
+	// T267: /model — picker command (show current or switch model)
+	d.RegisterCommand(CommandRegistration{
+		Name:         "model",
+		Description:  "Show or switch the current model",
+		Type:         CommandTypeLocal,
+		ArgumentHint: "[model-name]",
+		Immediate:    true,
+		Source:       "builtin",
+		Handler: newModelHandler(ModelState{
+			CurrentModel: func() string { return "" },
+		}),
 	})
 
 	d.Register("/session", func(args string) tea.Cmd {
