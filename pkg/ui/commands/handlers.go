@@ -152,6 +152,11 @@ type InstallGitHubAppMsg struct {
 	Message string
 }
 
+// LoginMsg is returned when /login is invoked.
+type LoginMsg struct {
+	Message string
+}
+
 // AgentsMsg is returned when /agents lists agent configurations.
 type AgentsMsg struct {
 	Message string
@@ -2532,6 +2537,21 @@ func newInstallGitHubAppHandler() Handler {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// T262: /login — OAuth login flow (stub)
+// Source: src/commands/login.ts
+// ---------------------------------------------------------------------------
+
+func newLoginHandler() Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			return LoginMsg{
+				Message: "To authenticate, run `claude auth login` from the CLI.",
+			}
+		}
+	}
+}
+
 func (d *Dispatcher) registerDefaults() {
 	d.Register("/model", func(args string) tea.Cmd {
 		if args == "" {
@@ -2957,5 +2977,15 @@ func (d *Dispatcher) registerDefaults() {
 		Type:        CommandTypeLocal,
 		Source:      "builtin",
 		Handler:     newInstallGitHubAppHandler(),
+	})
+
+	// T262: /login — OAuth login flow (stub)
+	d.RegisterCommand(CommandRegistration{
+		Name:        "login",
+		Description: "Log in to your Anthropic account",
+		Type:        CommandTypeLocal,
+		Immediate:   true,
+		Source:      "builtin",
+		Handler:     newLoginHandler(),
 	})
 }
