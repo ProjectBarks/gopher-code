@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -241,6 +243,96 @@ func TestTrustedDevice_LoadSaveValidateCycle(t *testing.T) {
 	_, err := kr.Get(keyringService, keyringUser)
 	if err == nil {
 		t.Fatal("expected keyring to be empty after ClearToken")
+	}
+}
+
+// TestSessionRunnerLifecycleIntegration exercises the full SessionRunner
+// lifecycle: create → start (idle→starting→running) → heartbeat fires →
+// stop (running→stopping→done) → verify archive called and Done closed.
+func TestSessionRunnerLifecycleIntegration(t *testing.T) {
+	// Build a mock API that tracks heartbeats and archives.
+	api := newMockAPI() // from session_runner_test.go
+
+	// Track state transitions.
+	var transitions []string
+	var tmu sync.Mutex
+	recordTransition := func(from, to RunnerState) {
+		tmu.Lock()
+		transitions = append(transitions, from.String()+"->"+to.String())
+		tmu.Unlock()
+	}
+
+	runner := NewSessionRunner(SessionRunnerDeps{
+		API:               api,
+		EnvironmentID:     "env-integration-1",
+		HeartbeatInterval: 25 * time.Millisecond,
+		OnStateChange:     recordTransition,
+		OnDebug:           func(msg string) { t.Logf("debug: %s", msg) },
+	})
+
+	// Phase 1: verify idle state.
+	if runner.State() != RunnerIdle {
+		t.Fatalf("initial state = %s, want idle", runner.State())
+	}
+
+	// Phase 2: start with a valid work response.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	work := validWorkResponse() // from session_runner_test.go
+	if err := runner.Start(ctx, work); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if runner.State() != RunnerRunning {
+		t.Fatalf("post-start state = %s, want running", runner.State())
+	}
+	if runner.WorkID() != work.ID {
+		t.Errorf("WorkID = %q, want %q", runner.WorkID(), work.ID)
+	}
+	if runner.SessionID() != work.Data.ID {
+		t.Errorf("SessionID = %q, want %q", runner.SessionID(), work.Data.ID)
+	}
+
+	// Phase 3: wait for at least one heartbeat to fire.
+	time.Sleep(80 * time.Millisecond)
+	if calls := api.getHeartbeatCalls(); calls < 1 {
+		t.Errorf("heartbeat calls = %d, want >= 1", calls)
+	}
+
+	// Phase 4: stop gracefully.
+	runner.Stop(StopReasonCompleted)
+
+	// Phase 5: verify terminal state.
+	if runner.State() != RunnerDone {
+		t.Fatalf("post-stop state = %s, want done", runner.State())
+	}
+	if runner.StopReasonValue() != StopReasonCompleted {
+		t.Errorf("stop reason = %q, want completed", runner.StopReasonValue())
+	}
+
+	// Done channel must be closed.
+	select {
+	case <-runner.Done():
+	default:
+		t.Fatal("Done channel not closed after Stop")
+	}
+
+	// Archive should have been called exactly once with the session ID.
+	if calls := api.getArchiveCalls(); calls != 1 {
+		t.Errorf("archive calls = %d, want 1", calls)
+	}
+
+	// Verify the full transition chain.
+	tmu.Lock()
+	defer tmu.Unlock()
+	expected := []string{"idle->starting", "starting->running", "running->stopping", "stopping->done"}
+	if len(transitions) != len(expected) {
+		t.Fatalf("transitions = %v, want %v", transitions, expected)
+	}
+	for i, want := range expected {
+		if transitions[i] != want {
+			t.Errorf("transition[%d] = %q, want %q", i, transitions[i], want)
+		}
 	}
 }
 

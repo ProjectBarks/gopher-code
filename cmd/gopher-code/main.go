@@ -283,7 +283,23 @@ func main() {
 		}
 
 		// T173: Construct the BridgeAPIClient for the orchestrator/REPL bridge.
-		_ = bridge.NewBridgeAPIClientFromConfig(rcCfg, func() string { return "" }, nil)
+		apiClient := bridge.NewBridgeAPIClientFromConfig(rcCfg, func() string { return "" }, nil)
+
+		// T181: Construct SessionRunner so the lifecycle state machine is linked
+		// into the binary. The runner manages heartbeat, archive, and graceful
+		// shutdown for each bridge work item.
+		sessionRunner := bridge.NewSessionRunner(bridge.SessionRunnerDeps{
+			API:           apiClient,
+			EnvironmentID: "",                          // set after RegisterBridgeEnvironment
+			OnDebug:       func(msg string) { slog.Debug(msg) },
+			OnStateChange: func(from, to bridge.RunnerState) {
+				slog.Debug("bridge: session runner state change", "from", from, "to", to)
+			},
+			OnFatalError: func(err error) {
+				slog.Error("bridge: session runner fatal error", "error", err)
+			},
+		})
+		_ = sessionRunner
 
 		// T179: If a work secret is provided via env, decode and validate it
 		// during bridge session init so we fail fast on malformed secrets.
