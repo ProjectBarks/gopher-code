@@ -462,7 +462,7 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleThinkingToggle()
 
 	case commands.ShowHelpMsg:
-		helpText := "Commands: /help /clear /model <name> /session /quit /compact /thinking /doctor /resume"
+		helpText := a.dispatcher.HelpText()
 		helpMsg := message.Message{
 			Role:    message.RoleAssistant,
 			Content: []message.ContentBlock{{Type: message.ContentText, Text: helpText}},

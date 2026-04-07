@@ -78,6 +78,65 @@ func TestDispatcherHelpCommand(t *testing.T) {
 	}
 }
 
+// T253: HelpV2 screen integration tests
+func TestHelpV2Text(t *testing.T) {
+	d := NewDispatcher()
+	helpText := d.HelpText()
+
+	// Must contain section headers
+	if !strings.Contains(helpText, "Available slash commands:") {
+		t.Error("HelpText should contain 'Available slash commands:' header")
+	}
+	if !strings.Contains(helpText, "Keybindings:") {
+		t.Error("HelpText should contain 'Keybindings:' section")
+	}
+	if !strings.Contains(helpText, "Tips:") {
+		t.Error("HelpText should contain 'Tips:' section")
+	}
+
+	// Must list known commands
+	for _, cmd := range []string{"/help", "/clear", "/compact", "/exit", "/model", "/cost", "/diff"} {
+		if !strings.Contains(helpText, cmd) {
+			t.Errorf("HelpText should list %s", cmd)
+		}
+	}
+
+	// Must NOT list hidden commands
+	if strings.Contains(helpText, "/heapdump") {
+		t.Error("HelpText should not list hidden command /heapdump")
+	}
+	if strings.Contains(helpText, "/bridge-kick") {
+		t.Error("HelpText should not list hidden command /bridge-kick")
+	}
+}
+
+func TestHelpV2Alias(t *testing.T) {
+	d := NewDispatcher()
+	// /? should be an alias for /help
+	cmd := d.Dispatch("/?")
+	if cmd == nil {
+		t.Fatal("/? should be dispatched as /help alias")
+	}
+	msg := cmd()
+	if _, ok := msg.(ShowHelpMsg); !ok {
+		t.Errorf("/? should produce ShowHelpMsg, got %T", msg)
+	}
+}
+
+func TestHelpV2Registration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/help")
+	if reg == nil {
+		t.Fatal("/help should have a full registration")
+	}
+	if reg.Description == "" {
+		t.Error("/help registration should have a description")
+	}
+	if reg.Type != CommandTypeLocal {
+		t.Errorf("Expected CommandTypeLocal, got %v", reg.Type)
+	}
+}
+
 func TestDispatcherUnknownCommand(t *testing.T) {
 	d := NewDispatcher()
 	cmd := d.Dispatch("/unknown")

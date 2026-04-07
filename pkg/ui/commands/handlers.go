@@ -426,6 +426,106 @@ func (d *Dispatcher) Commands() []string {
 	return cmds
 }
 
+// HelpText builds a formatted help screen listing all visible commands,
+// keybindings, and tips. This matches the HelpV2 screen from Claude Code TS.
+func (d *Dispatcher) HelpText() string {
+	var b strings.Builder
+
+	b.WriteString("Available slash commands:\n\n")
+
+	// Collect visible commands sorted by name.
+	regs := d.Registrations()
+	// Also include simple-registered commands that lack full registrations.
+	simpleOnly := make(map[string]bool)
+	for name := range d.handlers {
+		if _, hasReg := d.registrations[name]; !hasReg {
+			if _, isAlias := d.aliases[name]; !isAlias {
+				simpleOnly[name] = true
+			}
+		}
+	}
+
+	type entry struct {
+		Name string
+		Desc string
+		Hint string
+	}
+	var entries []entry
+	for _, r := range regs {
+		if r.IsHidden {
+			continue
+		}
+		if r.IsEnabled != nil && !r.IsEnabled() {
+			continue
+		}
+		name := "/" + strings.TrimPrefix(r.Name, "/")
+		entries = append(entries, entry{Name: name, Desc: r.Description, Hint: r.ArgumentHint})
+	}
+	for name := range simpleOnly {
+		desc := ""
+		switch name {
+		case "/model":
+			desc = "Switch model"
+		case "/session":
+			desc = "Switch session"
+		case "/thinking":
+			desc = "Toggle extended thinking"
+		case "/doctor":
+			desc = "Check system health"
+		case "/resume":
+			desc = "Resume a previous session"
+		}
+		entries = append(entries, entry{Name: name, Desc: desc})
+	}
+
+	// Sort entries by name (insertion sort — small N).
+	for i := 1; i < len(entries); i++ {
+		for j := i; j > 0 && entries[j].Name < entries[j-1].Name; j-- {
+			entries[j], entries[j-1] = entries[j-1], entries[j]
+		}
+	}
+
+	// Find max name+hint width for alignment.
+	maxWidth := 0
+	for _, e := range entries {
+		w := len(e.Name)
+		if e.Hint != "" {
+			w += 1 + len(e.Hint)
+		}
+		if w > maxWidth {
+			maxWidth = w
+		}
+	}
+
+	for _, e := range entries {
+		left := e.Name
+		if e.Hint != "" {
+			left += " " + e.Hint
+		}
+		padding := strings.Repeat(" ", maxWidth-len(left)+2)
+		b.WriteString("  " + left + padding + e.Desc + "\n")
+	}
+
+	// Keybindings section
+	b.WriteString("\nKeybindings:\n\n")
+	b.WriteString("  Enter            Submit message\n")
+	b.WriteString("  Ctrl+C           Quit / cancel current operation\n")
+	b.WriteString("  Ctrl+J           Insert newline\n")
+	b.WriteString("  Esc              Interrupt streaming response\n")
+	b.WriteString("  Up/Down          Navigate history\n")
+	b.WriteString("  Tab              Autocomplete commands\n")
+
+	// Tips section
+	b.WriteString("\nTips:\n\n")
+	b.WriteString("  - Start a message with / to see available commands\n")
+	b.WriteString("  - Use /compact to reduce context when conversations get long\n")
+	b.WriteString("  - Use /model to switch between available models\n")
+	b.WriteString("  - Use /cost to check your current session token usage\n")
+
+	return b.String()
+}
+
+
 // ---------------------------------------------------------------------------
 // T224: createMovedToPluginCommand factory
 // Source: src/commands/createMovedToPluginCommand.ts
@@ -1960,8 +2060,17 @@ func (d *Dispatcher) registerDefaults() {
 		}),
 	})
 
-	d.Register("/help", func(args string) tea.Cmd {
-		return func() tea.Msg { return ShowHelpMsg{} }
+	// T253: /help — HelpV2 screen showing available commands, keybindings, tips
+	d.RegisterCommand(CommandRegistration{
+		Name:        "help",
+		Description: "Show available commands and keybindings",
+		Type:        CommandTypeLocal,
+		Aliases:     []string{"?"},
+		Immediate:   true,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg { return ShowHelpMsg{} }
+		},
 	})
 
 	// NOTE: /quit is now an alias for /exit (T246), registered below.
