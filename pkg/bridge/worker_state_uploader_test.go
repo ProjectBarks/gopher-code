@@ -432,3 +432,61 @@ func TestWorkerStateUploader_CloseStopsRetry(t *testing.T) {
 		t.Errorf("sends after close: before=%d, after=%d", countAtClose, countAfter)
 	}
 }
+
+// ---------- Integration: WorkerStateUploader with CCRClient.PutWorker ----------
+
+func TestWorkerStateUploader_PutWorkerIntegration(t *testing.T) {
+	// Verify WorkerStateUploader works with a CCRClient-style PutWorker func.
+	var mu sync.Mutex
+	var bodies []map[string]any
+
+	// Simulate the PutWorker signature: func(map[string]any) bool
+	putWorker := func(body map[string]any) bool {
+		mu.Lock()
+		bodies = append(bodies, body)
+		mu.Unlock()
+		return true
+	}
+
+	u := NewWorkerStateUploader(WorkerStateUploaderConfig{
+		Send:      putWorker,
+		BaseDelay: time.Millisecond,
+		MaxDelay:  10 * time.Millisecond,
+		Jitter:    0,
+	})
+	defer u.Close()
+
+	// Simulate a state update followed by a metadata update — the two should
+	// coalesce if they arrive while the first send is in-flight.
+	u.Enqueue(map[string]any{
+		"worker_status": "busy",
+		"worker_epoch":  1,
+	})
+
+	// Wait for at least one delivery.
+	deadline := time.After(time.Second)
+	for {
+		mu.Lock()
+		n := len(bodies)
+		mu.Unlock()
+		if n > 0 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for PutWorker call")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if bodies[0]["worker_status"] != "busy" {
+		t.Errorf("worker_status = %v, want busy", bodies[0]["worker_status"])
+	}
+	if bodies[0]["worker_epoch"] != 1 {
+		t.Errorf("worker_epoch = %v, want 1", bodies[0]["worker_epoch"])
+	}
+}

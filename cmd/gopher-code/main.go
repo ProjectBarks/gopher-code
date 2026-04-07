@@ -671,6 +671,21 @@ func main() {
 			}
 		}
 
+		// T218: Construct WorkerStateUploader — coalesces PUT /worker patches
+		// and sends them through the CCRClient.  Closed on session teardown.
+		var workerUploader *bridge.WorkerStateUploader
+		if ccrClient != nil {
+			workerUploader = bridge.NewWorkerStateUploader(bridge.WorkerStateUploaderConfig{
+				Send:      ccrClient.PutWorker,
+				BaseDelay: 500 * time.Millisecond,
+				MaxDelay:  30 * time.Second,
+				Jitter:    200 * time.Millisecond,
+			})
+			defer workerUploader.Close()
+			slog.Debug("bridge: WorkerStateUploader constructed")
+		}
+
+		_ = workerUploader
 		_ = ccrClient
 		_ = remoteBridgeCore
 		_ = replBridge
