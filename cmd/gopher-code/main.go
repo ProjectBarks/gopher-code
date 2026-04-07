@@ -13,6 +13,7 @@ import (
 
 	"github.com/projectbarks/gopher-code/internal/cli"
 	"github.com/projectbarks/gopher-code/pkg/auth"
+	"github.com/projectbarks/gopher-code/pkg/bridge"
 	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/config"
 	"github.com/projectbarks/gopher-code/pkg/hooks"
@@ -159,11 +160,27 @@ func main() {
 		if len(os.Args) > 2 {
 			rcName = strings.Join(os.Args[2:], " ")
 		}
+
+		// T170: Resolve bridge connection config (URL + token) for the remote-control session.
+		// Priority: ant-only env overrides > OAuth keychain/production defaults.
+		bridgeDeps := bridge.ConfigDeps{
+			GetAccessToken: func() (string, bool) {
+				key, err := auth.GetAPIKey()
+				if err != nil {
+					return "", false
+				}
+				return key, true
+			},
+			GetBaseAPIURL: func() string { return "https://api.anthropic.com" },
+		}
+		bridgeURL := bridge.BridgeBaseURL(bridgeDeps)
+		_, bridgeAuthed := bridge.BridgeAccessToken(bridgeDeps)
+
 		fmt.Fprintf(os.Stderr, "Starting remote control session")
 		if rcName != "" {
 			fmt.Fprintf(os.Stderr, " %q", rcName)
 		}
-		fmt.Fprintln(os.Stderr, "...")
+		fmt.Fprintf(os.Stderr, " (bridge: %s, authed: %v)\n", bridgeURL, bridgeAuthed)
 		// TODO(T195+): Wire full bridge REPL init once bridge core is implemented.
 		// For now, exit cleanly after printing the intent.
 		_ = rcName
