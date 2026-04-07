@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/projectbarks/gopher-code/pkg/session"
 )
 
 // ---------------------------------------------------------------------------
@@ -405,6 +408,71 @@ func TestWorkSecretEncryptionRoundTrip(t *testing.T) {
 	if localURL != wantLocal {
 		t.Errorf("BuildSdkUrl (localhost) = %q, want %q", localURL, wantLocal)
 	}
+}
+
+// TestBridgePointerLifecycleIntegration exercises the full bridge pointer
+// lifecycle: write → read (fresh) → clear → read (missing), mirroring the
+// remote-control session path in the binary (T192).
+func TestBridgePointerLifecycleIntegration(t *testing.T) {
+	tmp := t.TempDir()
+	session.SetHomeDirForTest(tmp)
+
+	dir := "/projects/rc-session"
+	dbg := NewBridgeDebug(LogLevelDebug, DefaultBufferSize, nil)
+
+	ptr := BridgePointer{
+		SessionID:     "sess-rc-1",
+		EnvironmentID: "env-rc-1",
+		Source:        PointerSourceREPL,
+	}
+
+	// Phase 1: Write pointer (as the binary does on remote-control start).
+	if err := WriteBridgePointer(dir, ptr, dbg); err != nil {
+		t.Fatalf("WriteBridgePointer: %v", err)
+	}
+
+	// Phase 2: Read back and verify fields + freshness.
+	got := ReadBridgePointer(dir, dbg)
+	if got == nil {
+		t.Fatal("ReadBridgePointer returned nil for freshly written pointer")
+	}
+	if got.SessionID != ptr.SessionID {
+		t.Errorf("SessionID = %q, want %q", got.SessionID, ptr.SessionID)
+	}
+	if got.EnvironmentID != ptr.EnvironmentID {
+		t.Errorf("EnvironmentID = %q, want %q", got.EnvironmentID, ptr.EnvironmentID)
+	}
+	if got.Source != PointerSourceREPL {
+		t.Errorf("Source = %q, want %q", got.Source, PointerSourceREPL)
+	}
+	if got.AgeMs < 0 || got.AgeMs > int64(BridgePointerTTL.Milliseconds()) {
+		t.Errorf("AgeMs = %d, outside expected range", got.AgeMs)
+	}
+
+	// Phase 3: Verify JSON on disk contains expected keys.
+	path := GetBridgePointerPath(dir)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatalf("JSON unmarshal: %v", err)
+	}
+	if m["sessionId"] != "sess-rc-1" || m["environmentId"] != "env-rc-1" || m["source"] != "repl" {
+		t.Errorf("unexpected JSON content: %v", m)
+	}
+
+	// Phase 4: Clear pointer (as the binary does via defer on exit).
+	ClearBridgePointer(dir, dbg)
+
+	// Phase 5: Read after clear returns nil.
+	if got := ReadBridgePointer(dir, dbg); got != nil {
+		t.Error("expected nil after ClearBridgePointer")
+	}
+
+	// Phase 6: Clear again is idempotent (no panic).
+	ClearBridgePointer(dir, dbg)
 }
 
 // TestStatusMachineLifecycleIntegration exercises the full bridge status state

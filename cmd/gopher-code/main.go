@@ -418,6 +418,20 @@ func main() {
 			)
 		}
 
+		// T192: Write bridge pointer so crash-recovery and --continue can
+		// locate this remote-control session. Clear on clean exit.
+		bridgePtr := bridge.BridgePointer{
+			SessionID:     "", // populated after RegisterBridgeEnvironment (T195+)
+			EnvironmentID: "", // populated after RegisterBridgeEnvironment (T195+)
+			Source:        bridge.PointerSourceREPL,
+		}
+		// Best-effort write; fields are empty until registration completes but
+		// the pointer file is created so the directory is warm for later refresh.
+		if bridgePtr.SessionID != "" && bridgePtr.EnvironmentID != "" {
+			_ = bridge.WriteBridgePointer(rcCwd, bridgePtr, bridgeDebug)
+		}
+		defer bridge.ClearBridgePointer(rcCwd, bridgeDebug)
+
 		// TODO(T195+): Wire full bridge REPL init once bridge core is implemented.
 		_ = rcCfg
 		_ = pollCfg
@@ -427,6 +441,7 @@ func main() {
 		_ = bridgeMessaging
 		_ = parseInbound
 		_ = bridgeDebug
+		_ = bridgePtr
 		cliOk("")
 	}
 
