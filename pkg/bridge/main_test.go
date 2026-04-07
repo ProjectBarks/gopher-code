@@ -659,3 +659,161 @@ func TestMainConstants(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Integration: orchestrator construction and wiring
+// ---------------------------------------------------------------------------
+
+func TestOrchestratorConstruction_DefaultsAreUsable(t *testing.T) {
+	t.Parallel()
+
+	orch := NewBridgeOrchestrator()
+
+	// Verify default backoff matches package defaults.
+	if orch.Backoff != DefaultBackoff {
+		t.Error("expected default backoff config")
+	}
+
+	// PollConfig must be non-nil.
+	if orch.PollConfig == nil {
+		t.Fatal("expected non-nil PollConfig")
+	}
+
+	// Internal maps must be initialised (not nil).
+	if orch.ActiveSessionCount() != 0 {
+		t.Errorf("expected 0 active sessions, got %d", orch.ActiveSessionCount())
+	}
+
+	// Done channel must be non-nil.
+	select {
+	case <-orch.Done():
+		t.Fatal("Done channel should not be closed on a fresh orchestrator")
+	default:
+		// expected
+	}
+
+	// Now and Sleep hooks must be set.
+	if orch.Now == nil {
+		t.Error("expected non-nil Now func")
+	}
+	if orch.Sleep == nil {
+		t.Error("expected non-nil Sleep func")
+	}
+}
+
+func TestOrchestratorConstruction_WiringMatchesBinary(t *testing.T) {
+	t.Parallel()
+
+	// Simulate the wiring done in cmd/gopher-code/main.go for the
+	// remote-control path: config, API client, debug, poll config.
+	cfg := NewRemoteControlConfig("/tmp/test-wiring", "test-session")
+	apiClient := NewBridgeAPIClientFromConfig(cfg, func() string { return "" }, nil)
+	debug := NewBridgeDebug(LogLevelDebug, DefaultBufferSize, nil)
+	pollCfg := NewDynamicPollConfig(DefaultPollConfig, cfg.MaxSessions > 1)
+
+	orch := NewBridgeOrchestrator()
+	orch.Config = cfg
+	orch.API = apiClient
+	orch.Debug = debug
+	orch.PollConfig = pollCfg
+
+	// Verify all fields are wired correctly.
+	if orch.Config.Dir != "/tmp/test-wiring" {
+		t.Errorf("Config.Dir = %q, want /tmp/test-wiring", orch.Config.Dir)
+	}
+	if orch.API == nil {
+		t.Fatal("API must be non-nil after wiring")
+	}
+	if orch.Debug == nil {
+		t.Fatal("Debug must be non-nil after wiring")
+	}
+	if orch.PollConfig == nil {
+		t.Fatal("PollConfig must be non-nil after wiring")
+	}
+}
+
+func TestOrchestratorDoubleStart(t *testing.T) {
+	t.Parallel()
+
+	api := &mockAPIClient{}
+	orch := NewBridgeOrchestrator()
+	orch.Config = BridgeConfig{Dir: "/tmp/test", MaxSessions: 1}
+	orch.API = api
+	orch.Sleep = func(d time.Duration) { time.Sleep(1 * time.Millisecond) }
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	// Start in background.
+	errCh := make(chan error, 1)
+	go func() { errCh <- orch.Start(ctx) }()
+
+	// Give it time to enter running state.
+	time.Sleep(50 * time.Millisecond)
+
+	// Second Start should fail immediately.
+	err := orch.Start(ctx)
+	if err == nil || !strings.Contains(err.Error(), "already running") {
+		t.Errorf("expected 'already running' error, got: %v", err)
+	}
+
+	cancel()
+	<-errCh
+}
+
+func TestOrchestratorStopBeforeStart(t *testing.T) {
+	t.Parallel()
+
+	orch := NewBridgeOrchestrator()
+	// Stop on a never-started orchestrator should be a no-op (not panic/deadlock).
+	orch.Stop()
+}
+
+func TestOrchestratorHealthcheck(t *testing.T) {
+	t.Parallel()
+
+	api := &mockAPIClient{
+		pollResults: []*WorkResponse{
+			{
+				ID:     "work-hc",
+				Data:   WorkData{Type: WorkDataTypeHealthcheck},
+				Secret: makeTestWorkSecret(),
+			},
+			nil, // no more work
+		},
+	}
+
+	logger := &mockLogger{}
+
+	orch := NewBridgeOrchestrator()
+	orch.Config = BridgeConfig{Dir: "/tmp/test", MaxSessions: 1, SpawnMode: SpawnModeSameDir}
+	orch.API = api
+	orch.Logger = logger
+	orch.Sleep = func(d time.Duration) { time.Sleep(1 * time.Millisecond) }
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- orch.Start(ctx) }()
+
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if err != nil && err != context.Canceled {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for orchestrator")
+	}
+
+	// Healthcheck should have been acknowledged.
+	api.mu.Lock()
+	acked := len(api.ackCalls)
+	api.mu.Unlock()
+	if acked == 0 {
+		t.Error("expected healthcheck to be acknowledged")
+	}
+}
+

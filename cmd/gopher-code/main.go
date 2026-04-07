@@ -401,15 +401,31 @@ func main() {
 			)
 		}
 
+		// T193: Construct the BridgeOrchestrator — the central coordination
+		// point that ties registration, poll-loop, session dispatch, and
+		// graceful shutdown together.
+		orchestrator := bridge.NewBridgeOrchestrator()
+		orchestrator.Config = rcCfg
+		orchestrator.API = apiClient
+		orchestrator.Logger = nil // TODO(T195+): wire real BridgeLogger implementation
+		orchestrator.Debug = bridgeDebug
+		orchestrator.PollConfig = pollCfg
+
+		slog.Debug("bridge: orchestrator constructed",
+			"dir", rcCfg.Dir,
+			"max_sessions", rcCfg.MaxSessions,
+			"spawn_mode", rcCfg.SpawnMode,
+		)
+
 		// TODO(T195+): Wire full bridge REPL init once bridge core is implemented.
-		_ = rcCfg
-		_ = pollCfg
+		// The orchestrator.Start(ctx) call will be wired here once the
+		// SessionSpawner, full BridgeLogger, and transport are ready.
+		_ = orchestrator
 		_ = tdm
 		_ = permCallbacks
 		_ = bridgeStatus
 		_ = bridgeMessaging
 		_ = parseInbound
-		_ = bridgeDebug
 		cliOk("")
 	}
 
