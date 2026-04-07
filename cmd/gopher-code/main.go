@@ -326,6 +326,20 @@ func main() {
 		})
 		_ = codeSessionClient
 
+		// T187: Construct PermissionCallbacks so the bridge session can
+		// dispatch permission requests to the remote web app and receive
+		// allow/deny responses. SendFunc and CancelFunc are placeholders
+		// until the full bridge transport is wired (T195+).
+		permCallbacks := bridge.NewPermissionCallbacks()
+		permCallbacks.SendFunc = func(req bridge.BridgePermissionRequest) error {
+			slog.Debug("bridge: permission request", "request_id", req.RequestID, "tool", req.ToolName)
+			return nil
+		}
+		permCallbacks.CancelFunc = func(requestID string) error {
+			slog.Debug("bridge: permission cancel", "request_id", requestID)
+			return nil
+		}
+
 		// T184: Construct BridgeMessaging for outbound event buffering and
 		// delivery during the remote-control session. The SendFunc is a
 		// placeholder until the full bridge transport is wired (T195+).
@@ -374,6 +388,7 @@ func main() {
 		_ = rcCfg
 		_ = pollCfg
 		_ = tdm
+		_ = permCallbacks
 		_ = bridgeMessaging
 		_ = parseInbound
 		cliOk("")
