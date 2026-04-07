@@ -285,6 +285,21 @@ func main() {
 		// T173: Construct the BridgeAPIClient for the orchestrator/REPL bridge.
 		_ = bridge.NewBridgeAPIClientFromConfig(rcCfg, func() string { return "" }, nil)
 
+		// T179: If a work secret is provided via env, decode and validate it
+		// during bridge session init so we fail fast on malformed secrets.
+		if wsEnv := os.Getenv("CLAUDE_CODE_WORK_SECRET"); wsEnv != "" {
+			ws, wsErr := bridge.DecodeWorkSecret(wsEnv)
+			if wsErr != nil {
+				cliErrorf("Invalid work secret: %v", wsErr)
+			}
+			sdkURL := bridge.BuildSdkUrl(ws.APIBaseURL, "pending")
+			slog.Debug("bridge: work secret validated",
+				"api_base_url", ws.APIBaseURL,
+				"sdk_url", sdkURL,
+				"has_auth", len(ws.Auth) > 0,
+			)
+		}
+
 		// TODO(T195+): Wire full bridge REPL init once bridge core is implemented.
 		_ = rcCfg
 		_ = pollCfg

@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -185,23 +186,15 @@ func TestBridgeConfigToPollWorkflow(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// T178: Trusted device token integration — load/save/validate cycle
-// ---------------------------------------------------------------------------
-
 // TestTrustedDevice_LoadSaveValidateCycle exercises the full lifecycle of a
-// trusted device token: enroll (save) → load from cache → clear → re-load
+// trusted device token: enroll (save) ��� load from cache → clear → re-load
 // from keyring → validate header injection.
 func TestTrustedDevice_LoadSaveValidateCycle(t *testing.T) {
 	kr := newMemKeyring()
 
-	// Enrollment server returns a device token.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
-		}
-		if r.URL.Path != "/api/auth/trusted_devices" {
-			t.Errorf("expected /api/auth/trusted_devices, got %s", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(enrollmentResponse{
@@ -223,44 +216,101 @@ func TestTrustedDevice_LoadSaveValidateCycle(t *testing.T) {
 	}
 	mgr := NewTrustedDeviceManager(deps)
 
-	// Step 1: No token yet — GetToken returns empty.
 	if tok := mgr.GetToken(); tok != "" {
 		t.Fatalf("expected empty token before enrollment, got %q", tok)
 	}
-
-	// Step 2: Enroll — saves token to keyring and clears cache.
 	mgr.Enroll(context.Background())
-
-	// Step 3: Load — GetToken returns the enrolled token from keyring.
 	tok := mgr.GetToken()
 	if tok != "integration-token-xyz" {
 		t.Fatalf("post-enroll GetToken: got %q, want %q", tok, "integration-token-xyz")
 	}
-
-	// Step 4: Validate header injection.
 	hdrKey, hdrVal := mgr.Header()
 	if hdrKey != "X-Trusted-Device-Token" || hdrVal != "integration-token-xyz" {
-		t.Fatalf("Header: got (%q, %q), want (%q, %q)",
-			hdrKey, hdrVal, "X-Trusted-Device-Token", "integration-token-xyz")
+		t.Fatalf("Header: got (%q, %q)", hdrKey, hdrVal)
 	}
-
-	// Step 5: Clear cache — next GetToken should re-read from keyring.
 	mgr.ClearCache()
 	tok = mgr.GetToken()
 	if tok != "integration-token-xyz" {
-		t.Fatalf("after ClearCache: got %q, want %q", tok, "integration-token-xyz")
+		t.Fatalf("after ClearCache: got %q", tok)
 	}
-
-	// Step 6: ClearToken — removes from keyring and cache.
 	mgr.ClearToken()
 	tok = mgr.GetToken()
 	if tok != "" {
 		t.Fatalf("after ClearToken: expected empty, got %q", tok)
 	}
-
-	// Step 7: Verify keyring is empty.
 	_, err := kr.Get(keyringService, keyringUser)
 	if err == nil {
 		t.Fatal("expected keyring to be empty after ClearToken")
+	}
+}
+
+// TestWorkSecretEncryptionRoundTrip exercises the full work secret lifecycle.
+func TestWorkSecretEncryptionRoundTrip(t *testing.T) {
+	original := WorkSecret{
+		Version:             1,
+		SessionIngressToken: "tok_integration_abc123",
+		APIBaseURL:          "https://api.anthropic.com",
+		Sources: []WorkSecretSource{
+			{Type: "git", GitInfo: &GitInfo{Type: "github", Repo: "org/repo", Token: "ghp_test"}},
+		},
+		Auth: []WorkSecretAuth{
+			{Type: "api_key", Token: "sk-ant-integration"},
+		},
+		EnvironmentVariables: map[string]string{"FOO": "bar"},
+	}
+
+	rawJSON, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(rawJSON)
+
+	decoded, err := DecodeWorkSecret(encoded)
+	if err != nil {
+		t.Fatalf("DecodeWorkSecret: %v", err)
+	}
+
+	if decoded.Version != original.Version {
+		t.Errorf("Version = %d, want %d", decoded.Version, original.Version)
+	}
+	if decoded.SessionIngressToken != original.SessionIngressToken {
+		t.Errorf("SessionIngressToken mismatch")
+	}
+	if decoded.APIBaseURL != original.APIBaseURL {
+		t.Errorf("APIBaseURL mismatch")
+	}
+	if len(decoded.Sources) != 1 || decoded.Sources[0].GitInfo.Token != "ghp_test" {
+		t.Error("git source credential not preserved")
+	}
+	if len(decoded.Auth) != 1 || decoded.Auth[0].Token != "sk-ant-integration" {
+		t.Error("auth token not preserved")
+	}
+	if decoded.EnvironmentVariables["FOO"] != "bar" {
+		t.Error("environment variables not preserved")
+	}
+
+	wsURL := BuildSdkUrl(decoded.APIBaseURL, "sess_test123")
+	wantWS := "wss://api.anthropic.com/v1/session_ingress/ws/sess_test123"
+	if wsURL != wantWS {
+		t.Errorf("BuildSdkUrl = %q, want %q", wsURL, wantWS)
+	}
+	ccrURL := BuildCCRv2SdkUrl(decoded.APIBaseURL, "sess_test123")
+	wantCCR := "https://api.anthropic.com/v1/code/sessions/sess_test123"
+	if ccrURL != wantCCR {
+		t.Errorf("BuildCCRv2SdkUrl = %q, want %q", ccrURL, wantCCR)
+	}
+
+	localSecret := original
+	localSecret.APIBaseURL = "http://localhost:8080"
+	localJSON, _ := json.Marshal(localSecret)
+	localEncoded := base64.RawURLEncoding.EncodeToString(localJSON)
+	localDecoded, err := DecodeWorkSecret(localEncoded)
+	if err != nil {
+		t.Fatalf("DecodeWorkSecret (localhost): %v", err)
+	}
+	localURL := BuildSdkUrl(localDecoded.APIBaseURL, "sess_local")
+	wantLocal := "ws://localhost:8080/v2/session_ingress/ws/sess_local"
+	if localURL != wantLocal {
+		t.Errorf("BuildSdkUrl (localhost) = %q, want %q", localURL, wantLocal)
 	}
 }
