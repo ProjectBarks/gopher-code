@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"testing"
 )
@@ -138,5 +139,86 @@ func TestBridgeConfigToPollWorkflow(t *testing.T) {
 	}
 	if decoded.Type != ActivityToolStart || decoded.Summary != "Reading file" {
 		t.Fatalf("activity round-trip failed: %+v", decoded)
+	}
+}
+
+// TestWorkSecretEncryptionRoundTrip exercises the full work secret lifecycle:
+// construct WorkSecret → JSON-encode → base64url → DecodeWorkSecret → validate
+// fields → BuildSdkUrl / BuildCCRv2SdkUrl. This is the integration path used
+// by the binary's remote-control session init (T179).
+func TestWorkSecretEncryptionRoundTrip(t *testing.T) {
+	// Step 1: Construct a realistic work secret.
+	original := WorkSecret{
+		Version:             1,
+		SessionIngressToken: "tok_integration_abc123",
+		APIBaseURL:          "https://api.anthropic.com",
+		Sources: []WorkSecretSource{
+			{Type: "git", GitInfo: &GitInfo{Type: "github", Repo: "org/repo", Token: "ghp_test"}},
+		},
+		Auth: []WorkSecretAuth{
+			{Type: "api_key", Token: "sk-ant-integration"},
+		},
+		EnvironmentVariables: map[string]string{"FOO": "bar"},
+	}
+
+	// Step 2: Encode to base64url (simulating what the server sends).
+	rawJSON, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(rawJSON)
+
+	// Step 3: Decode (as the binary does on receipt).
+	decoded, err := DecodeWorkSecret(encoded)
+	if err != nil {
+		t.Fatalf("DecodeWorkSecret: %v", err)
+	}
+
+	// Step 4: Validate all fields survived the round-trip.
+	if decoded.Version != original.Version {
+		t.Errorf("Version = %d, want %d", decoded.Version, original.Version)
+	}
+	if decoded.SessionIngressToken != original.SessionIngressToken {
+		t.Errorf("SessionIngressToken = %q, want %q", decoded.SessionIngressToken, original.SessionIngressToken)
+	}
+	if decoded.APIBaseURL != original.APIBaseURL {
+		t.Errorf("APIBaseURL = %q, want %q", decoded.APIBaseURL, original.APIBaseURL)
+	}
+	if len(decoded.Sources) != 1 || decoded.Sources[0].GitInfo.Token != "ghp_test" {
+		t.Error("git source credential not preserved")
+	}
+	if len(decoded.Auth) != 1 || decoded.Auth[0].Token != "sk-ant-integration" {
+		t.Error("auth token not preserved")
+	}
+	if decoded.EnvironmentVariables["FOO"] != "bar" {
+		t.Error("environment variables not preserved")
+	}
+
+	// Step 5: Build SDK URLs from the decoded secret (integration with URL builders).
+	wsURL := BuildSdkUrl(decoded.APIBaseURL, "sess_test123")
+	wantWS := "wss://api.anthropic.com/v1/session_ingress/ws/sess_test123"
+	if wsURL != wantWS {
+		t.Errorf("BuildSdkUrl = %q, want %q", wsURL, wantWS)
+	}
+
+	ccrURL := BuildCCRv2SdkUrl(decoded.APIBaseURL, "sess_test123")
+	wantCCR := "https://api.anthropic.com/v1/code/sessions/sess_test123"
+	if ccrURL != wantCCR {
+		t.Errorf("BuildCCRv2SdkUrl = %q, want %q", ccrURL, wantCCR)
+	}
+
+	// Step 6: Verify localhost variant uses ws:// and v2.
+	localSecret := original
+	localSecret.APIBaseURL = "http://localhost:8080"
+	localJSON, _ := json.Marshal(localSecret)
+	localEncoded := base64.RawURLEncoding.EncodeToString(localJSON)
+	localDecoded, err := DecodeWorkSecret(localEncoded)
+	if err != nil {
+		t.Fatalf("DecodeWorkSecret (localhost): %v", err)
+	}
+	localURL := BuildSdkUrl(localDecoded.APIBaseURL, "sess_local")
+	wantLocal := "ws://localhost:8080/v2/session_ingress/ws/sess_local"
+	if localURL != wantLocal {
+		t.Errorf("BuildSdkUrl (localhost) = %q, want %q", localURL, wantLocal)
 	}
 }
