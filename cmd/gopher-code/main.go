@@ -471,8 +471,41 @@ func main() {
 			slog.Debug("bridge: REPL bridge skipped (pre-flight check declined)")
 		}
 
+		// T197: Wire the SSE/HTTP transport into the remote-control session.
+		// When InitReplBridge returns a valid handle, create a v2 transport
+		// that connects to the bridge URL with the resolved auth token.
+		var replTransport bridge.ReplBridgeTransport
+		if replHandle != nil && bridgeURL != "" {
+			replTransport = bridge.NewV2ReplTransport(bridge.V2TransportOpts{
+				SessionURL:   bridgeURL,
+				IngressToken: bridgeToken,
+				SessionID:    replHandle.OrgUUID,
+				GetAuthToken: func() string {
+					tok, _ := bridgeDeps.GetAccessToken()
+					return tok
+				},
+				Logger: func(msg string) { bridgeDebug.LogStatus(msg, nil) },
+			})
+			replTransport.SetOnData(func(data string) {
+				slog.Debug("bridge: transport inbound data", "len", len(data))
+			})
+			replTransport.SetOnClose(func(closeCode int) {
+				slog.Debug("bridge: transport closed", "close_code", closeCode)
+			})
+			replTransport.SetOnConnect(func() {
+				slog.Debug("bridge: transport connected")
+			})
+			replTransport.Connect()
+			defer replTransport.Close()
+			slog.Debug("bridge: v2 SSE/HTTP transport wired",
+				"session_url", bridgeURL,
+				"org_uuid", replHandle.OrgUUID,
+			)
+		}
+
 		// TODO(T195+): Wire full bridge REPL session lifecycle.
 		_ = replHandle
+		_ = replTransport
 		_ = orchestrator
 		_ = tdm
 		_ = permCallbacks
