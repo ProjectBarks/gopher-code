@@ -2728,3 +2728,47 @@ func TestIDE_DetectJetBrains(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// T257: /init-verifiers tests
+// ---------------------------------------------------------------------------
+
+func TestInitVerifiers_ReturnsPromptMsg(t *testing.T) {
+	d := NewDispatcher()
+	cmd := d.Dispatch("/init-verifiers")
+	msg := cmd()
+	pm, ok := msg.(PromptMsg)
+	if !ok {
+		t.Fatalf("Expected PromptMsg, got %T", msg)
+	}
+	if pm.Command != "/init-verifiers" {
+		t.Errorf("Expected command '/init-verifiers', got %q", pm.Command)
+	}
+	for _, want := range []string{
+		"## Goal",
+		"verifier skills",
+		"## Phase 1: Auto-Detection",
+		"## Phase 2: Verification Tool Setup",
+		"## Phase 3: Interactive Q&A",
+		"## Phase 4: Generate Verifier Skill",
+		"## Phase 5: Confirm Creation",
+	} {
+		if !strings.Contains(pm.Text, want) {
+			t.Errorf("Prompt should contain %q", want)
+		}
+	}
+}
+
+func TestInitVerifiers_HasRegistration(t *testing.T) {
+	d := NewDispatcher()
+	reg := d.GetRegistration("/init-verifiers")
+	if reg == nil {
+		t.Fatal("Should have registration for /init-verifiers")
+	}
+	if reg.Type != CommandTypePrompt {
+		t.Errorf("Expected CommandTypePrompt, got %v", reg.Type)
+	}
+	if reg.Description != "Create verifier skill(s) for automated verification of code changes" {
+		t.Errorf("Unexpected description: %q", reg.Description)
+	}
+}
