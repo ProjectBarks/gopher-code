@@ -260,6 +260,14 @@ func main() {
 			"authed":     fmt.Sprintf("%v", bridgeAuthed),
 		})
 
+		// T191: Render bridge UI status banner so the user sees a
+		// human-readable startup summary in the remote-control path.
+		fmt.Fprint(os.Stderr, bridge.RenderVerboseBanner(Version, bridge.BridgeConfig{
+			SpawnMode:   bridge.SpawnModeSameDir,
+			MaxSessions: 1,
+		}, ""))
+		fmt.Fprintln(os.Stderr, bridge.RenderConnectingLine(0, "", ""))
+
 		fmt.Fprintf(os.Stderr, "Starting remote control session")
 		if rcName != "" {
 			fmt.Fprintf(os.Stderr, " %q", rcName)

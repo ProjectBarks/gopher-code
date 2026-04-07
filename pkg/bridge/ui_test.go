@@ -587,6 +587,66 @@ func TestTruncationWidthConstants(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Integration: render full bridge status to string
+// ---------------------------------------------------------------------------
+
+// TestRenderBridgeStatus_Integration exercises the end-to-end rendering path
+// that the binary uses: verbose banner + connecting line + footer, verifying
+// all pieces compose into a single coherent status string.
+func TestRenderBridgeStatus_Integration(t *testing.T) {
+	// Simulate what the binary does: render banner, status line, and footer
+	// in sequence and verify the composed output is non-empty and contains
+	// the expected structural elements.
+	banner := RenderVerboseBanner("0.2.0", BridgeConfig{
+		SpawnMode:   SpawnModeSameDir,
+		MaxSessions: 1,
+	}, "")
+	statusLine := RenderConnectingLine(0, "", "")
+	footer := RenderFooter("https://claude.ai/code", true, false, nil)
+
+	composed := banner + statusLine + "\n" + footer
+	plain := stripANSI(composed)
+
+	for _, want := range []string{
+		"Remote Control",
+		"v0.2.0",
+		"Connecting",
+		"space to show QR code",
+	} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("composed status missing %q:\n%s", want, plain)
+		}
+	}
+
+	// Verify the composed output is multi-line (banner + status + footer).
+	lines := strings.Split(strings.TrimRight(plain, "\n"), "\n")
+	if len(lines) < 3 {
+		t.Errorf("expected at least 3 lines in composed output, got %d", len(lines))
+	}
+}
+
+// TestRenderBridgeStatus_FailedIntegration exercises the failed-state rendering
+// path: failed status block composes with footer.
+func TestRenderBridgeStatus_FailedIntegration(t *testing.T) {
+	failed := RenderFailedStatusLine("websocket closed", "my-repo", "main")
+	footer := RenderFooter("https://claude.ai/code", true, false, nil)
+	composed := failed + footer
+	plain := stripANSI(composed)
+
+	for _, want := range []string{
+		"Remote Control Failed",
+		"websocket closed",
+		"my-repo",
+		"main",
+		"space to show QR code",
+	} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("failed status missing %q:\n%s", want, plain)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Helper: strip ANSI sequences for plain-text comparison
 // ---------------------------------------------------------------------------
 
