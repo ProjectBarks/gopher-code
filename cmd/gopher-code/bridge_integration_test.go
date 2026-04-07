@@ -154,3 +154,69 @@ func TestBridgeFeatureGates_CcrMirror(t *testing.T) {
 		t.Fatal("expected IsCcrMirrorEnabled=false in default build")
 	}
 }
+
+// TestHybridTransport_SelectedByEnv verifies that setting
+// CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2=1 causes GetTransportForUrl
+// to select TransportKindHybrid, and that NewV1ReplTransport wraps it
+// into a ReplBridgeTransport that satisfies the interface used in main.go.
+func TestHybridTransport_SelectedByEnv(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_USE_CCR_V2", "")
+	t.Setenv("CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2", "1")
+
+	sel, err := bridge.GetTransportForUrl(
+		"wss://api.example.com/v2/session_ingress/ws/sess-abc",
+		map[string]string{"Authorization": "Bearer test-tok"},
+		"sess-abc",
+	)
+	if err != nil {
+		t.Fatalf("GetTransportForUrl error: %v", err)
+	}
+	if sel.Kind != bridge.TransportKindHybrid {
+		t.Fatalf("expected TransportKindHybrid, got %d", sel.Kind)
+	}
+
+	// Construct HybridTransport + V1 adapter — mirrors the main.go wiring.
+	hybrid := bridge.NewHybridTransport(bridge.HybridTransportOpts{
+		URL:          sel.URL,
+		Headers:      sel.Headers,
+		SessionID:    sel.SessionID,
+		GetAuthToken: func() string { return "test-tok" },
+	})
+	transport := bridge.NewV1ReplTransport(hybrid)
+
+	// HybridTransport reports "connected" (not-closed) by default;
+	// verify the adapter surfaces that correctly.
+	if !transport.IsConnected() {
+		t.Fatal("expected IsConnected=true before Close() (HybridTransport default)")
+	}
+	if label := transport.StateLabel(); label != "connected" {
+		t.Fatalf("expected StateLabel 'connected', got %q", label)
+	}
+	transport.Close()
+	if transport.IsConnected() {
+		t.Fatal("expected not connected after Close()")
+	}
+	if label := transport.StateLabel(); label != "closed" {
+		t.Fatalf("expected StateLabel 'closed' after Close(), got %q", label)
+	}
+}
+
+// TestHybridTransport_DefaultSelectsV2 verifies that without the
+// POST_FOR_SESSION_INGRESS_V2 env var, the default WS URL selects
+// TransportKindWebSocket (and the main.go code path falls through to V2).
+func TestHybridTransport_DefaultSelectsV2(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_USE_CCR_V2", "")
+	t.Setenv("CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2", "")
+
+	sel, err := bridge.GetTransportForUrl(
+		"wss://api.example.com/v2/session_ingress/ws/sess-abc",
+		nil,
+		"sess-abc",
+	)
+	if err != nil {
+		t.Fatalf("GetTransportForUrl error: %v", err)
+	}
+	if sel.Kind == bridge.TransportKindHybrid {
+		t.Fatal("expected non-Hybrid transport when env var is not set")
+	}
+}

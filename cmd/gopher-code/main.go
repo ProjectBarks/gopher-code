@@ -530,19 +530,48 @@ func main() {
 			defer rbh.Close()
 		}
 
-		// T197: Wire SSE/HTTP transport.
+		// T197+T213: Wire transport via GetTransportForUrl — selects SSE (v2),
+		// HybridTransport (v1), or WebSocket based on env vars and URL scheme.
 		var replTransport bridge.ReplBridgeTransport
 		if replHandle != nil && bridgeURL != "" {
-			replTransport = bridge.NewV2ReplTransport(bridge.V2TransportOpts{
-				SessionURL:   bridgeURL,
-				IngressToken: bridgeToken,
-				SessionID:    replHandle.OrgUUID,
-				GetAuthToken: func() string {
-					tok, _ := bridgeDeps.GetAccessToken()
-					return tok
-				},
-				Logger: func(msg string) { bridgeDebug.LogStatus(msg, nil) },
-			})
+			transportSel, transportErr := bridge.GetTransportForUrl(
+				bridgeURL,
+				map[string]string{"Authorization": "Bearer " + bridgeToken},
+				replHandle.OrgUUID,
+			)
+			if transportErr != nil {
+				slog.Debug("bridge: transport selection failed, falling back to v2", "error", transportErr)
+			}
+
+			if transportErr == nil && transportSel.Kind == bridge.TransportKindHybrid {
+				// T213: HybridTransport — WS reads + HTTP POST writes.
+				hybrid := bridge.NewHybridTransport(bridge.HybridTransportOpts{
+					URL:       transportSel.URL,
+					Headers:   transportSel.Headers,
+					SessionID: transportSel.SessionID,
+					GetAuthToken: func() string {
+						tok, _ := bridgeDeps.GetAccessToken()
+						return tok
+					},
+					Logger: func(msg string) { bridgeDebug.LogStatus(msg, nil) },
+				})
+				replTransport = bridge.NewV1ReplTransport(hybrid)
+				slog.Debug("bridge: selected HybridTransport (v1)")
+			} else {
+				// Default: v2 SSE+CCR transport.
+				replTransport = bridge.NewV2ReplTransport(bridge.V2TransportOpts{
+					SessionURL:   bridgeURL,
+					IngressToken: bridgeToken,
+					SessionID:    replHandle.OrgUUID,
+					GetAuthToken: func() string {
+						tok, _ := bridgeDeps.GetAccessToken()
+						return tok
+					},
+					Logger: func(msg string) { bridgeDebug.LogStatus(msg, nil) },
+				})
+				slog.Debug("bridge: selected V2ReplTransport (SSE+CCR)")
+			}
+
 			replTransport.SetOnData(func(data string) {
 				slog.Debug("bridge: transport inbound data", "len", len(data))
 			})
