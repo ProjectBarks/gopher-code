@@ -199,6 +199,16 @@ type OutputStyleMsg struct {
 	Message string
 }
 
+// ReleaseNotesMsg is returned by /release-notes.
+type ReleaseNotesMsg struct {
+	Message string
+}
+
+// StickersMsg is returned by /stickers.
+type StickersMsg struct {
+	Message string
+}
+
 // MovedToPluginMsg informs the user a command moved to a plugin.
 type MovedToPluginMsg struct {
 	Command    string
@@ -3514,6 +3524,38 @@ func (d *Dispatcher) registerDefaults() {
 			GetAllowRules:     func() map[string][]string { return nil },
 			GetDenyRules:      func() map[string][]string { return nil },
 		}),
+	})
+
+	// T276: /release-notes — show changelog URL
+	// Source: src/commands/release-notes/
+	d.RegisterCommand(CommandRegistration{
+		Name:        "release-notes",
+		Description: "View release notes",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				return ReleaseNotesMsg{
+					Message: "See the full changelog at: https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md",
+				}
+			}
+		},
+	})
+
+	// T291: /stickers — show sticker info
+	// Source: src/commands/stickers/index.ts
+	d.RegisterCommand(CommandRegistration{
+		Name:        "stickers",
+		Description: "Get Claude Code stickers",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				return StickersMsg{
+					Message: "Visit https://www.anthropic.com/stickers to order Claude Code stickers!",
+				}
+			}
+		},
 	})
 
 	// T273: /pr-comments — fetch and display PR comments via gh CLI
