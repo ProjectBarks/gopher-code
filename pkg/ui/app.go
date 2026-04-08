@@ -19,6 +19,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
 	"github.com/projectbarks/gopher-code/pkg/ui/core"
 	"github.com/projectbarks/gopher-code/pkg/ui/hooks/notifications"
+	bridgehooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/bridge"
 	"github.com/projectbarks/gopher-code/pkg/ui/hooks/ide"
 	swarmhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/swarm"
 	"github.com/projectbarks/gopher-code/pkg/ui/hooks"
@@ -255,6 +256,11 @@ type AppModel struct {
 	fileSuggester     *hooks.FileSuggester
 	fileSuggestions   []hooks.SuggestionItem
 	fileSuggestActive bool
+
+	// T406: Bridge/remote hooks
+	replBridgeHook    *bridgehooks.ReplBridgeHook
+	remoteSessionHook *bridgehooks.RemoteSessionHook
+	mailboxHook       *bridgehooks.MailboxBridgeHook
 }
 
 // NewAppModel creates a new AppModel with the given session and bridge.
@@ -329,6 +335,11 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 	app.taskWatcher = &swarmhooks.TaskWatcher{}
 	app.permPoller = &swarmhooks.PermissionPoller{}
 
+	// T406: Bridge/remote hooks (disabled by default).
+	app.replBridgeHook = bridgehooks.NewReplBridgeHook(bridgehooks.ReplBridgeHookConfig{})
+	app.remoteSessionHook = bridgehooks.NewRemoteSessionHook(nil)
+	app.mailboxHook = bridgehooks.NewMailboxBridgeHook(bridgehooks.MailboxBridgeConfig{})
+
 	return app
 }
 
@@ -343,6 +354,11 @@ func (a *AppModel) Init() tea.Cmd {
 	cmds = append(cmds, a.input.Init())
 	// T400: Run startup notification checks.
 	cmds = append(cmds, a.notifs.runStartupChecks(notifications.StartupOptions{})...)
+
+	// T406: Initialize bridge/remote hooks.
+	cmds = append(cmds, a.replBridgeHook.Init())
+	cmds = append(cmds, a.remoteSessionHook.Init())
+	cmds = append(cmds, a.mailboxHook.Init())
 
 	// T407: Kick off swarm initialization if enabled.
 	if initCmd := a.swarmInit.Init(); initCmd != nil {
@@ -505,6 +521,27 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case permissions.PermissionResponseMsg:
 		return a.handlePermissionResponse(msg)
+
+	// T406: Bridge/remote hook message routing
+	case bridgehooks.BridgeStatusMsg:
+		var bcmds []tea.Cmd
+		_, cmd1 := a.replBridgeHook.Update(msg)
+		_, cmd2 := a.remoteSessionHook.Update(msg)
+		if cmd1 != nil {
+			bcmds = append(bcmds, cmd1)
+		}
+		if cmd2 != nil {
+			bcmds = append(bcmds, cmd2)
+		}
+		return a, tea.Batch(bcmds...)
+
+	case bridgehooks.RemoteSessionURLMsg:
+		_, cmd := a.remoteSessionHook.Update(msg)
+		return a, cmd
+
+	case bridgehooks.MailboxPollMsg:
+		_, cmd := a.mailboxHook.Update(msg)
+		return a, cmd
 
 	// --- Slash command: /compact ---
 	// Source: REPL.tsx — /compact triggers context window compaction
@@ -1255,4 +1292,18 @@ func (a *AppModel) TaskWatcher() *swarmhooks.TaskWatcher {
 // PermissionPoller returns the permission poller hook (for testing/integration).
 func (a *AppModel) PermissionPoller() *swarmhooks.PermissionPoller {
 	return a.permPoller
+}
+
+// T406: Bridge hook accessors
+
+func (a *AppModel) ReplBridgeHook() *bridgehooks.ReplBridgeHook {
+	return a.replBridgeHook
+}
+
+func (a *AppModel) RemoteSessionHook() *bridgehooks.RemoteSessionHook {
+	return a.remoteSessionHook
+}
+
+func (a *AppModel) MailboxHook() *bridgehooks.MailboxBridgeHook {
+	return a.mailboxHook
 }
