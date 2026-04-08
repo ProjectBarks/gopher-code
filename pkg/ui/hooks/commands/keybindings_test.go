@@ -201,3 +201,60 @@ func TestNewResolver_IntegrationWithDefaultBindings(t *testing.T) {
 	_, ok = r.Resolve("ctrl+z", keybindings.ContextGlobal)
 	assert.False(t, ok)
 }
+
+// TestDefaultBindings_EndToEnd_CtrlT exercises the full integration path from
+// DefaultBindingMap through the resolver and CommandKeybindings model, matching
+// the wiring in pkg/ui/app.go (line ~323). This confirms DefaultBindings are
+// reachable from the binary and produce the expected command dispatch.
+func TestDefaultBindings_EndToEnd_CtrlT(t *testing.T) {
+	// Same wiring as pkg/ui/app.go: DefaultBindingMap -> NewResolver -> NewCommandKeybindings
+	bm := keybindings.DefaultBindingMap()
+	resolver := NewResolver(bm)
+	model := NewCommandKeybindings(resolver)
+
+	// ctrl+t is bound in the Global context to app:toggleTodos,
+	// which the CommandKeybindings model maps to "/tasks".
+	cmd := model.Update(keyPress("ctrl+t"))
+	require.NotNil(t, cmd, "ctrl+t should produce a command via default bindings")
+
+	msg := cmd()
+	ecm, ok := msg.(ExecuteCommandMsg)
+	require.True(t, ok, "expected ExecuteCommandMsg, got %T", msg)
+	assert.Equal(t, "/tasks", ecm.Command)
+	assert.True(t, ecm.FromKeybinding)
+}
+
+// TestDefaultBindings_EndToEnd_CtrlO verifies ctrl+o -> app:toggleTranscript -> "/transcript"
+// through the real default bindings pipeline.
+func TestDefaultBindings_EndToEnd_CtrlO(t *testing.T) {
+	bm := keybindings.DefaultBindingMap()
+	resolver := NewResolver(bm)
+	model := NewCommandKeybindings(resolver)
+
+	cmd := model.Update(keyPress("ctrl+o"))
+	require.NotNil(t, cmd, "ctrl+o should produce a command via default bindings")
+
+	msg := cmd()
+	ecm, ok := msg.(ExecuteCommandMsg)
+	require.True(t, ok)
+	assert.Equal(t, "/transcript", ecm.Command)
+	assert.True(t, ecm.FromKeybinding)
+}
+
+// TestDefaultBindings_EndToEnd_AllContextsCovered verifies that every context
+// in the default binding map has at least one binding and all actions are valid.
+func TestDefaultBindings_EndToEnd_AllContextsCovered(t *testing.T) {
+	bm := keybindings.DefaultBindingMap()
+
+	// All 20 contexts should be present.
+	assert.GreaterOrEqual(t, len(bm), 20, "DefaultBindingMap should cover at least 20 contexts")
+
+	for ctx, bindings := range bm {
+		assert.True(t, keybindings.ValidContext(ctx), "unexpected context %q", ctx)
+		assert.NotEmpty(t, bindings, "context %q has no bindings", ctx)
+		for _, action := range bindings {
+			assert.True(t, keybindings.ValidAction(action),
+				"context %q has invalid action %q", ctx, action)
+		}
+	}
+}
