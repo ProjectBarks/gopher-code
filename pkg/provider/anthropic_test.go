@@ -625,6 +625,107 @@ func TestAnthropicProvider_StreamErrorEvent(t *testing.T) {
 	}
 }
 
+// TestAnthropicProvider_BetaHeadersIntegration verifies that beta headers from
+// GetMergedBetas are sent through the real AnthropicProvider.Stream code path.
+// This is the integration test for T368: betas wired into the binary.
+func TestAnthropicProvider_BetaHeadersIntegration(t *testing.T) {
+	// Clean env so GetAPIProvider returns firstParty
+	t.Setenv("CLAUDE_CODE_USE_BEDROCK", "")
+	t.Setenv("CLAUDE_CODE_USE_VERTEX", "")
+	t.Setenv("CLAUDE_CODE_USE_FOUNDRY", "")
+	t.Setenv("DISABLE_INTERLEAVED_THINKING", "")
+	t.Setenv("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "")
+	t.Setenv("ANTHROPIC_BETAS", "")
+
+	var capturedBetaHeader string
+	var mu sync.Mutex
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		capturedBetaHeader = r.Header.Get("Anthropic-Beta")
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, sseEvent("message_start", `{"type":"message_start","message":{"id":"msg_beta","role":"assistant","model":"claude-sonnet-4-20250514","usage":{"input_tokens":5,"output_tokens":0},"stop_reason":null}}`))
+		fmt.Fprint(w, sseEvent("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}`))
+		fmt.Fprint(w, sseEvent("message_stop", `{"type":"message_stop"}`))
+	}))
+	defer server.Close()
+
+	p := NewAnthropicProvider("sk-test", "claude-sonnet-4-20250514")
+	p.baseURL = server.URL
+
+	req := ModelRequest{
+		Model:     "claude-sonnet-4-20250514",
+		MaxTokens: 1024,
+		Messages: []RequestMessage{
+			{Role: "user", Content: []RequestContent{{Type: "text", Text: "hi"}}},
+		},
+	}
+
+	ch, err := p.Stream(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Stream() error: %v", err)
+	}
+	collectResults(ch)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if capturedBetaHeader == "" {
+		t.Fatal("anthropic-beta header was not sent; GetMergedBetas not wired into Stream()")
+	}
+
+	// Verify required betas are present for a non-Haiku Sonnet 4 model on firstParty
+	t.Run("contains_claude_code_beta", func(t *testing.T) {
+		if !strings.Contains(capturedBetaHeader, BetaClaudeCode) {
+			t.Errorf("beta header %q missing %q", capturedBetaHeader, BetaClaudeCode)
+		}
+	})
+
+	t.Run("contains_interleaved_thinking", func(t *testing.T) {
+		if !strings.Contains(capturedBetaHeader, BetaInterleavedThinking) {
+			t.Errorf("beta header %q missing %q", capturedBetaHeader, BetaInterleavedThinking)
+		}
+	})
+
+	t.Run("contains_prompt_caching_scope", func(t *testing.T) {
+		if !strings.Contains(capturedBetaHeader, BetaPromptCachingScope) {
+			t.Errorf("beta header %q missing %q", capturedBetaHeader, BetaPromptCachingScope)
+		}
+	})
+
+	// Verify custom ANTHROPIC_BETAS env var is merged in
+	t.Run("custom_env_betas_merged", func(t *testing.T) {
+		t.Setenv("ANTHROPIC_BETAS", "my-custom-beta-123")
+
+		var capturedCustom string
+		server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			capturedCustom = r.Header.Get("Anthropic-Beta")
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, sseEvent("message_start", `{"type":"message_start","message":{"id":"msg_c","role":"assistant","model":"claude-sonnet-4-20250514","usage":{"input_tokens":5,"output_tokens":0},"stop_reason":null}}`))
+			fmt.Fprint(w, sseEvent("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}`))
+			fmt.Fprint(w, sseEvent("message_stop", `{"type":"message_stop"}`))
+		}))
+		defer server2.Close()
+
+		p2 := NewAnthropicProvider("sk-test", "claude-sonnet-4-20250514")
+		p2.baseURL = server2.URL
+
+		ch2, err := p2.Stream(context.Background(), req)
+		if err != nil {
+			t.Fatalf("Stream() error: %v", err)
+		}
+		collectResults(ch2)
+
+		if !strings.Contains(capturedCustom, "my-custom-beta-123") {
+			t.Errorf("custom beta not in header: %q", capturedCustom)
+		}
+	})
+}
+
 func TestAnthropicProvider_PingEvent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
