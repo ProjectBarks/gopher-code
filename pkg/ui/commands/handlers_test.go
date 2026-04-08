@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/projectbarks/gopher-code/pkg/hooks"
+	"github.com/projectbarks/gopher-code/pkg/keybindings"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/session"
 )
@@ -2930,6 +2931,55 @@ func TestKeybindings_DispatchReturnsMsg(t *testing.T) {
 	msg := cmd()
 	if _, ok := msg.(KeybindingsMsg); !ok {
 		t.Fatalf("expected KeybindingsMsg, got %T", msg)
+	}
+}
+
+// T446: integration test — verify the keystroke parser is exercised through
+// the /keybindings handler (real code path reachable from main).
+func TestKeybindings_ParserIntegration(t *testing.T) {
+	h := newKeybindingsHandler()
+	msg := h("")()
+	m, ok := msg.(KeybindingsMsg)
+	if !ok {
+		t.Fatalf("expected KeybindingsMsg, got %T", msg)
+	}
+
+	// The handler uses ParseChord + ChordToDisplayString to render keys.
+	// Arrow keys are rendered as Unicode glyphs by the parser's keyDisplayName.
+	// Verify that arrow-glyph display strings appear (e.g. "up" -> "↑").
+	if !strings.Contains(m.Message, "\u2191") { // ↑
+		t.Error("expected up-arrow glyph (↑) from parser display string")
+	}
+	if !strings.Contains(m.Message, "\u2193") { // ↓
+		t.Error("expected down-arrow glyph (↓) from parser display string")
+	}
+
+	// "Esc" is the parser's display name for the escape key.
+	if !strings.Contains(m.Message, "Esc") {
+		t.Error("expected 'Esc' display name from parser")
+	}
+
+	// "Enter" is the parser's display name for the enter/return key.
+	if !strings.Contains(m.Message, "Enter") {
+		t.Error("expected 'Enter' display name from parser")
+	}
+
+	// Verify the chord "ctrl+x ctrl+e" is parsed and displayed with the
+	// canonical separator (space between keystrokes in the chord).
+	if !strings.Contains(m.Message, "ctrl+x ctrl+e") {
+		t.Error("expected chord 'ctrl+x ctrl+e' in output")
+	}
+
+	// Platform-specific: on macOS "alt" bindings display as "opt",
+	// on Linux/Windows they display as "alt". Either way, the raw
+	// string "alt+v" or "meta+m" should NOT appear (the parser
+	// rewrites them to platform display names).
+	platform := keybindings.CurrentPlatform()
+	if platform == keybindings.PlatformMacOS {
+		// On macOS, meta+m -> opt+m, meta+p -> opt+p, etc.
+		if strings.Contains(m.Message, "meta+") {
+			t.Error("on macOS, 'meta+' should be rewritten to 'opt+' by the parser")
+		}
 	}
 }
 

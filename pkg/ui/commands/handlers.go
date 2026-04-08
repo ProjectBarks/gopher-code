@@ -2217,11 +2217,14 @@ func newPassesHandler() Handler {
 // ---------------------------------------------------------------------------
 
 // newKeybindingsHandler creates the /keybindings command handler.
-// Displays the current keybinding configuration grouped by context.
+// Displays the current keybinding configuration grouped by context,
+// using the keystroke parser to show platform-appropriate display strings.
+// T446: wires ParseChord, ChordToDisplayString, CurrentPlatform into binary.
 func newKeybindingsHandler() Handler {
 	return func(args string) tea.Cmd {
 		return func() tea.Msg {
 			blocks := keybindings.DefaultBindings()
+			platform := keybindings.CurrentPlatform()
 			var b strings.Builder
 			b.WriteString("Current Keybindings\n")
 			b.WriteString(strings.Repeat("=", 40) + "\n")
@@ -2245,17 +2248,26 @@ func newKeybindingsHandler() Handler {
 					}
 				}
 
-				// Find max key width for alignment.
+				// Parse each key string into a chord and format for the
+				// current platform (e.g. "opt" on macOS, "alt" on Linux).
+				displayKeys := make([]string, len(keys))
+				for i, k := range keys {
+					chord := keybindings.ParseChord(k)
+					displayKeys[i] = keybindings.ChordToDisplayString(chord, platform)
+				}
+
+				// Find max display key width for alignment.
 				maxW := 0
-				for _, k := range keys {
-					if len(k) > maxW {
-						maxW = len(k)
+				for _, dk := range displayKeys {
+					if len(dk) > maxW {
+						maxW = len(dk)
 					}
 				}
 
-				for _, k := range keys {
-					padding := strings.Repeat(" ", maxW-len(k)+2)
-					b.WriteString(fmt.Sprintf("  %-s%s%s\n", k, padding, block.Bindings[k]))
+				for i, k := range keys {
+					dk := displayKeys[i]
+					padding := strings.Repeat(" ", maxW-len(dk)+2)
+					b.WriteString(fmt.Sprintf("  %-s%s%s\n", dk, padding, block.Bindings[k]))
 				}
 			}
 
