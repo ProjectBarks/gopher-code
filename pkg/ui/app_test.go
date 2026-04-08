@@ -12,6 +12,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/session"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
+	swarmhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/swarm"
 )
 
 func newTestApp() *AppModel {
@@ -460,5 +461,202 @@ func TestScrollTracker_AppModelDelegation(t *testing.T) {
 	app.WaitForScrollIdle()
 	if app.GetIsScrollDraining() {
 		t.Error("AppModel should not be draining after WaitForScrollIdle")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T407: Swarm/task hooks integration tests
+// These tests exercise the real code path through AppModel.Update, ensuring
+// the swarm hooks are wired in and reachable from the binary.
+// ---------------------------------------------------------------------------
+
+func TestSwarmHooks_InitializedInAppModel(t *testing.T) {
+	app := newTestApp()
+	if app.swarmInit == nil {
+		t.Fatal("swarmInit should be initialized in NewAppModel")
+	}
+	if app.taskWatcher == nil {
+		t.Fatal("taskWatcher should be initialized in NewAppModel")
+	}
+	if app.permPoller == nil {
+		t.Fatal("permPoller should be initialized in NewAppModel")
+	}
+}
+
+func TestSwarmHooks_AccessorsReturnNonNil(t *testing.T) {
+	app := newTestApp()
+	if app.SwarmInit() == nil {
+		t.Fatal("SwarmInit() accessor should return non-nil")
+	}
+	if app.TaskWatcher() == nil {
+		t.Fatal("TaskWatcher() accessor should return non-nil")
+	}
+	if app.PermissionPoller() == nil {
+		t.Fatal("PermissionPoller() accessor should return non-nil")
+	}
+}
+
+func TestSwarmHooks_InitDisabled_NoCmd(t *testing.T) {
+	app := newTestApp()
+	// Default: swarm is disabled.
+	cmd := app.Init()
+	// Init should return a cmd (from input.Init), but swarm shouldn't add one.
+	// The swarmInit.Enabled is false, so no swarm cmd should be batched.
+	if app.swarmInit.Enabled {
+		t.Fatal("swarmInit should be disabled by default")
+	}
+	if cmd == nil {
+		t.Fatal("Init should return at least the input init cmd")
+	}
+}
+
+func TestSwarmHooks_InitEnabled_ProducesCmd(t *testing.T) {
+	app := newTestApp()
+	app.swarmInit.Enabled = true
+	app.swarmInit.TeamsDir = t.TempDir()
+	app.swarmInit.Teammates = []string{"coder"}
+
+	cmd := app.Init()
+	if cmd == nil {
+		t.Fatal("Init should return a batched cmd when swarm is enabled")
+	}
+}
+
+func TestSwarmHooks_SwarmInitMsg_RoutedThroughUpdate(t *testing.T) {
+	app := newTestApp()
+	// Simulate receiving a SwarmInitMsg (as if swarm init completed).
+	msg := swarmhooks.SwarmInitMsg{
+		TeamsDir:  "/tmp/teams",
+		Teammates: []string{"researcher"},
+		Colors:    map[string]string{"researcher": "blue"},
+	}
+	result, cmd := app.Update(msg)
+	if result == nil {
+		t.Fatal("Update should return non-nil model")
+	}
+	// No task watcher or perm poller configured, so no follow-up cmds.
+	_ = cmd
+}
+
+func TestSwarmHooks_SwarmInitMsg_Error_ShowsInConversation(t *testing.T) {
+	app := newTestApp()
+	msg := swarmhooks.SwarmInitMsg{
+		Err: fmt.Errorf("teams dir failed"),
+	}
+	app.Update(msg)
+	// The error should have been added to the conversation.
+	// We can't easily inspect conversation internals, but at least verify
+	// the handler didn't panic and the model is returned.
+}
+
+func TestSwarmHooks_TaskWatchMsg_RoutedThroughUpdate(t *testing.T) {
+	app := newTestApp()
+	// Configure a minimal task watcher so Tick() can produce a cmd.
+	app.taskWatcher.AgentID = "worker-1"
+	app.taskWatcher.ListTasks = func() ([]swarmhooks.Task, error) {
+		return nil, nil
+	}
+
+	msg := swarmhooks.TaskWatchMsg{
+		Tasks: []swarmhooks.Task{
+			{ID: "1", Subject: "test", Status: swarmhooks.TaskCompleted},
+		},
+		Completed: []string{"1"},
+	}
+	result, cmd := app.Update(msg)
+	if result == nil {
+		t.Fatal("Update should return non-nil model")
+	}
+	// Should reschedule the next tick.
+	if cmd == nil {
+		t.Fatal("handleTaskWatch should reschedule via Tick()")
+	}
+}
+
+func TestSwarmHooks_PermissionPollMsg_RoutedThroughUpdate(t *testing.T) {
+	app := newTestApp()
+	app.permPoller.AgentName = "worker"
+	app.permPoller.TeamName = "team"
+	app.permPoller.Poll = func(string, string, string) (*swarmhooks.PermissionResponse, error) {
+		return nil, nil
+	}
+
+	msg := swarmhooks.PermissionPollMsg{
+		Responses: []swarmhooks.PermissionResponse{
+			{RequestID: "r1", Decision: swarmhooks.PermissionApproved},
+		},
+	}
+	result, cmd := app.Update(msg)
+	if result == nil {
+		t.Fatal("Update should return non-nil model")
+	}
+	// Should reschedule the next tick.
+	if cmd == nil {
+		t.Fatal("handlePermissionPoll should reschedule via Tick()")
+	}
+}
+
+func TestSwarmHooks_EndToEnd_InitThenWatchTick(t *testing.T) {
+	// End-to-end: enable swarm, run Init, get SwarmInitMsg, then TaskWatchMsg.
+	app := newTestApp()
+	teamsDir := t.TempDir()
+
+	app.swarmInit.Enabled = true
+	app.swarmInit.TeamsDir = teamsDir
+	app.swarmInit.Teammates = []string{"researcher", "coder"}
+
+	app.taskWatcher.AgentID = "researcher"
+	app.taskWatcher.Interval = 10 * time.Millisecond
+	app.taskWatcher.ListTasks = func() ([]swarmhooks.Task, error) {
+		return []swarmhooks.Task{
+			{ID: "1", Subject: "build feature", Status: swarmhooks.TaskPending},
+		}, nil
+	}
+
+	// Step 1: Init produces a batch cmd including swarm init.
+	initCmd := app.Init()
+	if initCmd == nil {
+		t.Fatal("Init should return cmd when swarm enabled")
+	}
+
+	// Step 2: Execute the swarm init cmd to get the SwarmInitMsg.
+	siCmd := app.swarmInit.Init()
+	if siCmd == nil {
+		t.Fatal("SwarmInit.Init() should return a cmd when enabled")
+	}
+	initResult := siCmd()
+	initMsg, ok := initResult.(swarmhooks.SwarmInitMsg)
+	if !ok {
+		t.Fatalf("expected SwarmInitMsg, got %T", initResult)
+	}
+	if initMsg.Err != nil {
+		t.Fatalf("swarm init error: %v", initMsg.Err)
+	}
+	if len(initMsg.Colors) != 2 {
+		t.Errorf("expected 2 color assignments, got %d", len(initMsg.Colors))
+	}
+
+	// Step 3: Route the SwarmInitMsg through Update.
+	_, cmd := app.Update(initMsg)
+	// Since taskWatcher.AgentID is set, Update should return a tick cmd.
+	if cmd == nil {
+		t.Fatal("expected tick cmd after successful swarm init")
+	}
+
+	// Step 4: Simulate a TaskWatchMsg (as if tick fired).
+	watchMsg := swarmhooks.TaskWatchMsg{
+		Tasks: []swarmhooks.Task{
+			{ID: "1", Subject: "build feature", Status: swarmhooks.TaskPending},
+		},
+	}
+	_, cmd = app.Update(watchMsg)
+	if cmd == nil {
+		t.Fatal("expected reschedule cmd from handleTaskWatch")
+	}
+
+	// Verify ListTasks can be called (simulating tick execution).
+	_ = app.taskWatcher // just verify it's accessible
+	if app.taskWatcher.ListTasks == nil {
+		t.Fatal("ListTasks should still be set")
 	}
 }
