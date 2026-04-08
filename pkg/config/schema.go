@@ -47,10 +47,16 @@ const SettingsJSONSchema = `{
   "additionalProperties": true
 }`
 
-// ValidationError describes a schema validation error.
+// SchemaValidationError describes a schema validation error.
+// Source: utils/settings/validation.ts — ValidationError type
 type SchemaValidationError struct {
-	Path    string `json:"path"`
-	Message string `json:"message"`
+	File         string `json:"file,omitempty"`         // relative file path
+	Path         string `json:"path"`                   // field path in dot notation
+	Message      string `json:"message"`                // human-readable error
+	Expected     string `json:"expected,omitempty"`      // expected value or type
+	InvalidValue any    `json:"invalidValue,omitempty"` // the actual invalid value
+	Suggestion   string `json:"suggestion,omitempty"`    // fix suggestion
+	DocLink      string `json:"docLink,omitempty"`       // documentation URL
 }
 
 func (e *SchemaValidationError) Error() string {
