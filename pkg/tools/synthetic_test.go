@@ -28,21 +28,13 @@ func TestSyntheticOutputTool(t *testing.T) {
 		if err := json.Unmarshal(tool.InputSchema(), &parsed); err != nil {
 			t.Fatalf("schema is not valid JSON: %v", err)
 		}
-		props, ok := parsed["properties"].(map[string]interface{})
-		if !ok {
-			t.Fatal("schema missing properties")
-		}
-		if _, ok := props["text"]; !ok {
-			t.Error("schema missing 'text' property")
-		}
-		// Verify additionalProperties is false
-		if ap, ok := parsed["additionalProperties"]; !ok || ap != false {
-			t.Error("additionalProperties should be false")
+		if parsed["type"] != "object" {
+			t.Error("schema type should be object")
 		}
 	})
 
-	t.Run("returns_text_as_is", func(t *testing.T) {
-		input := json.RawMessage(`{"text": "Hello, world!"}`)
+	t.Run("returns_structured_output", func(t *testing.T) {
+		input := json.RawMessage(`{"name": "test", "value": 42}`)
 		out, err := tool.Execute(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -50,33 +42,19 @@ func TestSyntheticOutputTool(t *testing.T) {
 		if out.IsError {
 			t.Fatalf("unexpected tool error: %s", out.Content)
 		}
-		if out.Content != "Hello, world!" {
-			t.Errorf("expected 'Hello, world!', got %q", out.Content)
+		if out.Content == "" {
+			t.Error("output should not be empty")
 		}
 	})
 
-	t.Run("returns_multiline_text", func(t *testing.T) {
-		input := json.RawMessage(`{"text": "line1\nline2\nline3"}`)
+	t.Run("empty_object", func(t *testing.T) {
+		input := json.RawMessage(`{}`)
 		out, err := tool.Execute(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if out.IsError {
-			t.Fatalf("unexpected tool error: %s", out.Content)
-		}
-		if out.Content != "line1\nline2\nline3" {
-			t.Errorf("expected multiline text, got %q", out.Content)
-		}
-	})
-
-	t.Run("empty_text", func(t *testing.T) {
-		input := json.RawMessage(`{"text": ""}`)
-		out, err := tool.Execute(context.Background(), nil, input)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !out.IsError {
-			t.Error("expected error for empty text")
+			t.Error("empty object should succeed (no schema to violate)")
 		}
 	})
 
