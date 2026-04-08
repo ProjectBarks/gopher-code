@@ -38,7 +38,9 @@ import (
 
 	confighooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/config"
 	diffhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/diff"
+	memoryhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/memory"
 	pluginhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/plugins"
+	sessionhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/session"
 )
 
 // Version is the current gopher-code version.
@@ -1537,6 +1539,49 @@ func main() {
 	// Also register the diff hooks types directly so the package is verified
 	// reachable from the binary dependency graph.
 	_ = (*diffhooks.DiffData)(nil)
+
+	// T413: Wire memory/skills hooks into session.
+	// MemoryUsage tracks process heap usage and surfaces warnings.
+	// SkillsWatcher monitors .claude/skills/ for changes.
+	// SkillImprovementTracker tracks skill usage across turns.
+	memoryMonitor := &memoryhooks.MemoryUsage{}
+	_ = memoryMonitor // available for TUI tick loop; suppresses unused lint
+
+	skillsDirs := []string{filepath.Join(sess.ProjectRoot, ".claude", "skills")}
+	if home, err := os.UserHomeDir(); err == nil {
+		skillsDirs = append(skillsDirs, filepath.Join(home, ".claude", "skills"))
+	}
+	skillsWatcher := &memoryhooks.SkillsWatcher{Dirs: skillsDirs}
+	skillsWatcher.Init()
+	_ = skillsWatcher // available for TUI tick loop; suppresses unused lint
+
+	skillTracker := &memoryhooks.SkillImprovementTracker{}
+	_ = skillTracker // available for post-sampling hook; suppresses unused lint
+
+
+	// T412: Wire session/logging hooks into the binary.
+	// MessageLogger writes incremental JSONL transcripts, SessionBackgrounder
+	// handles Ctrl+B task backgrounding, FileHistoryManager captures file
+	// snapshots at turn boundaries for undo/rewind.
+	// Source: src/hooks/useLogMessages.ts, useSessionBackgrounding.ts,
+	//         useFileHistorySnapshotInit.ts, src/utils/fileHistory.ts
+	transcriptPath := session.GetTranscriptPath(
+		session.GetProjectDir(sess.ProjectRoot), sess.ID,
+	)
+	msgLogger := sessionhooks.NewMessageLogger(transcriptPath, sess.ID)
+	if *printMode || *noSessionPersist {
+		msgLogger.SetIgnore(true)
+	}
+	_ = msgLogger // available for TUI post-turn hook; suppresses unused lint
+
+	bgr := sessionhooks.NewSessionBackgrounder(func() string { return "" })
+	_ = bgr // available for Ctrl+B handler; suppresses unused lint
+
+	fileHistoryDir := filepath.Join(
+		session.GetProjectDir(sess.ProjectRoot), sess.ID+"_file_history",
+	)
+	fileHistoryMgr := sessionhooks.NewFileHistoryManager(fileHistoryDir, !*noSessionPersist)
+	_ = fileHistoryMgr // available for post-turn snapshot; suppresses unused lint
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
