@@ -15,14 +15,16 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/remote"
 	"github.com/projectbarks/gopher-code/pkg/session"
+	"github.com/projectbarks/gopher-code/pkg/keybindings"
 	"github.com/projectbarks/gopher-code/pkg/ui/commands"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
 	"github.com/projectbarks/gopher-code/pkg/ui/core"
-	"github.com/projectbarks/gopher-code/pkg/ui/hooks/notifications"
-	bridgehooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/bridge"
-	"github.com/projectbarks/gopher-code/pkg/ui/hooks/ide"
-	swarmhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/swarm"
 	"github.com/projectbarks/gopher-code/pkg/ui/hooks"
+	bridgehooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/bridge"
+	cmdhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/commands"
+	"github.com/projectbarks/gopher-code/pkg/ui/hooks/ide"
+	"github.com/projectbarks/gopher-code/pkg/ui/hooks/notifications"
+	swarmhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/swarm"
 	"github.com/projectbarks/gopher-code/pkg/ui/screens"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
@@ -212,6 +214,11 @@ type AppModel struct {
 	// Command dispatch
 	dispatcher *commands.Dispatcher
 
+	// T403: Command keybinding resolver + queue processor
+	cmdKeybindings *cmdhooks.CommandKeybindings
+	cmdQueue       *cmdhooks.Queue
+	cmdProcessor   *cmdhooks.QueueProcessor
+
 	// Welcome screen
 	showWelcome bool
 	welcome     *components.WelcomeScreen
@@ -311,6 +318,19 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 
 	// Command dispatcher for slash commands
 	app.dispatcher = commands.NewDispatcher()
+
+	// T403: Command keybinding resolver + queue processor.
+	resolver := cmdhooks.NewResolver(keybindings.DefaultBindingMap())
+	app.cmdKeybindings = cmdhooks.NewCommandKeybindings(resolver)
+	app.cmdQueue = cmdhooks.NewQueue()
+	app.cmdProcessor = cmdhooks.NewQueueProcessor(app.cmdQueue, func(cmd cmdhooks.QueuedCommand) tea.Cmd {
+		dispatchCmd := app.dispatcher.Dispatch(cmd.Value)
+		drainCmd := func() tea.Msg { return cmdhooks.QueueDrainedMsg{Completed: cmd} }
+		if dispatchCmd == nil {
+			return drainCmd
+		}
+		return tea.Batch(dispatchCmd, drainCmd)
+	})
 
 	// Welcome screen shown on startup
 	modelName := ""
@@ -588,6 +608,21 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case swarmhooks.PermissionPollMsg:
 		return a.handlePermissionPoll(msg)
+
+	// T403: Command keybinding -> queue -> processor pipeline.
+	case cmdhooks.ExecuteCommandMsg:
+		a.cmdQueue.Enqueue(cmdhooks.QueuedCommand{
+			Value:    msg.Command,
+			Priority: cmdhooks.PriorityNow,
+			Mode:     "keybinding",
+		})
+		return a, a.cmdProcessor.Update(cmdhooks.ProcessQueueMsg{})
+
+	case cmdhooks.ProcessQueueMsg:
+		return a, a.cmdProcessor.Update(msg)
+
+	case cmdhooks.QueueDrainedMsg:
+		return a, a.cmdProcessor.Update(msg)
 	}
 
 	// Route unhandled messages to focused component
