@@ -1,5 +1,9 @@
 package main
 
+// T376: Integration tests for OAuth config (13 fields + environments).
+// Exercises auth.GetOAuthConfig, scopes, constants, and FileSuffixForOAuthConfig
+// through the real code path from the binary's main package.
+
 import (
 	"testing"
 

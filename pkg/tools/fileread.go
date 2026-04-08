@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/projectbarks/gopher-code/pkg/provider"
 )
 
 // binaryExtensions is the set of file extensions treated as binary.
@@ -125,9 +127,8 @@ const CyberRiskMitigationReminder = "\n\n<system-reminder>\nWhenever you read a 
 // FileReadTool reads files with line numbers.
 type FileReadTool struct{}
 
-// PDFMaxPagesPerRead is the max pages for a single PDF read.
-// Source: constants/apiLimits.ts:77
-const PDFMaxPagesPerRead = 20
+// PDFMaxPagesPerRead re-exports the canonical limit from provider.
+const PDFMaxPagesPerRead = provider.PDFMaxPagesPerRead
 
 type fileReadInput struct {
 	FilePath string `json:"file_path"`
