@@ -270,6 +270,9 @@ type AppModel struct {
 	remoteSessionHook *bridgehooks.RemoteSessionHook
 	mailboxHook       *bridgehooks.MailboxBridgeHook
 
+	// T411: Display hooks — typeahead buffering, elapsed time, blink, status throttle.
+	displayHooks *DisplayHooks
+
 	// T415: Standalone hooks from pkg/ui/hooks (top-level).
 	terminalSize       *hooks.TerminalSizeTracker
 	globalKeys         *hooks.GlobalKeybindings
@@ -369,6 +372,9 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 	app.replBridgeHook = bridgehooks.NewReplBridgeHook(bridgehooks.ReplBridgeHookConfig{})
 	app.remoteSessionHook = bridgehooks.NewRemoteSessionHook(nil)
 	app.mailboxHook = bridgehooks.NewMailboxBridgeHook(bridgehooks.MailboxBridgeConfig{})
+
+	// T411: Display hooks — typeahead, elapsed time, blink, status throttle.
+	app.displayHooks = NewDisplayHooks()
 
 	// T415: Standalone hooks from pkg/ui/hooks (top-level).
 	app.initStandaloneHooks()
@@ -639,6 +645,12 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case cmdhooks.QueueDrainedMsg:
 		return a, a.cmdProcessor.Update(msg)
+
+	default:
+		// T411: Display hook tick messages (ElapsedTimeMsg, BlinkMsg, MinDisplayTimeMsg).
+		if handled, dcmd := a.displayHooks.HandleDisplayMsg(msg); handled {
+			return a, dcmd
+		}
 	}
 
 	// Route unhandled messages to focused component
@@ -759,6 +771,14 @@ func (a *AppModel) handleResize(msg tea.WindowSizeMsg) (*AppModel, tea.Cmd) {
 }
 
 func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
+	// T411: Typeahead buffering — swallow keystrokes while streaming/tool-running.
+	isCancel := (msg.Code == 'c' && msg.Mod == tea.ModCtrl) || msg.Code == tea.KeyEscape
+	if !isCancel {
+		if !a.displayHooks.PushKey(msg) {
+			return a, nil
+		}
+	}
+
 	// Reset Ctrl+C pending on any non-Ctrl+C key (T414: delegate to lifecycle.DoublePress).
 	if !(msg.Code == 'c' && msg.Mod == tea.ModCtrl) && a.ctrlCExit.Pending() {
 		a.ctrlCExit.Reset()
@@ -907,6 +927,9 @@ func (a *AppModel) handleSubmit(msg components.SubmitMsg) (*AppModel, tea.Cmd) {
 	// Show spinner in conversation
 	a.conversation.SetStreamingText(a.spinner.View() + "\n" + a.spinner.TipView())
 
+	// T411: Block typeahead, start elapsed timer, and enable blink.
+	displayCmd := a.displayHooks.BlockForQuery()
+
 	if a.queryFunc != nil {
 		ctx, cancel := context.WithCancel(context.Background())
 		a.queryCtx = ctx
@@ -915,7 +938,7 @@ func (a *AppModel) handleSubmit(msg components.SubmitMsg) (*AppModel, tea.Cmd) {
 		queryFunc := a.queryFunc
 		sess := a.session
 
-		return a, tea.Batch(a.spinner.Tick(), func() tea.Msg {
+		return a, tea.Batch(a.spinner.Tick(), displayCmd, func() tea.Msg {
 			var onEvent query.EventCallback
 			if a.bridge != nil {
 				onEvent = a.bridge.BridgeCallback()
@@ -925,7 +948,7 @@ func (a *AppModel) handleSubmit(msg components.SubmitMsg) (*AppModel, tea.Cmd) {
 		})
 	}
 
-	return a, a.spinner.Tick()
+	return a, tea.Batch(a.spinner.Tick(), displayCmd)
 }
 
 func (a *AppModel) handleQueryEvent(msg QueryEventMsg) (*AppModel, tea.Cmd) {
@@ -1085,6 +1108,11 @@ func (a *AppModel) handleTurnComplete(msg TurnCompleteMsg) (*AppModel, tea.Cmd) 
 		_ = a.session.Save() // fire-and-forget; errors are non-fatal
 	}
 
+	// T411: Unblock typeahead, stop elapsed timer, disable blink, replay buffered keys.
+	replayCmds := a.displayHooks.UnblockAfterQuery()
+	if len(replayCmds) > 0 {
+		return a, tea.Batch(replayCmds...)
+	}
 	return a, nil
 }
 
@@ -1369,4 +1397,9 @@ func (a *AppModel) RemoteSessionHook() *bridgehooks.RemoteSessionHook {
 
 func (a *AppModel) MailboxHook() *bridgehooks.MailboxBridgeHook {
 	return a.mailboxHook
+}
+
+// GetDisplayHooks returns the display hooks for testing/integration.
+func (a *AppModel) GetDisplayHooks() *DisplayHooks {
+	return a.displayHooks
 }

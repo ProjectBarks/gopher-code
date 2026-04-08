@@ -17,9 +17,10 @@ const (
 
 // AgentError represents an error from the agent loop.
 type AgentError struct {
-	Kind    AgentErrorKind
-	Wrapped error
-	Detail  string
+	Kind        AgentErrorKind
+	Wrapped     error
+	Detail      string
+	UserMessage string // User-facing message from provider.APIError.UserFacingMessage()
 }
 
 func (e *AgentError) Error() string {

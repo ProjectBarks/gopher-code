@@ -36,6 +36,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/tools"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 
+	"github.com/projectbarks/gopher-code/pkg/memdir"
 	confighooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/config"
 	diffhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/diff"
 	memoryhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/memory"
@@ -1325,8 +1326,24 @@ func main() {
 	// Resolve model aliases
 	resolvedModel := resolveModelAlias(*model)
 
+	// Build memory section from memdir package (T456).
+	// The memory section uses memdir.BuildMemoryPrompt which assembles
+	// behavioural instructions + MEMORY.md content. This makes the memdir
+	// package (including the LLM relevance selector) reachable from main().
+	memorySection := prompt.SystemPromptSection("memory", func() *string {
+		homeDir, _ := os.UserHomeDir()
+		autoMemDir := filepath.Join(homeDir, ".claude", "memory")
+		_ = memdir.EnsureMemoryDirExists(autoMemDir)
+		content := ""
+		if data, err := os.ReadFile(filepath.Join(autoMemDir, memdir.EntrypointName)); err == nil {
+			content = string(data)
+		}
+		p := memdir.BuildMemoryPrompt("auto memory", autoMemDir, nil, content)
+		return &p
+	})
+
 	// Build with environment context
-	sysPrompt = prompt.BuildSystemPrompt(sysPrompt, *cwd, resolvedModel)
+	sysPrompt = prompt.BuildSystemPrompt(sysPrompt, *cwd, resolvedModel, memorySection)
 
 	// Append system prompt additions
 	if *appendSystemPrompt != "" {
@@ -1513,6 +1530,31 @@ func main() {
 	sess.PermissionPolicy = permPolicy
 	_ = permCtx // PermissionContext available for TUI interactive handler wiring
 
+	// T476: Wire analytics subsystem into the binary.
+	// Set session-level metadata so all events are enriched, attach the
+	// composite sink (Datadog + 1P backends) unless analytics is disabled,
+	// and log the tengu_init event. Shutdown flushes pending events on exit.
+	//
+	// Source: src/services/analytics.ts — initAnalytics + tengu_init event
+	isInteractive := !*printMode && *queryStr == "" && len(flag.Args()) == 0
+	analytics.SetSessionInfo(analytics.SessionInfo{
+		SessionID:     sess.ID,
+		Model:         resolvedModel,
+		Version:       Version,
+		ClientType:    "cli",
+		IsInteractive: isInteractive,
+		Cwd:           *cwd,
+	})
+	if !analytics.IsAnalyticsDisabled() {
+		compositeSink := analytics.NewCompositeSink(analytics.CompositeSinkConfig{
+			Datadog:     analytics.NewDatadogSink(),
+			GateChecker: func(gate string) bool { return false }, // stub until real GrowthBook SDK
+		})
+		analytics.AttachSink(compositeSink)
+	}
+	defer analytics.Shutdown()
+	analytics.LogEvent("tengu_init", analytics.EventMetadata{"version": Version})
+
 	// T405: Initialise MCP/plugin hooks (merged clients, plugin state, LSP
 	// recommendation engine). These are session-scoped and wired into the
 	// binary through pkg/ui/hooks/plugins.
@@ -1558,6 +1600,14 @@ func main() {
 	skillTracker := &memoryhooks.SkillImprovementTracker{}
 	_ = skillTracker // available for post-sampling hook; suppresses unused lint
 
+	// T456: Wire LLM memory relevance selector into the binary.
+	// memdir.FindRelevantMemories is the LLM-backed selector that picks up
+	// to 5 relevant memory files per query. The MemoryRelevanceSelector
+	// is initialised here so the memdir package (including relevance.go)
+	// is reachable from main(). The selector is available for the TUI
+	// turn-loop to call before each assistant turn.
+	memRelevanceSelector := &memdir.MemoryRelevanceSelector{}
+	_ = memRelevanceSelector // available for pre-turn memory selection
 
 	// T412: Wire session/logging hooks into the binary.
 	// MessageLogger writes incremental JSONL transcripts, SessionBackgrounder

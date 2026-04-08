@@ -12,6 +12,38 @@ import (
 
 // Source: src/memdir/findRelevantMemories.ts
 
+// MemoryRelevanceSelector is the session-level wrapper for the LLM memory
+// relevance selector. It tracks already-surfaced paths across turns so the
+// 5-slot budget is spent on fresh candidates. Construct one per session and
+// call Select before each assistant turn.
+type MemoryRelevanceSelector struct {
+	// Provider is the LLM selector backend. Must be set before calling Select.
+	Provider SelectorProvider
+	// AlreadySurfaced tracks paths that have been selected in prior turns.
+	AlreadySurfaced map[string]struct{}
+}
+
+// Select calls FindRelevantMemories and updates AlreadySurfaced with the
+// results. Safe to call with a nil Provider (returns nil).
+func (s *MemoryRelevanceSelector) Select(
+	ctx context.Context,
+	query string,
+	memories []MemoryHeader,
+	recentTools []string,
+) []RelevantMemory {
+	if s.Provider == nil {
+		return nil
+	}
+	if s.AlreadySurfaced == nil {
+		s.AlreadySurfaced = make(map[string]struct{})
+	}
+	selected := FindRelevantMemories(ctx, s.Provider, query, memories, recentTools, s.AlreadySurfaced)
+	for _, m := range selected {
+		s.AlreadySurfaced[m.Path] = struct{}{}
+	}
+	return selected
+}
+
 // SelectMemoriesSystemPrompt is the verbatim system prompt used for the
 // LLM-based memory relevance selector.
 // Source: src/memdir/findRelevantMemories.ts:18-24
