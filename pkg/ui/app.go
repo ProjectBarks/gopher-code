@@ -20,6 +20,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/ui/core"
 	"github.com/projectbarks/gopher-code/pkg/ui/hooks/notifications"
 	"github.com/projectbarks/gopher-code/pkg/ui/hooks/ide"
+	swarmhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/swarm"
 	"github.com/projectbarks/gopher-code/pkg/ui/screens"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
@@ -243,6 +244,11 @@ type AppModel struct {
 	// T404: IDE integration hooks — connection, @-mentions, selection, logging.
 	ideConn      *ide.IDEConnection
 	ideSelection ide.Selection
+	// T407: Swarm/task hooks — initialization, task watcher, permission poller
+	// Source: useSwarmInitialization.ts, useTaskListWatcher.ts, useSwarmPermissionPoller.ts
+	swarmInit    *swarmhooks.SwarmInit
+	taskWatcher  *swarmhooks.TaskWatcher
+	permPoller   *swarmhooks.PermissionPoller
 }
 
 // NewAppModel creates a new AppModel with the given session and bridge.
@@ -308,6 +314,11 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 	// T404: IDE connection tracker (Disconnected until IDE extension connects).
 	app.ideConn = ide.NewIDEConnection()
 	app.ideSelection = ide.EmptySelection
+	// T407: Swarm/task hooks — disabled by default, enabled when session is
+	// in swarm mode (TeammateContext is set).
+	app.swarmInit = &swarmhooks.SwarmInit{Enabled: false}
+	app.taskWatcher = &swarmhooks.TaskWatcher{}
+	app.permPoller = &swarmhooks.PermissionPoller{}
 
 	return app
 }
@@ -323,6 +334,11 @@ func (a *AppModel) Init() tea.Cmd {
 	cmds = append(cmds, a.input.Init())
 	// T400: Run startup notification checks.
 	cmds = append(cmds, a.notifs.runStartupChecks(notifications.StartupOptions{})...)
+
+	// T407: Kick off swarm initialization if enabled.
+	if initCmd := a.swarmInit.Init(); initCmd != nil {
+		cmds = append(cmds, initCmd)
+	}
 	return tea.Batch(cmds...)
 }
 
@@ -515,6 +531,17 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.conversation.AddMessage(outMsg)
 		}
 		return a, nil
+
+	// --- T407: Swarm/task hook messages ---
+	// Source: useSwarmInitialization.ts, useTaskListWatcher.ts, useSwarmPermissionPoller.ts
+	case swarmhooks.SwarmInitMsg:
+		return a.handleSwarmInit(msg)
+
+	case swarmhooks.TaskWatchMsg:
+		return a.handleTaskWatch(msg)
+
+	case swarmhooks.PermissionPollMsg:
+		return a.handlePermissionPoll(msg)
 	}
 
 	// Route unhandled messages to focused component
@@ -1144,4 +1171,73 @@ func (a *AppModel) handleThinkingToggle() (*AppModel, tea.Cmd) {
 	}
 	a.conversation.AddMessage(infoMsg)
 	return a, nil
+}
+
+// ---------------------------------------------------------------------------
+// T407: Swarm/task hook handlers
+// Source: useSwarmInitialization.ts, useTaskListWatcher.ts, useSwarmPermissionPoller.ts
+// ---------------------------------------------------------------------------
+
+// handleSwarmInit processes the result of swarm initialization and starts
+// the task watcher and permission poller ticks.
+func (a *AppModel) handleSwarmInit(msg swarmhooks.SwarmInitMsg) (*AppModel, tea.Cmd) {
+	if msg.Err != nil {
+		errMsg := message.Message{
+			Role:    message.RoleAssistant,
+			Content: []message.ContentBlock{{Type: message.ContentText, Text: "Swarm init error: " + msg.Err.Error()}},
+		}
+		a.conversation.AddMessage(errMsg)
+		return a, nil
+	}
+
+	// Start task watcher and permission poller ticks.
+	var cmds []tea.Cmd
+	if a.taskWatcher.AgentID != "" {
+		cmds = append(cmds, a.taskWatcher.Tick())
+	}
+	if a.permPoller.AgentName != "" {
+		cmds = append(cmds, a.permPoller.Tick())
+	}
+	return a, tea.Batch(cmds...)
+}
+
+// handleTaskWatch processes a task-watcher tick result and reschedules the next tick.
+func (a *AppModel) handleTaskWatch(msg swarmhooks.TaskWatchMsg) (*AppModel, tea.Cmd) {
+	if msg.Err != nil {
+		errMsg := message.Message{
+			Role:    message.RoleAssistant,
+			Content: []message.ContentBlock{{Type: message.ContentText, Text: "Task watcher error: " + msg.Err.Error()}},
+		}
+		a.conversation.AddMessage(errMsg)
+	}
+	// Reschedule next tick.
+	return a, a.taskWatcher.Tick()
+}
+
+// handlePermissionPoll processes a permission-poll tick result and reschedules.
+func (a *AppModel) handlePermissionPoll(msg swarmhooks.PermissionPollMsg) (*AppModel, tea.Cmd) {
+	if msg.Err != nil {
+		errMsg := message.Message{
+			Role:    message.RoleAssistant,
+			Content: []message.ContentBlock{{Type: message.ContentText, Text: "Permission poll error: " + msg.Err.Error()}},
+		}
+		a.conversation.AddMessage(errMsg)
+	}
+	// Reschedule next tick.
+	return a, a.permPoller.Tick()
+}
+
+// SwarmInit returns the swarm initialization hook (for testing/integration).
+func (a *AppModel) SwarmInit() *swarmhooks.SwarmInit {
+	return a.swarmInit
+}
+
+// TaskWatcher returns the task watcher hook (for testing/integration).
+func (a *AppModel) TaskWatcher() *swarmhooks.TaskWatcher {
+	return a.taskWatcher
+}
+
+// PermissionPoller returns the permission poller hook (for testing/integration).
+func (a *AppModel) PermissionPoller() *swarmhooks.PermissionPoller {
+	return a.permPoller
 }
