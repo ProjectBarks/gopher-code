@@ -257,6 +257,57 @@ func CheckFastModeEvent(event FastModeEvent) *Notification {
 	return nil
 }
 
+
+// ---------------------------------------------------------------------------
+// Manager — collects startup notification checks and dispatches results.
+// ---------------------------------------------------------------------------
+
+// Manager collects notification hooks and runs them to produce notifications.
+type Manager struct {
+	notifications []Notification
+}
+
+// NewManager creates a new notification Manager.
+func NewManager() *Manager {
+	return &Manager{}
+}
+
+// RunStartupChecks runs the standard startup notification checks.
+func (m *Manager) RunStartupChecks(opts StartupOptions) {
+	m.notifications = append(m.notifications, CheckRateLimit(opts.RateLimit)...)
+	if n := CheckSettingsErrors(opts.SettingsErrors); n != nil {
+		m.notifications = append(m.notifications, *n)
+	}
+	m.notifications = append(m.notifications, CheckStartup(opts.IsRemoteMode, opts.StartupCompute)...)
+	m.notifications = append(m.notifications, CheckModelMigrations(opts.Migrations)...)
+}
+
+// AddFastModeEvent processes a fast-mode lifecycle event.
+func (m *Manager) AddFastModeEvent(event FastModeEvent) {
+	if n := CheckFastModeEvent(event); n != nil {
+		m.notifications = append(m.notifications, *n)
+	}
+}
+
+// Notifications returns all collected notifications.
+func (m *Manager) Notifications() []Notification {
+	return m.notifications
+}
+
+// Clear removes all collected notifications.
+func (m *Manager) Clear() {
+	m.notifications = m.notifications[:0]
+}
+
+// StartupOptions bundles all the state needed for startup notification checks.
+type StartupOptions struct {
+	RateLimit      RateLimitState
+	SettingsErrors []SettingsError
+	IsRemoteMode   bool
+	StartupCompute StartupCheck
+	Migrations     MigrationConfig
+}
+
 // formatDuration formats a duration into a compact human-readable string,
 // hiding trailing zero components (matches TS formatDuration with hideTrailingZeros).
 func formatDuration(d time.Duration) string {

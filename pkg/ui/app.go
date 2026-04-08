@@ -18,6 +18,8 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/ui/commands"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
 	"github.com/projectbarks/gopher-code/pkg/ui/core"
+	"github.com/projectbarks/gopher-code/pkg/ui/hooks/notifications"
+	"github.com/projectbarks/gopher-code/pkg/ui/hooks/ide"
 	"github.com/projectbarks/gopher-code/pkg/ui/screens"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
@@ -234,6 +236,13 @@ type AppModel struct {
 
 	// T164: Scroll activity tracking
 	scrollTracker *scrollTracker
+
+	// T400: Notification hooks state
+	notifs *notifState
+
+	// T404: IDE integration hooks — connection, @-mentions, selection, logging.
+	ideConn      *ide.IDEConnection
+	ideSelection ide.Selection
 }
 
 // NewAppModel creates a new AppModel with the given session and bridge.
@@ -292,6 +301,14 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 	app.showWelcome = true
 	app.welcome = components.NewWelcomeScreen(t, modelName, cwd)
 
+	// T400: Notification hooks state
+	app.notifs = initNotifState()
+
+
+	// T404: IDE connection tracker (Disconnected until IDE extension connects).
+	app.ideConn = ide.NewIDEConnection()
+	app.ideSelection = ide.EmptySelection
+
 	return app
 }
 
@@ -302,7 +319,11 @@ func (a *AppModel) SetQueryFunc(fn QueryFunc) {
 
 // Init initializes the AppModel and all child components.
 func (a *AppModel) Init() tea.Cmd {
-	return a.input.Init()
+	var cmds []tea.Cmd
+	cmds = append(cmds, a.input.Init())
+	// T400: Run startup notification checks.
+	cmds = append(cmds, a.notifs.runStartupChecks(notifications.StartupOptions{})...)
+	return tea.Batch(cmds...)
 }
 
 // Update handles messages and routes them to the appropriate handler.
@@ -393,6 +414,15 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case StatusUpdateMsg:
 		a.mode = msg.Mode
+		return a, nil
+
+	// T400: Route toast notifications.
+	case components.ToastMsg:
+		_, cmd := a.notifs.toast.Update(msg)
+		return a, cmd
+
+	case components.ToastDismissMsg:
+		a.notifs.toast.Update(msg)
 		return a, nil
 
 	// Slash command results
@@ -536,6 +566,11 @@ func (a *AppModel) View() tea.View {
 
 	// Second divider below input (Claude has dividers above AND below prompt)
 	sections = append(sections, dividerStyle.Render(strings.Repeat(components.DividerChar, a.width)))
+
+	// T400: Toast notifications (above status line)
+	if a.notifs.toast.HasToasts() {
+		sections = append(sections, a.notifs.toast.View().Content)
+	}
 
 	// Status line (always visible)
 	sections = append(sections, a.statusLine.View().Content)
