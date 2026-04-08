@@ -414,6 +414,20 @@ type CompactDeps struct {
 // Handler is a function that processes a slash command.
 type Handler func(args string) tea.Cmd
 
+// SetCompactDeps replaces the /compact handler's stub dependencies with real ones.
+// Call this after the session is initialized so the handler can access messages.
+// Source: T305 — wires the stub compact handler to the real session.
+func (d *Dispatcher) SetCompactDeps(deps CompactDeps) {
+	d.RegisterCommand(CommandRegistration{
+		Name:         "compact",
+		Description:  "Compact conversation history",
+		Type:         CommandTypeLocal,
+		ArgumentHint: "[custom instructions]",
+		Source:       "builtin",
+		Handler:      newCompactHandler(deps),
+	})
+}
+
 // Dispatcher routes slash commands to their handlers.
 type Dispatcher struct {
 	handlers      map[string]Handler

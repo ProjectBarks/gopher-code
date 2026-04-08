@@ -333,6 +333,13 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 	// Command dispatcher for slash commands
 	app.dispatcher = commands.NewDispatcher()
 
+	// T305: Wire real compact deps now that session is available.
+	if sess != nil {
+		app.dispatcher.SetCompactDeps(commands.CompactDeps{
+			GetMessages: func() []message.Message { return sess.Messages },
+		})
+	}
+
 	// T403: Command keybinding resolver + queue processor.
 	resolver := cmdhooks.NewResolver(keybindings.DefaultBindingMap())
 	app.cmdKeybindings = cmdhooks.NewCommandKeybindings(resolver)
