@@ -25,10 +25,11 @@ func resolveModel(model string) string {
 // AnthropicProvider implements the ModelProvider interface for the Anthropic
 // Messages API with SSE streaming support.
 type AnthropicProvider struct {
-	apiKey     string
-	baseURL    string
-	httpClient *http.Client
-	model      string
+	apiKey       string
+	baseURL      string
+	httpClient   *http.Client
+	model        string
+	extraHeaders map[string]string
 }
 
 // NewAnthropicProvider creates a new AnthropicProvider with the given API key
@@ -45,6 +46,17 @@ func NewAnthropicProvider(apiKey, model string) *AnthropicProvider {
 // SetBaseURL overrides the default Anthropic API base URL.
 func (p *AnthropicProvider) SetBaseURL(url string) {
 	p.baseURL = url
+}
+
+// SetExtraHeaders sets additional HTTP headers to include in every API request.
+// Used for attribution headers (x-anthropic-billing-header) and similar per-request metadata.
+func (p *AnthropicProvider) SetExtraHeaders(headers map[string]string) {
+	p.extraHeaders = headers
+}
+
+// ExtraHeaders returns the extra headers map (may be nil).
+func (p *AnthropicProvider) ExtraHeaders() map[string]string {
+	return p.extraHeaders
 }
 
 // Name returns the provider name.
@@ -156,6 +168,11 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req ModelRequest) (<-cha
 	// Add beta headers — Source: utils/betas.ts:397-428
 	if betas := GetMergedBetas(req.Model, true); len(betas) > 0 {
 		httpReq.Header.Set("anthropic-beta", strings.Join(betas, ","))
+	}
+
+	// Add extra headers (attribution, etc.) — Source: constants/system.ts
+	for k, v := range p.extraHeaders {
+		httpReq.Header.Set(k, v)
 	}
 
 	resp, err := p.httpClient.Do(httpReq)

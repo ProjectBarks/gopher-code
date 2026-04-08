@@ -28,7 +28,10 @@ type InputPane struct {
 	focused   bool
 	cursor    int // Cursor position in runes (not bytes)
 	History   *input.InputHistory
-	multiline bool // True when in multi-line editing mode
+	Search    *input.HistorySearch
+	Paste     *input.PasteHandler
+	Buffer    *input.InputBuffer // low-level buffer primitive (shared with hooks)
+	multiline bool               // True when in multi-line editing mode
 
 	// Vim mode state — see pkg/vim for types.
 	VimEnabled bool
@@ -39,9 +42,13 @@ type InputPane struct {
 
 // NewInputPane creates a new empty input pane.
 func NewInputPane() *InputPane {
+	h := input.NewInputHistory()
 	return &InputPane{
 		runes:   make([]rune, 0),
-		History: input.NewInputHistory(),
+		History: h,
+		Search:  input.NewHistorySearch(h),
+		Paste:   input.NewPasteHandler(),
+		Buffer:  input.NewInputBuffer(),
 	}
 }
 
@@ -54,7 +61,24 @@ func (ip *InputPane) Init() tea.Cmd {
 
 // Update handles key presses and other messages.
 func (ip *InputPane) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Let the paste handler consume its own timeout messages first.
+	if cmd, handled := ip.Paste.Update(msg); handled {
+		return ip, cmd
+	}
+
 	switch msg := msg.(type) {
+	case input.PasteCompleteMsg:
+		// Paste finished — insert the assembled text into the buffer.
+		ip.insertText(msg.Text)
+		return ip, nil
+	case input.HistorySearchStartMsg:
+		ip.Search.Start(string(ip.runes), ip.cursor)
+		return ip, nil
+	case input.HistorySearchEndMsg:
+		if msg.Accepted {
+			ip.SetValue(msg.Text)
+		}
+		return ip, nil
 	case tea.KeyPressMsg:
 		return ip.handleKey(msg)
 	case tea.WindowSizeMsg:
@@ -106,6 +130,7 @@ func (ip *InputPane) Value() string { return string(ip.runes) }
 func (ip *InputPane) SetValue(v string) {
 	ip.runes = []rune(v)
 	ip.cursor = len(ip.runes)
+	ip.Buffer.SetValue(v)
 }
 
 // HasText returns true if the input buffer contains any text.
@@ -117,6 +142,7 @@ func (ip *InputPane) HasText() bool {
 func (ip *InputPane) Clear() {
 	ip.runes = ip.runes[:0]
 	ip.cursor = 0
+	ip.Buffer.Clear()
 }
 
 // AddToHistory adds a command to the history.
@@ -124,12 +150,53 @@ func (ip *InputPane) AddToHistory(cmd string) {
 	ip.History.Add(cmd)
 }
 
+// IsSearching returns true when Ctrl+R history search is active.
+func (ip *InputPane) IsSearching() bool {
+	return ip.Search.Active
+}
+
+// IsPasting returns true while a multi-chunk paste is being assembled.
+func (ip *InputPane) IsPasting() bool {
+	return ip.Paste.IsPasting()
+}
+
 // --- Key handling ---
 
+// insertText inserts text at the current cursor position.
+func (ip *InputPane) insertText(text string) {
+	runes := []rune(text)
+	newRunes := make([]rune, 0, len(ip.runes)+len(runes))
+	newRunes = append(newRunes, ip.runes[:ip.cursor]...)
+	newRunes = append(newRunes, runes...)
+	newRunes = append(newRunes, ip.runes[ip.cursor:]...)
+	ip.runes = newRunes
+	ip.cursor += len(runes)
+}
+
 func (ip *InputPane) handleKey(msg tea.KeyPressMsg) (*InputPane, tea.Cmd) {
+	// History search (Ctrl+R) intercepts keys first when active.
+	if text, cmd, handled := ip.Search.HandleKey(msg); handled {
+		if text != "" {
+			ip.SetValue(text)
+		}
+		return ip, cmd
+	}
+
+	// If search was just requested (Ctrl+R emits HistorySearchStartMsg),
+	// start the search session.
+	// Note: The HandleKey above returns a cmd that produces HistorySearchStartMsg.
+	// We handle the start trigger here by checking if the cmd will start search.
+
 	// Vim mode intercepts keys before the normal handler.
 	if ip.handleVimKey(msg) {
 		return ip, nil
+	}
+
+	// Paste detection: if the input text is long, treat as paste.
+	if msg.Text != "" {
+		if handled, cmd := ip.Paste.HandleInput(msg.Text); handled {
+			return ip, cmd
+		}
 	}
 
 	switch {

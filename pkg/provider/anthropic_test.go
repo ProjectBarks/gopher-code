@@ -775,3 +775,49 @@ func TestAnthropicProvider_PingEvent(t *testing.T) {
 		t.Error("expected text delta 'Hi' after ping event")
 	}
 }
+
+// ── T381: ExtraHeaders integration ──────────────────────────────
+
+func TestAnthropicProvider_ExtraHeadersSentInRequest(t *testing.T) {
+	// Verify that SetExtraHeaders causes the headers to appear on the HTTP
+	// request, which is how the attribution header reaches the API.
+	var gotHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("x-anthropic-billing-header")
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, sseEvent("message_start", `{"type":"message_start","message":{"id":"m1","role":"assistant","model":"test","usage":{"input_tokens":1,"output_tokens":1}}}`))
+		fmt.Fprint(w, sseEvent("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}`))
+		fmt.Fprint(w, sseEvent("message_stop", `{"type":"message_stop"}`))
+	}))
+	defer srv.Close()
+
+	p := NewAnthropicProvider("test-key", "claude-sonnet-4-6")
+	p.SetBaseURL(srv.URL)
+	p.SetExtraHeaders(map[string]string{
+		"x-anthropic-billing-header": "cc_version=0.2.0.go; cc_entrypoint=cli;",
+	})
+
+	ch, err := p.Stream(context.Background(), ModelRequest{
+		Model:     "claude-sonnet-4-6",
+		MaxTokens: 100,
+		Messages:  []RequestMessage{{Role: "user", Content: []RequestContent{{Type: "text", Text: "hi"}}}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	// Drain the channel
+	for range ch {
+	}
+
+	if gotHeader != "cc_version=0.2.0.go; cc_entrypoint=cli;" {
+		t.Errorf("extra header not sent, got %q", gotHeader)
+	}
+}
+
+func TestAnthropicProvider_ExtraHeadersNilSafe(t *testing.T) {
+	// Without SetExtraHeaders, requests should still work.
+	p := NewAnthropicProvider("test-key", "claude-sonnet-4-6")
+	if p.ExtraHeaders() != nil {
+		t.Error("default extraHeaders should be nil")
+	}
+}

@@ -484,3 +484,73 @@ func TestBuildSystemPrompt_ClearResetsCache(t *testing.T) {
 		t.Errorf("after ClearSystemPromptSections, section should recompute; got %d", calls)
 	}
 }
+
+// ── T379: Integration — section builders wired through BuildSystemPrompt ──
+
+func TestIntegration_SectionBuildersWiredIntoBuildSystemPrompt(t *testing.T) {
+	// This test verifies that BuildSystemPrompt exercises the section builders
+	// from constants.go (ActionsSection, OutputEfficiencySection, ToneAndStyleSection,
+	// HooksSection, ComputeSimpleEnvInfo) through the real code path that main.go calls.
+
+	p := BuildSystemPrompt("", "/tmp/test-dir", "claude-opus-4-6[1m]")
+
+	// ActionsSection() content (from constants.go)
+	if !strings.Contains(p, "# Executing actions with care") {
+		t.Error("BuildSystemPrompt should include ActionsSection heading")
+	}
+	if !strings.Contains(p, "reversibility and blast radius") {
+		t.Error("BuildSystemPrompt should include ActionsSection content (reversibility)")
+	}
+	if !strings.Contains(p, "measure twice, cut once") {
+		t.Error("BuildSystemPrompt should include ActionsSection content (measure twice)")
+	}
+
+	// OutputEfficiencySection() content (from constants.go)
+	if !strings.Contains(p, "# Output efficiency") {
+		t.Error("BuildSystemPrompt should include OutputEfficiencySection heading")
+	}
+	if !strings.Contains(p, "Go straight to the point") {
+		t.Error("BuildSystemPrompt should include OutputEfficiencySection content")
+	}
+
+	// ToneAndStyleSection() content (from constants.go)
+	if !strings.Contains(p, "# Tone and style") {
+		t.Error("BuildSystemPrompt should include ToneAndStyleSection heading")
+	}
+	if !strings.Contains(p, "Only use emojis if the user explicitly requests it") {
+		t.Error("BuildSystemPrompt should include ToneAndStyleSection content (emojis)")
+	}
+	if !strings.Contains(p, "owner/repo#123") {
+		t.Error("BuildSystemPrompt should include ToneAndStyleSection content (GitHub links)")
+	}
+
+	// HooksSection() content (from constants.go)
+	if !strings.Contains(p, "Users may configure 'hooks'") {
+		t.Error("BuildSystemPrompt should include HooksSection content")
+	}
+	if !strings.Contains(p, "<user-prompt-submit-hook>") {
+		t.Error("BuildSystemPrompt should include HooksSection content (submit hook)")
+	}
+
+	// ComputeSimpleEnvInfo() content (from constants.go)
+	if !strings.Contains(p, "Primary working directory: /tmp/test-dir") {
+		t.Error("BuildSystemPrompt should use ComputeSimpleEnvInfo for env section")
+	}
+	if !strings.Contains(p, "claude-opus-4-6") {
+		t.Error("BuildSystemPrompt should include model ID via ComputeSimpleEnvInfo")
+	}
+	if !strings.Contains(p, "Assistant knowledge cutoff is May 2025") {
+		t.Error("BuildSystemPrompt should include knowledge cutoff via GetKnowledgeCutoff")
+	}
+	if !strings.Contains(p, "The most recent Claude model family is Claude 4.5/4.6") {
+		t.Error("BuildSystemPrompt should include model family info via ComputeSimpleEnvInfo")
+	}
+	if !strings.Contains(p, "Fast mode for Claude Code") {
+		t.Error("BuildSystemPrompt should include FastModeExplanation via ComputeSimpleEnvInfo")
+	}
+
+	// CyberRiskInstruction constant (from system.go, used in DefaultSystemPrompt)
+	if !strings.Contains(p, "IMPORTANT: Assist with authorized security testing") {
+		t.Error("BuildSystemPrompt should include CyberRiskInstruction")
+	}
+}
