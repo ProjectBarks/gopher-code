@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/message"
+	"github.com/projectbarks/gopher-code/pkg/services"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
 	"github.com/projectbarks/gopher-code/pkg/provider"
 	"golang.org/x/text/unicode/norm"
@@ -322,6 +323,10 @@ type SessionState struct {
 	// Source: services/compact/timeBasedMCConfig.ts
 	TimeBasedMCConfig compact.TimeBasedMCConfigProvider `json:"-"`
 
+	// T486: MagicDocs tracker — detects and tracks "# MAGIC DOC:" headers.
+	// Source: services/MagicDocs/magicDocs.ts
+	MagicDocs *services.MagicDocTracker `json:"-"`
+
 	// T163: Callbacks fired when SwitchSession changes the active session ID.
 	// Source: bootstrap/state.ts — onSessionSwitch (createSignal pattern)
 	sessionSwitchCallbacks []func(sessionID string) `json:"-"`
@@ -368,6 +373,7 @@ func New(config SessionConfig, cwd string) *SessionState {
 		PostCompactCleaner:   compact.NewPostCompactCleaner(),
 		SessionMemoryCompact: compact.NewSessionMemoryCompactState(),
 		TimeBasedMCConfig:    compact.GetDefaultTimeBasedMCConfig,
+		MagicDocs:            services.NewMagicDocTracker(),
 	}
 }
 
