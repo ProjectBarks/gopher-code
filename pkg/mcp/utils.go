@@ -198,3 +198,84 @@ var ErrInvalidScope = errors.New("invalid scope")
 
 // ErrInvalidTransport is returned when an invalid transport type is provided.
 var ErrInvalidTransport = errors.New("invalid transport")
+
+// ---------------------------------------------------------------------------
+// T574: Additional MCP utility functions
+// Source: services/mcp/utils.ts, services/mcp/mcpStringUtils.ts
+// ---------------------------------------------------------------------------
+
+// FilterToolsByServer returns tool names belonging to a specific MCP server.
+// Source: utils.ts:39-42
+func FilterToolsByServer(toolNames []string, serverName string) []string {
+	prefix := MCPToolPrefix(serverName)
+	var result []string
+	for _, name := range toolNames {
+		if strings.HasPrefix(name, prefix) {
+			result = append(result, name)
+		}
+	}
+	return result
+}
+
+// CommandBelongsToServer checks if a command name belongs to an MCP server.
+// MCP prompts: mcp__{server}__{prompt}; MCP skills: {server}:{skill}.
+// Source: utils.ts:52-62
+func CommandBelongsToServer(commandName, serverName string) bool {
+	normalized := NormalizeNameForMCP(serverName)
+	return strings.HasPrefix(commandName, "mcp__"+normalized+"__") ||
+		strings.HasPrefix(commandName, normalized+":")
+}
+
+// MCPInfo holds parsed info from an MCP connection string.
+// Source: services/mcp/mcpStringUtils.ts
+type MCPInfo struct {
+	ServerName string
+	Transport  string // "stdio", "sse", "http", "websocket"
+	Command    string // for stdio
+	URL        string // for sse/http/ws
+}
+
+// MCPInfoFromString parses an MCP server identifier string.
+// Formats: "npx:package", "http(s)://...", or plain name.
+// Source: services/mcp/mcpStringUtils.ts — mcpInfoFromString
+func MCPInfoFromString(s string) MCPInfo {
+	if strings.HasPrefix(s, "npx:") || strings.HasPrefix(s, "npm:") {
+		parts := strings.SplitN(s, ":", 2)
+		return MCPInfo{
+			ServerName: parts[1],
+			Transport:  "stdio",
+			Command:    parts[0] + " " + parts[1],
+		}
+	}
+	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
+		host := s
+		host = strings.TrimPrefix(host, "http://")
+		host = strings.TrimPrefix(host, "https://")
+		if i := strings.IndexAny(host, ":/"); i > 0 {
+			host = host[:i]
+		}
+		return MCPInfo{
+			ServerName: NormalizeNameForMCP(host),
+			Transport:  "sse",
+			URL:        s,
+		}
+	}
+	return MCPInfo{ServerName: s}
+}
+
+// MergeServerConfigs combines configs from multiple scopes. Later scopes override.
+// Source: config.ts — loadMergedConfig
+func MergeServerConfigs(scopeConfigs ...map[string]ServerConfig) map[string]ScopedServerConfig {
+	merged := make(map[string]ScopedServerConfig)
+	scopes := []ConfigScope{ScopeEnterprise, ScopeUser, ScopeProject, ScopeLocal}
+	for i, cfgs := range scopeConfigs {
+		scope := ScopeLocal
+		if i < len(scopes) {
+			scope = scopes[i]
+		}
+		for name, cfg := range cfgs {
+			merged[name] = ScopedServerConfig{ServerConfig: cfg, Scope: scope}
+		}
+	}
+	return merged
+}
