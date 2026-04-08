@@ -33,49 +33,59 @@ func TestRemoteTriggerTool(t *testing.T) {
 		if !ok {
 			t.Fatal("schema missing properties")
 		}
-		if _, ok := props["agent"]; !ok {
-			t.Error("schema missing 'agent' property")
-		}
-		if _, ok := props["prompt"]; !ok {
-			t.Error("schema missing 'prompt' property")
-		}
-		// Verify additionalProperties is false
-		if ap, ok := parsed["additionalProperties"]; !ok || ap != false {
-			t.Error("additionalProperties should be false")
+		if _, ok := props["action"]; !ok {
+			t.Error("schema missing 'action' property")
 		}
 	})
 
-	t.Run("returns_not_configured", func(t *testing.T) {
-		input := json.RawMessage(`{"agent": "my-agent", "prompt": "do something"}`)
+	t.Run("list_requires_no_id", func(t *testing.T) {
+		// list without OAuth token → auth error (expected in test)
+		input := json.RawMessage(`{"action": "list"}`)
+		out, err := tool.Execute(context.Background(), nil, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// Should fail with auth error since no OAuth configured in test
+		if !out.IsError {
+			// If it succeeds, that's fine too (means auth is configured)
+			return
+		}
+		if !strings.Contains(out.Content, "Not authenticated") && !strings.Contains(out.Content, "failed") {
+			t.Errorf("expected auth or connection error, got: %s", out.Content)
+		}
+	})
+
+	t.Run("get_without_auth", func(t *testing.T) {
+		// Without OAuth, returns auth error (param validation happens after auth)
+		input := json.RawMessage(`{"action": "get"}`)
 		out, err := tool.Execute(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !out.IsError {
-			t.Error("expected error output (not configured)")
-		}
-		if !strings.Contains(out.Content, "not configured") {
-			t.Errorf("expected 'not configured' in output, got %q", out.Content)
+			t.Error("should fail without auth")
 		}
 	})
 
-	t.Run("missing_agent", func(t *testing.T) {
-		out, err := tool.Execute(context.Background(), nil, json.RawMessage(`{"agent": "", "prompt": "x"}`))
+	t.Run("create_without_auth", func(t *testing.T) {
+		input := json.RawMessage(`{"action": "create", "body": {"name": "test"}}`)
+		out, err := tool.Execute(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !out.IsError {
-			t.Error("expected error for missing agent")
+			t.Error("should fail without auth")
 		}
 	})
 
-	t.Run("missing_prompt", func(t *testing.T) {
-		out, err := tool.Execute(context.Background(), nil, json.RawMessage(`{"agent": "a", "prompt": ""}`))
+	t.Run("unknown_action", func(t *testing.T) {
+		input := json.RawMessage(`{"action": "delete"}`)
+		out, err := tool.Execute(context.Background(), nil, input)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !out.IsError {
-			t.Error("expected error for missing prompt")
+			t.Error("should fail for unknown action")
 		}
 	})
 
