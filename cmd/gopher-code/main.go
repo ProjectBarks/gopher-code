@@ -978,7 +978,7 @@ func main() {
 				SSO:      *sso,
 				Console:  *console,
 				ClaudeAI: *claudeAI,
-			}, nil); code != 0 {
+			}, handlers.NewBrowserOAuthFlow()); code != 0 {
 				cliError("auth login failed")
 			}
 			cliOk("")

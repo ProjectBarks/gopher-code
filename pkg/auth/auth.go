@@ -86,7 +86,7 @@ func DeleteAPIKey() {
 
 // EnsureValidAuth checks that a valid API key or token is available before
 // making an API call. For API key auth, this is a simple lookup.
-// For OAuth (future), this would refresh expired tokens.
+// For OAuth tokens, it checks expiry and refreshes if needed.
 // Source: services/api/claude.ts — getClient() calls refreshIfExpired before each request
 func EnsureValidAuth() (string, error) {
 	key, err := GetAPIKey()
@@ -94,13 +94,30 @@ func EnsureValidAuth() (string, error) {
 		return "", err
 	}
 
-	// Future: OAuth token refresh would go here
-	// if isOAuthToken(key) && isExpired(key) {
-	//     key, err = refreshToken(key)
-	// }
+	// Check OAuth token expiry if we have stored expiry info.
+	if OAuthTokenExpiresAtMs != 0 && IsOAuthTokenExpired(OAuthTokenExpiresAtMs) {
+		if OAuthRefreshConfig != nil {
+			tokens, err := RefreshOAuthToken(*OAuthRefreshConfig)
+			if err != nil {
+				return "", fmt.Errorf("OAuth token expired and refresh failed: %w", err)
+			}
+			if err := SaveAPIKey(tokens.AccessToken); err != nil {
+				return "", fmt.Errorf("save refreshed token: %w", err)
+			}
+			return tokens.AccessToken, nil
+		}
+	}
 
 	return key, nil
 }
+
+// OAuthTokenExpiresAtMs holds the OAuth token expiry timestamp in milliseconds.
+// Set during login; 0 means no expiry tracking (e.g. API key auth).
+var OAuthTokenExpiresAtMs int64
+
+// OAuthRefreshConfig holds parameters needed to refresh the OAuth token.
+// Set during login; nil means refresh is not available.
+var OAuthRefreshConfig *RefreshTokenParams
 
 // Status returns the current auth status.
 func Status() string {
