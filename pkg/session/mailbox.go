@@ -44,10 +44,9 @@ func (m *Mailbox) GetInboxPath(agentName, teamName string) string {
 	if teamName == "" {
 		teamName = "default"
 	}
-	safeTeam := sanitizePathComponent(agentName)
+	safeTeam := sanitizePathComponent(teamName)
 	safeAgent := sanitizePathComponent(agentName)
-	_ = safeTeam // Fix: use teamName
-	return filepath.Join(m.teamsDir, sanitizePathComponent(teamName), "inboxes", safeAgent+".json")
+	return filepath.Join(m.teamsDir, safeTeam, "inboxes", safeAgent+".json")
 }
 
 // ReadMailbox reads all messages from a teammate's inbox.
