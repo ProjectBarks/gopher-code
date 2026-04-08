@@ -3590,6 +3590,32 @@ Follow these steps:
 If there are no comments, return "No comments found."`,
 	}))
 
+	// T285: /security-review — moved to plugin
+	// Source: src/commands/security-review.ts
+	d.RegisterCommand(CreateMovedToPluginCommand(MovedToPluginOptions{
+		Name:          "security-review",
+		Description:   "Complete a security review of pending changes",
+		PluginName:    "security-review",
+		PluginCommand: "security-review",
+	}))
+
+	// T288: /stats — show session statistics (ant-only)
+	// Source: src/commands/stats/index.ts
+	d.RegisterCommand(CommandRegistration{
+		Name:        "stats",
+		Description: "Show session statistics",
+		Type:        CommandTypeLocal,
+		IsHidden:    true,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				return OutputStyleMsg{
+					Message: "Session statistics are not yet available in this build.",
+				}
+			}
+		},
+	})
+
 	// T300: /version — show build version (ant-only)
 	// Source: src/commands/version.ts
 	d.RegisterCommand(CommandRegistration{
