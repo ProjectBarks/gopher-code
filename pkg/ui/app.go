@@ -269,6 +269,14 @@ type AppModel struct {
 	replBridgeHook    *bridgehooks.ReplBridgeHook
 	remoteSessionHook *bridgehooks.RemoteSessionHook
 	mailboxHook       *bridgehooks.MailboxBridgeHook
+
+	// T415: Standalone hooks from pkg/ui/hooks (top-level).
+	terminalSize       *hooks.TerminalSizeTracker
+	globalKeys         *hooks.GlobalKeybindings
+	mergedTools        *hooks.MergedTools
+	apiKeyVerification *hooks.ApiKeyVerification
+	interactionTracker *hooks.InteractionTracker
+	updateNotification *hooks.UpdateNotification
 }
 
 // NewAppModel creates a new AppModel with the given session and bridge.
@@ -361,6 +369,9 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 	app.replBridgeHook = bridgehooks.NewReplBridgeHook(bridgehooks.ReplBridgeHookConfig{})
 	app.remoteSessionHook = bridgehooks.NewRemoteSessionHook(nil)
 	app.mailboxHook = bridgehooks.NewMailboxBridgeHook(bridgehooks.MailboxBridgeConfig{})
+
+	// T415: Standalone hooks from pkg/ui/hooks (top-level).
+	app.initStandaloneHooks()
 
 	return app
 }
@@ -738,6 +749,11 @@ func (a *AppModel) handleResize(msg tea.WindowSizeMsg) (*AppModel, tea.Cmd) {
 	a.bubble.SetWidth(a.width)
 	a.streaming.SetSize(a.width, 0)
 	a.welcome.SetSize(a.width, a.height)
+
+	// T415: Update terminal size tracker on resize.
+	if a.terminalSize != nil {
+		a.terminalSize.Update(a.width, a.height)
+	}
 
 	return a, nil
 }
