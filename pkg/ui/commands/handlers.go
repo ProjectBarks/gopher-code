@@ -3590,6 +3590,22 @@ Follow these steps:
 If there are no comments, return "No comments found."`,
 	}))
 
+	// T287: /skills — list available skills
+	// Source: src/commands/skills/index.ts
+	d.RegisterCommand(CommandRegistration{
+		Name:        "skills",
+		Description: "List available skills",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				return OutputStyleMsg{
+					Message: "Use the Skill tool to invoke skills. Available skills are listed in system-reminder messages.",
+				}
+			}
+		},
+	})
+
 	// T285: /security-review — moved to plugin
 	// Source: src/commands/security-review.ts
 	d.RegisterCommand(CreateMovedToPluginCommand(MovedToPluginOptions{
