@@ -33,6 +33,7 @@ type SessionConfig struct {
 	MaxBudgetUSD      float64 `json:"max_budget_usd,omitempty"`
 	TokenBudgetTarget int     `json:"token_budget_target,omitempty"` // +500k feature: output token target
 	FallbackModel     string  `json:"fallback_model,omitempty"`      // --fallback-model: switch on 529 exhaustion
+	QuerySource       provider.QuerySource `json:"query_source,omitempty"` // origin of query for retry policy + analytics
 }
 
 // DefaultConfig returns sensible defaults.

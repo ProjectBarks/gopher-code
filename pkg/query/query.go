@@ -19,14 +19,6 @@ import (
 
 const microCompactThreshold = 10000
 
-// maxRetries is the general retry limit for retryable API errors (429, 5xx).
-// Source: services/api/withRetry.ts:52 — DEFAULT_MAX_RETRIES = 10
-const maxRetries = 10
-
-// max529Retries is the 529-specific retry limit (overloaded).
-// Source: services/api/withRetry.ts:54 — MAX_529_RETRIES = 3
-const max529Retries = 3
-
 // loadClaudeMD loads CLAUDE.md files following the same hierarchy as the TS source:
 // 1. Global ~/.claude/CLAUDE.md
 // 2. Walk up from CWD (up to 10 levels) looking for CLAUDE.md
@@ -106,7 +98,15 @@ func Query(
 	// QueryConfig is threaded through iterations for gate checks.
 	_ = qcfg // consumed by streaming tool exec, summaries, etc. in future tasks
 
-	retryCount := 0
+	// Retry budget for structured retry/fallback decisions.
+	// Source: services/api/withRetry.ts:170-188
+	retryBudget := provider.NewRetryBudget(provider.RetryBudgetConfig{
+		MaxRetries:        provider.GetDefaultMaxRetries(),
+		Max529Consecutive: provider.Max529Retries,
+		QuerySource:       sess.Config.QuerySource,
+		Model:             sess.Config.Model,
+		FallbackModel:     sess.Config.FallbackModel,
+	})
 	compactedOnce := false
 
 	// Token budget tracker for +500k feature
@@ -189,12 +189,60 @@ func Query(
 			req.JSONSchema = json.RawMessage(sess.Config.JSONSchema)
 		}
 
-		// 4. Call provider.Stream - with error classification for L2
+		// 4. Call provider.StreamWithRetry — exponential backoff for transient errors
+		// Source: services/api/claude.ts + withRetry.ts + logging.ts
 		apiStart := time.Now()
-		ch, err := prov.Stream(ctx, req)
+
+		// Log API query event — Source: logging.ts:171-233
+		provider.LogAPIQuery(provider.APIQueryEvent{
+			Model:          req.Model,
+			MessagesLength: len(req.Messages),
+			QuerySource:    string(sess.Config.QuerySource),
+		})
+
+		attempt := retryBudget.RecordAttempt()
+
+		// Use StreamWithRetry for exponential backoff on transient errors (429, 529, 5xx).
+		// The query loop handles high-level recovery (compaction, fallback, auth).
+		// Source: services/api/withRetry.ts:170-517
+		ch, retryAttempt, err := provider.StreamWithRetry(ctx, prov, req, provider.RetryOptions{
+			MaxRetries:                  provider.GetDefaultMaxRetries(),
+			Model:                       sess.Config.Model,
+			FallbackModel:               sess.Config.FallbackModel,
+			QuerySource:                 sess.Config.QuerySource,
+			InitialConsecutive529Errors: retryBudget.Consecutive529Count(),
+		})
+		if retryAttempt > 0 {
+			attempt = retryAttempt
+		}
+
 		if err != nil {
+			// Log API error — Source: logging.ts:235-396
+			provider.LogAPIError(provider.APIErrorEvent{
+				Error:       err.Error(),
+				Model:       req.Model,
+				DurationMs:  provider.ComputeDurationMs(apiStart),
+				Attempt:     attempt,
+				QuerySource: string(sess.Config.QuerySource),
+			})
+
+			// Unwrap CannotRetryError to get the underlying error for classification.
+			originalErr := err
+			if cannotRetry, ok := err.(*provider.CannotRetryError); ok && cannotRetry.OriginalError != nil {
+				originalErr = cannotRetry.OriginalError
+			}
+
 			// Fallback model switch: when 529 retries are exhausted and a fallback is configured
 			// Source: query.ts:894-951
+			if fbErr, ok := err.(*provider.FallbackTriggeredError); ok && sess.Config.FallbackModel != "" {
+				sess.Config.Model = fbErr.FallbackModel
+				emit(onEvent, QueryEvent{
+					Type: QEventTextDelta,
+					Text: fmt.Sprintf("\n[Switched to %s due to high demand for %s]\n", fbErr.FallbackModel, fbErr.OriginalModel),
+				})
+				continue // Retry with fallback model
+			}
+			// Also check query-level FallbackTriggeredError wrapper
 			if fte, ok := IsFallbackTriggered(err); ok && sess.Config.FallbackModel != "" {
 				sess.Config.Model = fte.FallbackModel
 				emit(onEvent, QueryEvent{
@@ -204,12 +252,44 @@ func Query(
 				continue // Retry with fallback model
 			}
 
-			errStr := strings.ToLower(err.Error())
+			// Classify using typed APIError when available.
+			// Source: services/api/errors.ts — classifyHTTPError
+			if apiErr, ok := originalErr.(*provider.APIError); ok {
+				userMsg := apiErr.UserFacingMessage()
+
+				// Context too long: compact and retry once
+				if provider.IsContextTooLongError(apiErr) {
+					if compactedOnce {
+						return &AgentError{Kind: ErrContextTooLong, Wrapped: originalErr, UserMessage: userMsg}
+					}
+					compactedOnce = true
+					CompactSession(sess)
+					continue
+				}
+
+				// Auth errors: fail immediately
+				// Source: errors.ts — invalid_api_key, token_revoked, org_disabled, auth_error, oauth_org_not_allowed
+				switch apiErr.Type {
+				case provider.ErrInvalidAPIKey, provider.ErrTokenRevoked, provider.ErrOrgDisabled,
+					provider.ErrAuthError, provider.ErrOAuthOrgNotAllowed:
+					return &AgentError{Kind: ErrProvider, Wrapped: originalErr, UserMessage: userMsg}
+				}
+
+				// Billing errors: fail immediately
+				if provider.IsBillingError(apiErr) {
+					return &AgentError{Kind: ErrProvider, Wrapped: originalErr, UserMessage: userMsg}
+				}
+
+				return &AgentError{Kind: ErrProvider, Wrapped: originalErr, UserMessage: userMsg}
+			}
+
+			// Fallback: string-based classification for non-APIError errors.
+			errStr := strings.ToLower(originalErr.Error())
 
 			// Context too long: compact and retry once
 			if strings.Contains(errStr, "context_too_long") || strings.Contains(errStr, "prompt is too long") {
 				if compactedOnce {
-					return &AgentError{Kind: ErrContextTooLong, Wrapped: err}
+					return &AgentError{Kind: ErrContextTooLong, Wrapped: originalErr}
 				}
 				compactedOnce = true
 				CompactSession(sess)
@@ -218,28 +298,14 @@ func Query(
 
 			// Auth errors: fail immediately
 			if strings.Contains(errStr, "401") || strings.Contains(errStr, "auth") {
-				return &AgentError{Kind: ErrProvider, Wrapped: err}
+				return &AgentError{Kind: ErrProvider, Wrapped: originalErr}
 			}
 
-			// Rate limit (429) or server errors (5xx): retry with appropriate limit.
-			// Source: withRetry.ts:52-54 — DEFAULT_MAX_RETRIES=10, MAX_529_RETRIES=3
-			if isRetryable(errStr) {
-				retryCount++
-				limit := maxRetries
-				if strings.Contains(errStr, "529") || strings.Contains(errStr, "overloaded") {
-					limit = max529Retries
-				}
-				if retryCount <= limit {
-					continue
-				}
-				return &AgentError{Kind: ErrProvider, Wrapped: err}
-			}
-
-			return &AgentError{Kind: ErrProvider, Wrapped: err}
+			return &AgentError{Kind: ErrProvider, Wrapped: originalErr}
 		}
 
-		// Reset retry count on successful Stream() call
-		retryCount = 0
+		// Reset 529 count on successful StreamWithRetry call
+		retryBudget.Reset529Count()
 
 		// 5. Consume stream events from channel
 		var textBuilder strings.Builder
@@ -320,6 +386,23 @@ func Query(
 		}
 		turnCost := provider.CalculateUSDCost(sess.Config.Model, turnUsage)
 		sess.AddCost(sess.Config.Model, turnCost, turnUsage)
+
+		// Log API success — Source: logging.ts:398-577
+		provider.LogAPISuccess(provider.APISuccessEvent{
+			Model:        req.Model,
+			MessageCount: len(req.Messages),
+			Usage: provider.NonNullableUsage{
+				InputTokens:              usage.InputTokens,
+				OutputTokens:             usage.OutputTokens,
+				CacheReadInputTokens:     turnUsage.CacheReadInputTokens,
+				CacheCreationInputTokens: turnUsage.CacheCreationInputTokens,
+			},
+			DurationMs:  provider.ComputeDurationMs(apiStart),
+			Attempt:     attempt,
+			StopReason:  &stopReason,
+			CostUSD:     turnCost,
+			QuerySource: string(sess.Config.QuerySource),
+		})
 
 		// Budget check: stop if spend exceeds --max-budget-usd
 		if sess.Config.MaxBudgetUSD > 0 {
@@ -474,6 +557,7 @@ func emit(cb EventCallback, evt QueryEvent) {
 }
 
 // isRetryable checks if an error message indicates a retryable error (429, 529, or 5xx).
+// Used as fallback for non-APIError errors that don't carry typed classification.
 func isRetryable(errStr string) bool {
 	if strings.Contains(errStr, "429") || strings.Contains(errStr, "rate") {
 		return true

@@ -384,3 +384,197 @@ func TestFallbackModelSwitch(t *testing.T) {
 		}
 	})
 }
+
+// TestTypedAPIErrorIntegration exercises the typed *provider.APIError classification
+// path through the query loop, ensuring ClassifyHTTPError, UserFacingMessage, and
+// the typed error helpers are wired into the real code path.
+// Source: services/api/errors.ts — full error classification
+func TestTypedAPIErrorIntegration(t *testing.T) {
+
+	t.Run("typed_429_retries_and_succeeds", func(t *testing.T) {
+		// Use a real classified APIError, not a plain fmt.Errorf
+		apiErr429 := provider.ClassifyHTTPError(429, []byte(`{"type":"rate_limit_error"}`), "")
+		prov := testharness.NewScriptedProvider(
+			testharness.MakeErrorTurn(apiErr429),
+			testharness.MakeTextTurn("ok", provider.StopReasonEndTurn),
+		)
+		reg, orch := setupRegistry()
+		sess := testharness.MakeSession()
+
+		err := query.Query(context.Background(), sess, prov, reg, orch, nil)
+		if err != nil {
+			t.Fatalf("should succeed after retrying typed 429 APIError, got: %v", err)
+		}
+
+		reqs := prov.Requests()
+		if len(reqs) != 2 {
+			t.Fatalf("expected 2 requests (1 retry + 1 success), got %d", len(reqs))
+		}
+	})
+
+	t.Run("typed_529_retries_limited_to_3", func(t *testing.T) {
+		// 529 has a lower retry limit (Max529Retries=3)
+		apiErr529 := provider.ClassifyHTTPError(529, []byte(`{"type":"overloaded_error"}`), "")
+		prov := testharness.NewScriptedProvider(
+			testharness.MakeErrorTurn(apiErr529),
+			testharness.MakeErrorTurn(apiErr529),
+			testharness.MakeErrorTurn(apiErr529),
+			testharness.MakeErrorTurn(apiErr529), // 4th attempt — should exceed limit
+		)
+		reg, orch := setupRegistry()
+		sess := testharness.MakeSession()
+
+		err := query.Query(context.Background(), sess, prov, reg, orch, nil)
+		if err == nil {
+			t.Fatal("expected error after exceeding 529 retry limit")
+		}
+
+		var agentErr *query.AgentError
+		if !errors.As(err, &agentErr) {
+			t.Fatalf("expected AgentError, got %T: %v", err, err)
+		}
+		if agentErr.Kind != query.ErrProvider {
+			t.Fatalf("expected ErrProvider, got kind=%d", agentErr.Kind)
+		}
+	})
+
+	t.Run("typed_401_auth_fails_immediately", func(t *testing.T) {
+		apiErr401 := provider.ClassifyHTTPError(401, []byte(`invalid x-api-key`), "")
+		prov := testharness.NewScriptedProvider(
+			testharness.MakeErrorTurn(apiErr401),
+			testharness.MakeTextTurn("should not reach", provider.StopReasonEndTurn),
+		)
+		reg, orch := setupRegistry()
+		sess := testharness.MakeSession()
+
+		err := query.Query(context.Background(), sess, prov, reg, orch, nil)
+		if err == nil {
+			t.Fatal("expected error for typed 401 APIError")
+		}
+
+		var agentErr *query.AgentError
+		if !errors.As(err, &agentErr) {
+			t.Fatalf("expected AgentError, got %T: %v", err, err)
+		}
+		if agentErr.Kind != query.ErrProvider {
+			t.Fatalf("expected ErrProvider, got kind=%d", agentErr.Kind)
+		}
+		// User message should be populated from UserFacingMessage()
+		if agentErr.UserMessage == "" {
+			t.Fatal("expected UserMessage to be populated for typed APIError")
+		}
+		if agentErr.UserMessage != provider.InvalidAPIKeyErrorMessage {
+			t.Errorf("UserMessage = %q, want %q", agentErr.UserMessage, provider.InvalidAPIKeyErrorMessage)
+		}
+
+		reqs := prov.Requests()
+		if len(reqs) != 1 {
+			t.Fatalf("expected 1 request (no retry for auth), got %d", len(reqs))
+		}
+	})
+
+	t.Run("typed_prompt_too_long_compacts_and_retries", func(t *testing.T) {
+		apiErrPrompt := provider.ClassifyHTTPError(400, []byte(`prompt is too long: 250000 tokens > 200000 maximum`), "")
+		prov := testharness.NewScriptedProvider(
+			testharness.MakeErrorTurn(apiErrPrompt),
+			testharness.MakeTextTurn("ok after compact", provider.StopReasonEndTurn),
+		)
+		reg, orch := setupRegistry()
+		sess := testharness.MakeSession()
+		// Pad session for compaction
+		for i := 0; i < 20; i++ {
+			sess.PushMessage(message.UserMessage(fmt.Sprintf("msg %d", i)))
+			sess.PushMessage(message.Message{
+				Role:    message.RoleAssistant,
+				Content: []message.ContentBlock{message.TextBlock(fmt.Sprintf("reply %d", i))},
+			})
+		}
+
+		err := query.Query(context.Background(), sess, prov, reg, orch, nil)
+		if err != nil {
+			t.Fatalf("should recover via compact for typed prompt_too_long, got: %v", err)
+		}
+
+		reqs := prov.Requests()
+		if len(reqs) < 2 {
+			t.Fatalf("expected at least 2 requests, got %d", len(reqs))
+		}
+		if len(reqs[1].Messages) >= len(reqs[0].Messages) {
+			t.Fatalf("compacted request should have fewer messages: second=%d first=%d",
+				len(reqs[1].Messages), len(reqs[0].Messages))
+		}
+	})
+
+	t.Run("typed_credit_balance_low_fails_immediately", func(t *testing.T) {
+		apiErrBilling := provider.ClassifyHTTPError(400, []byte(`Credit balance is too low`), "")
+		prov := testharness.NewScriptedProvider(
+			testharness.MakeErrorTurn(apiErrBilling),
+			testharness.MakeTextTurn("should not reach", provider.StopReasonEndTurn),
+		)
+		reg, orch := setupRegistry()
+		sess := testharness.MakeSession()
+
+		err := query.Query(context.Background(), sess, prov, reg, orch, nil)
+		if err == nil {
+			t.Fatal("expected error for billing error")
+		}
+
+		var agentErr *query.AgentError
+		if !errors.As(err, &agentErr) {
+			t.Fatalf("expected AgentError, got %T: %v", err, err)
+		}
+		if agentErr.UserMessage != provider.CreditBalanceTooLowErrorMessage {
+			t.Errorf("UserMessage = %q, want %q", agentErr.UserMessage, provider.CreditBalanceTooLowErrorMessage)
+		}
+
+		reqs := prov.Requests()
+		if len(reqs) != 1 {
+			t.Fatalf("expected 1 request (no retry for billing), got %d", len(reqs))
+		}
+	})
+
+	t.Run("typed_5xx_retries_and_succeeds", func(t *testing.T) {
+		apiErr500 := provider.ClassifyHTTPError(500, []byte(`Internal Server Error`), "")
+		prov := testharness.NewScriptedProvider(
+			testharness.MakeErrorTurn(apiErr500),
+			testharness.MakeTextTurn("ok", provider.StopReasonEndTurn),
+		)
+		reg, orch := setupRegistry()
+		sess := testharness.MakeSession()
+
+		err := query.Query(context.Background(), sess, prov, reg, orch, nil)
+		if err != nil {
+			t.Fatalf("should succeed after retrying typed 500 APIError, got: %v", err)
+		}
+
+		reqs := prov.Requests()
+		if len(reqs) != 2 {
+			t.Fatalf("expected 2 requests (1 retry + 1 success), got %d", len(reqs))
+		}
+	})
+
+	t.Run("typed_token_revoked_fails_immediately", func(t *testing.T) {
+		apiErr403 := provider.ClassifyHTTPError(403, []byte(`OAuth token has been revoked`), "")
+		// Override: token_revoked is classified as retryable (for refresh), but in the
+		// query loop auth errors should fail immediately.
+		prov := testharness.NewScriptedProvider(
+			testharness.MakeErrorTurn(apiErr403),
+			testharness.MakeTextTurn("should not reach", provider.StopReasonEndTurn),
+		)
+		reg, orch := setupRegistry()
+		sess := testharness.MakeSession()
+
+		err := query.Query(context.Background(), sess, prov, reg, orch, nil)
+		if err == nil {
+			t.Fatal("expected error for token revoked")
+		}
+
+		var agentErr *query.AgentError
+		if !errors.As(err, &agentErr) {
+			t.Fatalf("expected AgentError, got %T: %v", err, err)
+		}
+		if agentErr.UserMessage != provider.TokenRevokedErrorMessage {
+			t.Errorf("UserMessage = %q, want %q", agentErr.UserMessage, provider.TokenRevokedErrorMessage)
+		}
+	})
+}

@@ -828,8 +828,23 @@ func main() {
 			handlers.AutoModeConfigHandler(nil)
 		case "defaults":
 			handlers.AutoModeDefaultsHandler()
+		case "critique":
+			// Wire side query through provider.QueryWithModel
+			// Source: cli/handlers/autoMode.ts:73-149
+			apiKey, err := auth.GetAPIKey()
+			if err != nil {
+				cliError(err.Error())
+			}
+			model := "claude-sonnet-4-20250514"
+			p := provider.NewAnthropicProvider(apiKey, model)
+			sideQuery := handlers.NewProviderSideQuery(p)
+			if err := handlers.AutoModeCritiqueHandler(
+				context.Background(), nil, model, sideQuery,
+			); err != nil {
+				cliError(err.Error())
+			}
 		default:
-			cliErrorf("Unknown auto-mode subcommand: %s (use defaults, config)", sub)
+			cliErrorf("Unknown auto-mode subcommand: %s (use defaults, config, critique)", sub)
 		}
 		cliOk("")
 	}
@@ -1493,6 +1508,12 @@ func main() {
 	}
 
 	if sess == nil {
+		// Determine query source — headless/SDK mode vs interactive REPL
+		// Source: services/api/claude.ts:1066-1070
+		querySource := provider.QuerySourceREPLMainThread
+		if *printMode || *outputFormat == "json" {
+			querySource = provider.QuerySourceSDK
+		}
 		cfg := session.SessionConfig{
 			Model:           resolvedModel,
 			SystemPrompt:    sysPrompt,
@@ -1502,6 +1523,7 @@ func main() {
 			ThinkingEnabled: thinkingEnabled,
 			ThinkingBudget:  thinkingBudget,
 			MaxBudgetUSD:    *maxBudgetUSD,
+			QuerySource:     querySource,
 		}
 		if *jsonSchema != "" {
 			cfg.JSONSchema = *jsonSchema
