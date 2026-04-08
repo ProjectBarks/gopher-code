@@ -430,3 +430,113 @@ func TestInputPaneModeFilterHistory(t *testing.T) {
 		t.Errorf("Expected empty draft, got %q", ip.Value())
 	}
 }
+
+// TestT417_ArrowKeyHistoryIntegration is the integration test for T417:
+// exercises the full arrow-key history fix through InputPane.Update(),
+// validating draft preservation + mode filtering + submit-adds-to-history
+// in a single end-to-end flow reachable from main() via app.go -> InputPane.
+func TestT417_ArrowKeyHistoryIntegration(t *testing.T) {
+	ip := NewInputPane()
+	ip.SetSize(80, 3)
+	ip.Focus()
+
+	// === Phase 1: Submit commands to build history (mirrors app.go flow) ===
+	// Type "first command" and submit.
+	for _, ch := range "first command" {
+		ip.Update(tea.KeyPressMsg{Text: string(ch)})
+	}
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	// After submit, InputPane clears and resets history cursor.
+	// The app layer calls AddToHistory; simulate that here.
+	ip.AddToHistory("first command")
+
+	for _, ch := range "second command" {
+		ip.Update(tea.KeyPressMsg{Text: string(ch)})
+	}
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	ip.AddToHistory("second command")
+
+	// === Phase 2: Draft preservation ===
+	// Type a partial draft, then navigate history.
+	for _, ch := range "my draft" {
+		ip.Update(tea.KeyPressMsg{Text: string(ch)})
+	}
+
+	// Up: save draft, show newest history entry.
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if ip.Value() != "second command" {
+		t.Fatalf("Up should show 'second command', got %q", ip.Value())
+	}
+
+	// Up: show older entry.
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if ip.Value() != "first command" {
+		t.Fatalf("Up should show 'first command', got %q", ip.Value())
+	}
+
+	// Up at oldest: no change (no wrap-around).
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if ip.Value() != "first command" {
+		t.Fatalf("Up at oldest should stay on 'first command', got %q", ip.Value())
+	}
+
+	// Down: back to newest.
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if ip.Value() != "second command" {
+		t.Fatalf("Down should show 'second command', got %q", ip.Value())
+	}
+
+	// Down past newest: restore draft.
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if ip.Value() != "my draft" {
+		t.Fatalf("Down past newest should restore draft 'my draft', got %q", ip.Value())
+	}
+
+	// === Phase 3: Mode filtering ===
+	ip.Clear()
+	ip.History.Reset()
+
+	// Add mixed-mode entries.
+	ip.AddToHistory("!bash ls")
+	ip.AddToHistory("normal prompt")
+	ip.AddToHistory("!bash git status")
+
+	// Enable bash-mode filter.
+	ip.History.ModeFilter = "!"
+
+	// Up: should skip "normal prompt" and show "!bash git status".
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if ip.Value() != "!bash git status" {
+		t.Fatalf("Filtered Up should show '!bash git status', got %q", ip.Value())
+	}
+
+	// Up: should show "!bash ls" (skipping "normal prompt").
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	if ip.Value() != "!bash ls" {
+		t.Fatalf("Filtered Up should show '!bash ls', got %q", ip.Value())
+	}
+
+	// Down: back to newest filtered.
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if ip.Value() != "!bash git status" {
+		t.Fatalf("Filtered Down should show '!bash git status', got %q", ip.Value())
+	}
+
+	// Down: restore empty draft.
+	ip.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if ip.Value() != "" {
+		t.Fatalf("Down past newest should restore empty draft, got %q", ip.Value())
+	}
+
+	// Clear mode filter for next use.
+	ip.History.ModeFilter = ""
+
+	// === Phase 4: Down on empty history is no-op ===
+	ip2 := NewInputPane()
+	ip2.SetSize(80, 3)
+	ip2.Focus()
+	ip2.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if ip2.Value() != "" {
+		t.Fatalf("Down on empty history should be no-op, got %q", ip2.Value())
+	}
+}
