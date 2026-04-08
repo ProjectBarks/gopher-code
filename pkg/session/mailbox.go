@@ -187,6 +187,40 @@ func WithSummary(summary string) WriteOption {
 }
 
 // sanitizePathComponent removes dangerous characters from path components.
+// MarkRead marks all messages in an inbox as read.
+// Source: T420 — inbox poller marks messages after processing.
+func (m *Mailbox) MarkRead(agentName, teamName string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	path := m.GetInboxPath(agentName, teamName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	var messages []TeammateMessage
+	if err := json.Unmarshal(data, &messages); err != nil {
+		return err
+	}
+
+	for i := range messages {
+		messages[i].Read = true
+	}
+
+	updated, err := json.MarshalIndent(messages, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, updated, 0644)
+}
+
+// PollInbox checks for new unread messages and returns them.
+// Source: T420 — inbox poller for bridge/swarm hooks.
+func (m *Mailbox) PollInbox(agentName, teamName string) ([]TeammateMessage, error) {
+	return m.ReadUnreadMessages(agentName, teamName)
+}
+
 func sanitizePathComponent(s string) string {
 	s = strings.ReplaceAll(s, "/", "_")
 	s = strings.ReplaceAll(s, "\\", "_")

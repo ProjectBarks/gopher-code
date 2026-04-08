@@ -102,3 +102,21 @@ func ListWorktrees(repoDir string) ([]string, error) {
 	}
 	return paths, nil
 }
+
+// CleanupWorktreeOnExit checks if cwd is inside a worktree and cleans it up.
+// Returns true if cleanup was performed.
+// Source: T366 — WorktreeExitDialog cleanup
+func CleanupWorktreeOnExit(cwd string) bool {
+	gitFile := filepath.Join(cwd, ".git")
+	data, err := os.ReadFile(gitFile)
+	if err != nil {
+		return false // not a worktree (or not a git repo)
+	}
+	content := strings.TrimSpace(string(data))
+	if !strings.HasPrefix(content, "gitdir:") {
+		return false // regular .git directory, not a worktree
+	}
+	// It's a worktree — clean up
+	_ = DestroyWorktree(cwd)
+	return true
+}

@@ -331,6 +331,10 @@ type SessionState struct {
 	// Source: context/mailbox.tsx — MailboxProvider wraps Mailbox from utils/mailbox.ts
 	Mailbox *Mailbox `json:"-"`
 
+	// T423: Swarm/teammate context for multi-agent coordination.
+	// Source: context/TeammateContext.tsx
+	Teammate *TeammateContext `json:"-"`
+
 	// T163: Callbacks fired when SwitchSession changes the active session ID.
 	// Source: bootstrap/state.ts — onSessionSwitch (createSignal pattern)
 	sessionSwitchCallbacks []func(sessionID string) `json:"-"`

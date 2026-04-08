@@ -105,7 +105,8 @@ const (
 	Yellow100 = "#fff9c4"
 
 	// Error — failures, destructive actions, critical alerts
-	Red700 = "#c62828"
+	Amber500 = "#ff8f00" // Warning / caution
+	Red700   = "#c62828"
 	Red600 = "#d32f2f"
 	Red500 = "#e53935"
 	Red400 = "#ff5555" // Primary error in dark mode
@@ -158,3 +159,27 @@ const (
 	AccentBlue    = "#0087ff" // Primary action color
 	AccentBlueDim = "#005faf" // Pressed / active state
 )
+
+// T437: Colorize maps semantic color names to palette values.
+// Source: utils/colorize.ts — maps names like "error", "warning", "success"
+// to hex colors. Used by components that reference colors by semantic name.
+var SemanticColors = map[string]string{
+	"error":      Red500,
+	"warning":    Amber500,
+	"success":    Green500,
+	"info":       Blue400,
+	"accent":     AccentBlue,
+	"muted":      Gray500,
+	"dim":        Gray600,
+	"text":       Gray100,
+	"background": Blue900,
+}
+
+// Colorize returns the hex color for a semantic color name.
+// Returns fallback if the name isn't recognized.
+func Colorize(name, fallback string) string {
+	if c, ok := SemanticColors[name]; ok {
+		return c
+	}
+	return fallback
+}
