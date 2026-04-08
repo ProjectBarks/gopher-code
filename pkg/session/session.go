@@ -327,6 +327,10 @@ type SessionState struct {
 	// Source: services/MagicDocs/magicDocs.ts
 	MagicDocs *services.MagicDocTracker `json:"-"`
 
+	// T397: Mailbox — file-based messaging for agent swarms.
+	// Source: context/mailbox.tsx — MailboxProvider wraps Mailbox from utils/mailbox.ts
+	Mailbox *Mailbox `json:"-"`
+
 	// T163: Callbacks fired when SwitchSession changes the active session ID.
 	// Source: bootstrap/state.ts — onSessionSwitch (createSignal pattern)
 	sessionSwitchCallbacks []func(sessionID string) `json:"-"`
@@ -374,6 +378,7 @@ func New(config SessionConfig, cwd string) *SessionState {
 		SessionMemoryCompact: compact.NewSessionMemoryCompactState(),
 		TimeBasedMCConfig:    compact.GetDefaultTimeBasedMCConfig,
 		MagicDocs:            services.NewMagicDocTracker(),
+		Mailbox:              NewMailbox(""),
 	}
 }
 
