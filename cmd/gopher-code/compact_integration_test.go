@@ -213,6 +213,47 @@ func TestGroupMessagesByAPIRound_WiredIntoBinary(t *testing.T) {
 	}
 }
 
+// TestStripImages_WiredIntoBinary verifies StripImagesFromMessages is callable
+// through CompactConversation (images.go supporting file).
+func TestStripImages_WiredIntoBinary(t *testing.T) {
+	msgs := []message.Message{
+		{Role: message.RoleUser, Content: []message.ContentBlock{
+			{Type: "image", Text: ""},
+			{Type: message.ContentText, Text: "hello"},
+			{Type: "document", Text: ""},
+		}},
+		{Role: message.RoleAssistant, Content: []message.ContentBlock{
+			{Type: message.ContentText, Text: "reply"},
+		}},
+	}
+
+	stripped := compact.StripImagesFromMessages(msgs)
+	if len(stripped) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(stripped))
+	}
+	// User message should have image/doc replaced with text markers.
+	userBlocks := stripped[0].Content
+	if len(userBlocks) != 3 {
+		t.Fatalf("expected 3 blocks, got %d", len(userBlocks))
+	}
+	if userBlocks[0].Text != "[image]" {
+		t.Errorf("block 0 text = %q, want [image]", userBlocks[0].Text)
+	}
+	if userBlocks[2].Text != "[document]" {
+		t.Errorf("block 2 text = %q, want [document]", userBlocks[2].Text)
+	}
+	// Assistant message should be unchanged.
+	if stripped[1].Content[0].Text != "reply" {
+		t.Errorf("assistant message should be unchanged")
+	}
+
+	// StripReinjectedAttachments is a no-op stub but should be callable.
+	result := compact.StripReinjectedAttachments(msgs)
+	if len(result) != len(msgs) {
+		t.Errorf("StripReinjectedAttachments should return same messages")
+	}
+}
+
 // TestTimeBasedMCConfig_WiredThroughSession verifies that TimeBasedMCConfig
 // is initialized in the session.
 func TestTimeBasedMCConfig_WiredThroughSession(t *testing.T) {
