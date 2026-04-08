@@ -9,26 +9,22 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/projectbarks/gopher-code/pkg/ui/figures"
 )
 
 // ---------------------------------------------------------------------------
-// Glyph constants (from constants/figures.ts)
+// Glyph constants — delegated to pkg/ui/figures
 // ---------------------------------------------------------------------------
 
 // BridgeSpinnerFrames is the animation frames for the connecting/reconnecting
 // spinner. Each frame is a 3-char glyph with middle-dot separators.
-var BridgeSpinnerFrames = []string{
-	"\u00b7|\u00b7",  // ·|·
-	"\u00b7/\u00b7",  // ·/·
-	"\u00b7\u2014\u00b7", // ·—·
-	"\u00b7\\\u00b7", // ·\·
-}
+var BridgeSpinnerFrames = figures.BridgeSpinnerFrames[:]
 
 // BridgeReadyIndicator is shown when the bridge is idle or attached.
-const BridgeReadyIndicator = "\u00b7\u2714\ufe0e\u00b7" // ·✔︎·
+const BridgeReadyIndicator = figures.BridgeReadyIndicator
 
 // BridgeFailedIndicator is shown when the bridge has failed.
-const BridgeFailedIndicator = "\u00d7" // ×
+const BridgeFailedIndicator = figures.BridgeFailedIndicator
 
 // MiddleDot is the separator used between status segments.
 const MiddleDot = "\u00b7" // ·

@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/projectbarks/gopher-code/pkg/ui/figures"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
 
@@ -89,12 +90,12 @@ var TurnCompletionVerbs = []string{
 	"Cooked", "Crunched", "Sautéed", "Worked",
 }
 
-// Effort level icons (from Claude Code's src/constants/figures.ts).
+// Effort level icons — re-exported from pkg/ui/figures for local convenience.
 const (
-	EffortLow    = "○" // U+25CB WHITE CIRCLE
-	EffortMedium = "◐" // U+25D0 CIRCLE WITH LEFT HALF BLACK
-	EffortHigh   = "●" // U+25CF BLACK CIRCLE
-	EffortMax    = "◉" // U+25C9 FISHEYE
+	EffortLow    = figures.EffortLow
+	EffortMedium = figures.EffortMedium
+	EffortHigh   = figures.EffortHigh
+	EffortMax    = figures.EffortMax
 )
 
 // Tips shown below the spinner during thinking.
