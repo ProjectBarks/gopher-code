@@ -408,4 +408,54 @@ func TestL1BasicLoop(t *testing.T) {
 			t.Error("expected tool_b in tool definitions")
 		}
 	})
+
+	// 11. empty_tool_result_gets_no_content_message
+	// Source: utils/messages.ts:506 — content: content || NO_CONTENT_MESSAGE
+	t.Run("empty_tool_result_gets_no_content_message", func(t *testing.T) {
+		// A tool that returns empty content should have its result replaced
+		// with the NoContentMessage constant to avoid sending empty strings
+		// to the API.
+		emptyTool := testharness.NewSpyTool("empty_tool", false).
+			WithResponse(func(_ json.RawMessage) *tools.ToolOutput {
+				return tools.SuccessOutput("") // empty content
+			})
+
+		prov := testharness.NewScriptedProvider(
+			testharness.MakeToolTurn("t1", "empty_tool", json.RawMessage(`{}`), provider.StopReasonToolUse),
+			testharness.MakeTextTurn("done", provider.StopReasonEndTurn),
+		)
+
+		registry := tools.NewRegistry()
+		registry.Register(emptyTool)
+		orchestrator := tools.NewOrchestrator(registry)
+
+		sess := testharness.MakeSession()
+		err := query.Query(context.Background(), sess, prov, registry, orchestrator, nil)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		// Messages: user, assistant(tool_use), user(tool_result), assistant(text)
+		if len(sess.Messages) < 3 {
+			t.Fatalf("expected at least 3 messages, got %d", len(sess.Messages))
+		}
+
+		toolResultMsg := sess.Messages[2]
+		if toolResultMsg.Role != message.RoleUser {
+			t.Fatalf("expected message[2] role User, got %s", toolResultMsg.Role)
+		}
+
+		found := false
+		for _, block := range toolResultMsg.Content {
+			if block.Type == message.ContentToolResult {
+				if block.Content != message.NoContentMessage {
+					t.Errorf("expected tool result content %q, got %q", message.NoContentMessage, block.Content)
+				}
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("expected a tool_result block in message[2]")
+		}
+	})
 }
