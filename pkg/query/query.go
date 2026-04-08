@@ -623,7 +623,20 @@ func CompactSession(sess *session.SessionState) {
 	// Use MicroCompactMessages to shrink tool results first (cheaper than
 	// full LLM-based compaction). keepRecent=2 preserves the last 2
 	// compactable tool results.
-	compacted, savedTokens := compact.MicroCompactMessages(msgs, 2)
+	// When time-based MC is enabled and the gap since the last API call
+	// exceeds the threshold, use the config's KeepRecent instead.
+	// Source: services/compact/autoCompact.ts — time-based MC path
+	keepRecent := 2
+	if sess.TimeBasedMCConfig != nil {
+		mcCfg := sess.TimeBasedMCConfig()
+		if mcCfg.Enabled && sess.LastApiCompletionTimestamp != nil {
+			gapMinutes := int(time.Since(*sess.LastApiCompletionTimestamp).Minutes())
+			if gapMinutes >= mcCfg.GapThresholdMinutes {
+				keepRecent = mcCfg.KeepRecent
+			}
+		}
+	}
+	compacted, savedTokens := compact.MicroCompactMessages(msgs, keepRecent)
 
 	if savedTokens > 0 {
 		sess.Messages = compacted

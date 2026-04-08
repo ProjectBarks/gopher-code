@@ -319,6 +319,8 @@ type SessionState struct {
 	PostCompactCleaner *compact.PostCompactCleaner `json:"-"`
 	// Source: services/compact/sessionMemoryCompact.ts
 	SessionMemoryCompact *compact.SessionMemoryCompactState `json:"-"`
+	// Source: services/compact/timeBasedMCConfig.ts
+	TimeBasedMCConfig compact.TimeBasedMCConfigProvider `json:"-"`
 
 	// T163: Callbacks fired when SwitchSession changes the active session ID.
 	// Source: bootstrap/state.ts — onSessionSwitch (createSignal pattern)
@@ -365,6 +367,7 @@ func New(config SessionConfig, cwd string) *SessionState {
 		CompactWarning:       compact.NewCompactWarningState(),
 		PostCompactCleaner:   compact.NewPostCompactCleaner(),
 		SessionMemoryCompact: compact.NewSessionMemoryCompactState(),
+		TimeBasedMCConfig:    compact.GetDefaultTimeBasedMCConfig,
 	}
 }
 

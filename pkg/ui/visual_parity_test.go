@@ -5075,18 +5075,18 @@ func TestParity_CompactSessionContract(t *testing.T) {
 		}
 	})
 
-	// -- Behaviors 3+4+5+6+8: 5 messages → 3 = [m0, m3, m4] --
+	// -- Behaviors 3+4+5+6+8: 5 all-user messages, TruncateHead drops 20% (1) --
 	t.Run("five-messages-compact", func(t *testing.T) {
 		sess := session.New(session.DefaultConfig(), "/tmp")
 		for i := 0; i < 5; i++ {
 			sess.PushMessage(mkMsg(fmt.Sprintf("m%d", i)))
 		}
 		query.CompactSession(sess)
-		if len(sess.Messages) != 3 {
-			t.Fatalf("5-msg session should compact to 3, got %d: %+v",
+		if len(sess.Messages) != 4 {
+			t.Fatalf("5 all-user msgs: truncate drops 1 (20%%), want 4, got %d: %+v",
 				len(sess.Messages), sess.Messages)
 		}
-		wantTexts := []string{"m0", "m3", "m4"}
+		wantTexts := []string{"m1", "m2", "m3", "m4"}
 		for i, want := range wantTexts {
 			if got := extractText(sess.Messages[i]); got != want {
 				t.Errorf("after compact, msgs[%d] text: want %q, got %q", i, want, got)
@@ -5094,41 +5094,42 @@ func TestParity_CompactSessionContract(t *testing.T) {
 		}
 	})
 
-	// -- Behavior 7: 10 messages → [m0, m8, m9] --
+	// -- Behavior 7: 10 all-user messages, TruncateHead drops 20% (2) --
 	t.Run("ten-messages-compact", func(t *testing.T) {
 		sess := session.New(session.DefaultConfig(), "/tmp")
 		for i := 0; i < 10; i++ {
 			sess.PushMessage(mkMsg(fmt.Sprintf("m%d", i)))
 		}
 		query.CompactSession(sess)
-		if len(sess.Messages) != 3 {
-			t.Fatalf("10-msg session should compact to 3, got %d", len(sess.Messages))
+		if len(sess.Messages) != 8 {
+			t.Fatalf("10 all-user msgs: truncate drops 2 (20%%), want 8, got %d", len(sess.Messages))
 		}
-		wantTexts := []string{"m0", "m8", "m9"}
+		wantTexts := []string{"m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9"}
 		for i, want := range wantTexts {
 			if got := extractText(sess.Messages[i]); got != want {
-				t.Errorf("10→3 compact, msgs[%d]: want %q, got %q", i, want, got)
+				t.Errorf("10->8 compact, msgs[%d]: want %q, got %q", i, want, got)
 			}
 		}
-		// Middle messages m1..m7 must be completely absent.
-		for i := 1; i <= 7; i++ {
+		// Head messages m0, m1 must be dropped.
+		for i := 0; i <= 1; i++ {
 			mid := fmt.Sprintf("m%d", i)
 			for _, kept := range sess.Messages {
 				if extractText(kept) == mid {
-					t.Errorf("middle message %q should have been dropped", mid)
+					t.Errorf("head message %q should have been dropped", mid)
 				}
 			}
 		}
 	})
 
-	// Edge case: exactly 5 messages — boundary from "unchanged" to "compact".
+	// Edge case: exactly 5 messages -- boundary from "unchanged" to "compact".
 	t.Run("boundary-5-triggers-compact", func(t *testing.T) {
 		sess := session.New(session.DefaultConfig(), "/tmp")
 		for i := 0; i < 5; i++ {
 			sess.PushMessage(mkMsg(fmt.Sprintf("x%d", i)))
 		}
 		query.CompactSession(sess)
-		if len(sess.Messages) != 3 {
+		// 5 all-user msgs: drops 1 (20%), resulting in 4.
+		if len(sess.Messages) != 4 {
 			t.Errorf("boundary: 5-msg must compact (>4 threshold), got %d", len(sess.Messages))
 		}
 	})

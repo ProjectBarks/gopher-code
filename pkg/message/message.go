@@ -53,6 +53,14 @@ func UserMessage(text string) Message {
 	}
 }
 
+// AssistantMessage creates an assistant message with a single text block.
+func AssistantMessage(text string) Message {
+	return Message{
+		Role:    RoleAssistant,
+		Content: []ContentBlock{{Type: ContentText, Text: text}},
+	}
+}
+
 // TextBlock creates a text content block.
 func TextBlock(text string) ContentBlock {
 	return ContentBlock{Type: ContentText, Text: text}
