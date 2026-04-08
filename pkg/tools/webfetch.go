@@ -42,6 +42,26 @@ type webFetchInput struct {
 func (t *WebFetchTool) Name() string        { return "WebFetch" }
 func (t *WebFetchTool) Description() string { return "Fetch a URL and return its content as text" }
 func (t *WebFetchTool) IsReadOnly() bool    { return true }
+func (t *WebFetchTool) SearchHint() string  { return "fetch and analyze web page content" }
+func (t *WebFetchTool) MaxResultSizeChars() int { return 100_000 }
+
+// Prompt returns the tool description matching the TS source.
+// Source: tools/WebFetchTool/prompt.ts
+func (t *WebFetchTool) Prompt() string {
+	return `- Fetches content from a specified URL and processes it
+- Takes a URL and a prompt as input
+- Fetches the URL content, converts HTML to markdown
+- Returns the content for analysis
+- Use this tool when you need to retrieve and analyze web content
+
+Usage notes:
+  - IMPORTANT: If an MCP-provided web fetch tool is available, prefer using that.
+  - The URL must be a fully-formed valid URL
+  - HTTP URLs will be automatically upgraded to HTTPS
+  - This tool is read-only and does not modify any files
+  - Includes a 15-minute cache for repeated access
+  - For GitHub URLs, prefer using the gh CLI via Bash instead.`
+}
 
 func (t *WebFetchTool) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
