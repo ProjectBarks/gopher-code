@@ -15,9 +15,11 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/remote"
 	"github.com/projectbarks/gopher-code/pkg/session"
+	"github.com/projectbarks/gopher-code/pkg/keybindings"
 	"github.com/projectbarks/gopher-code/pkg/ui/commands"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
 	"github.com/projectbarks/gopher-code/pkg/ui/core"
+	cmdhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/commands"
 	"github.com/projectbarks/gopher-code/pkg/ui/screens"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
@@ -207,6 +209,12 @@ type AppModel struct {
 	// Command dispatch
 	dispatcher *commands.Dispatcher
 
+	// T403: Command keybinding resolver + queue processor
+	// Source: useCommandKeybindings.tsx, useQueueProcessor.ts
+	cmdKeybindings *cmdhooks.CommandKeybindings
+	cmdQueue       *cmdhooks.Queue
+	cmdProcessor   *cmdhooks.QueueProcessor
+
 	// Welcome screen
 	showWelcome bool
 	welcome     *components.WelcomeScreen
@@ -281,6 +289,22 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 
 	// Command dispatcher for slash commands
 	app.dispatcher = commands.NewDispatcher()
+
+	// T403: Command keybinding resolver + queue processor.
+	// The resolver maps keystrokes to actions via the default binding map.
+	// The queue processor drains commands serially, dispatching each through
+	// the slash command dispatcher.
+	resolver := cmdhooks.NewResolver(keybindings.DefaultBindingMap())
+	app.cmdKeybindings = cmdhooks.NewCommandKeybindings(resolver)
+	app.cmdQueue = cmdhooks.NewQueue()
+	app.cmdProcessor = cmdhooks.NewQueueProcessor(app.cmdQueue, func(cmd cmdhooks.QueuedCommand) tea.Cmd {
+		dispatchCmd := app.dispatcher.Dispatch(cmd.Value)
+		drainCmd := func() tea.Msg { return cmdhooks.QueueDrainedMsg{Completed: cmd} }
+		if dispatchCmd == nil {
+			return drainCmd
+		}
+		return tea.Batch(dispatchCmd, drainCmd)
+	})
 
 	// Welcome screen shown on startup
 	modelName := ""
@@ -485,6 +509,23 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.conversation.AddMessage(outMsg)
 		}
 		return a, nil
+
+	// T403: Command keybinding -> queue -> processor pipeline.
+	// ExecuteCommandMsg is produced by CommandKeybindings when a key resolves
+	// to a slash command. We enqueue it and kick the processor.
+	case cmdhooks.ExecuteCommandMsg:
+		a.cmdQueue.Enqueue(cmdhooks.QueuedCommand{
+			Value:    msg.Command,
+			Priority: cmdhooks.PriorityNow,
+			Mode:     "keybinding",
+		})
+		return a, a.cmdProcessor.Update(cmdhooks.ProcessQueueMsg{})
+
+	case cmdhooks.ProcessQueueMsg:
+		return a, a.cmdProcessor.Update(msg)
+
+	case cmdhooks.QueueDrainedMsg:
+		return a, a.cmdProcessor.Update(msg)
 	}
 
 	// Route unhandled messages to focused component
@@ -645,6 +686,14 @@ func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
 		if a.mode != ModeIdle && a.cancelQuery != nil {
 			a.cancelQuery()
 			return a, nil
+		}
+	}
+
+	// T403: Check command keybindings -- if the key resolves to a slash
+	// command action, dispatch it and consume the key event.
+	if a.cmdKeybindings != nil {
+		if cmd := a.cmdKeybindings.Update(msg); cmd != nil {
+			return a, cmd
 		}
 	}
 
