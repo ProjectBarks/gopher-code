@@ -101,6 +101,21 @@ func (o *ToolOrchestrator) executeSingle(ctx context.Context, call ToolCall, tc 
 		}
 	}
 
+	// Tool-specific permission check (security, validation, destructive warnings).
+	// Source: Tool.ts:495-503 — checkPermissions called before generic waterfall
+	if result := CheckToolPermissions(tool, ctx, tc, call.Input); result != nil {
+		switch result.Behavior {
+		case "deny":
+			return ToolCallResult{
+				ToolUseID: call.ID,
+				Output:    *ErrorOutput(fmt.Sprintf("permission denied: %s", result.Message)),
+			}
+		case "ask":
+			// For "ask", fall through to the generic permission system which
+			// may auto-approve or prompt the user.
+		}
+	}
+
 	if !tool.IsReadOnly() && tc.Permissions != nil {
 		decision := tc.Permissions.Check(ctx, call.Name, call.ID)
 		switch d := decision.(type) {

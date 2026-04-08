@@ -135,11 +135,27 @@ func (b *BashTool) Execute(ctx context.Context, tc *ToolContext, input json.RawM
 	cmdCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
 
-	// Use user's shell, falling back to bash.
+	// Build command, optionally wrapping with sandbox.
 	// Source: BashTool.tsx:881 — exec(command, ..., 'bash', ...)
-	// Source: utils/shell/bashProvider.ts — uses $SHELL or /bin/bash
-	shell := getUserShell()
-	cmd := exec.CommandContext(cmdCtx, shell, "-c", in.Command)
+	// Source: utils/sandbox/sandbox-adapter.ts — sandbox wrapping
+	var cmd *exec.Cmd
+	if tc.SandboxEnabled && !in.DangerouslyDisableSandbox && IsSandboxAvailable() {
+		sandboxCfg := SandboxConfig{
+			AllowNetwork: true,
+			AllowedPaths: []string{tc.CWD},
+			WorkingDir:   tc.CWD,
+		}
+		if tc.ProjectDir != "" && tc.ProjectDir != tc.CWD {
+			sandboxCfg.AllowedPaths = append(sandboxCfg.AllowedPaths, tc.ProjectDir)
+		}
+		binPath, binArgs := WrapCommand(in.Command, sandboxCfg)
+		cmd = exec.CommandContext(cmdCtx, binPath, binArgs...)
+	} else {
+		// Use user's shell, falling back to bash.
+		// Source: utils/shell/bashProvider.ts — uses $SHELL or /bin/bash
+		shell := getUserShell()
+		cmd = exec.CommandContext(cmdCtx, shell, "-c", in.Command)
+	}
 	cmd.Dir = tc.CWD
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
