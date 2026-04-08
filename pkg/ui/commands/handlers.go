@@ -642,6 +642,9 @@ type MovedToPluginOptions struct {
 	PluginName string
 	// PluginCommand is the command name within the plugin.
 	PluginCommand string
+	// FallbackPrompt is the prompt text used while the marketplace is private.
+	// Source: getPromptWhileMarketplaceIsPrivate in TS commands.
+	FallbackPrompt string
 }
 
 // CreateMovedToPluginCommand generates a redirect command that tells users
@@ -3512,4 +3515,24 @@ func (d *Dispatcher) registerDefaults() {
 			GetDenyRules:      func() map[string][]string { return nil },
 		}),
 	})
+
+	// T273: /pr-comments — fetch and display PR comments via gh CLI
+	// Source: src/commands/pr_comments/index.ts — createMovedToPluginCommand
+	d.RegisterCommand(CreateMovedToPluginCommand(MovedToPluginOptions{
+		Name:          "pr-comments",
+		Description:   "Get comments from a GitHub pull request",
+		PluginName:    "pr-comments",
+		PluginCommand: "pr-comments",
+		FallbackPrompt: `You are an AI assistant integrated into a git-based version control system. Your task is to fetch and display comments from a GitHub pull request.
+
+Follow these steps:
+
+1. Use ` + "`gh pr view --json number,headRepository`" + ` to get the PR number and repository info
+2. Use ` + "`gh api /repos/{owner}/{repo}/issues/{number}/comments`" + ` to get PR-level comments
+3. Use ` + "`gh api /repos/{owner}/{repo}/pulls/{number}/comments`" + ` to get review comments. Pay particular attention to the following fields: ` + "`body`" + `, ` + "`diff_hunk`" + `, ` + "`path`" + `, ` + "`line`" + `, etc.
+4. Parse and format all comments in a readable way
+5. Return ONLY the formatted comments, with no additional text
+
+If there are no comments, return "No comments found."`,
+	}))
 }
