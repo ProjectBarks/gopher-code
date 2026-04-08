@@ -69,3 +69,20 @@ var CommonInfoArgs = []string{
 	"get", "check", "describe", "print", "version",
 	"about", "status", "?",
 }
+
+// WrapTag wraps content in the named XML tag: <tag>content</tag>.
+// Source: used throughout TS codebase to embed metadata in messages.
+func WrapTag(tag, content string) string {
+	return "<" + tag + ">" + content + "</" + tag + ">"
+}
+
+// IsTerminalOutputTag returns true if the tag name identifies terminal output
+// (bash stdout/stderr, local command output) rather than user prompts.
+func IsTerminalOutputTag(tag string) bool {
+	for _, t := range TerminalOutputTags {
+		if t == tag {
+			return true
+		}
+	}
+	return false
+}

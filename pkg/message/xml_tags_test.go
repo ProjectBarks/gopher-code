@@ -79,3 +79,49 @@ func TestCommonInfoArgs(t *testing.T) {
 	}
 	assert.Equal(t, expected, CommonInfoArgs)
 }
+
+func TestWrapTag(t *testing.T) {
+	// WrapTag produces valid XML that ExtractTag can round-trip
+	wrapped := WrapTag(BashStdoutTag, "hello world")
+	assert.Equal(t, "<bash-stdout>hello world</bash-stdout>", wrapped)
+
+	// ExtractTag can extract the content back
+	extracted := ExtractTag(wrapped, BashStdoutTag)
+	assert.Equal(t, "hello world", extracted)
+
+	// Works with all tag families
+	for _, tag := range []string{
+		CommandNameTag, CommandMessageTag, CommandArgsTag,
+		TaskNotificationTag, TaskIDTag, StatusTag, SummaryTag,
+		UltraplanTag, RemoteReviewTag, TeammateMessageTag,
+		ChannelMessageTag, CrossSessionMessageTag, ForkBoilerplateTag,
+	} {
+		content := "test-content-for-" + tag
+		got := ExtractTag(WrapTag(tag, content), tag)
+		assert.Equal(t, content, got, "round-trip failed for tag %q", tag)
+	}
+}
+
+func TestIsTerminalOutputTag(t *testing.T) {
+	// All tags in TerminalOutputTags should return true
+	for _, tag := range TerminalOutputTags {
+		assert.True(t, IsTerminalOutputTag(tag), "expected %q to be a terminal output tag", tag)
+	}
+	// Non-terminal tags should return false
+	assert.False(t, IsTerminalOutputTag(CommandNameTag))
+	assert.False(t, IsTerminalOutputTag(TaskNotificationTag))
+	assert.False(t, IsTerminalOutputTag("unknown-tag"))
+}
+
+func TestWrapTag_TaskNotification_Integration(t *testing.T) {
+	// Build a task notification the way the coordinator does
+	inner := WrapTag(TaskIDTag, "agent-abc") + "\n" +
+		WrapTag(StatusTag, "completed") + "\n" +
+		WrapTag(SummaryTag, "task finished successfully")
+	notification := WrapTag(TaskNotificationTag, "\n"+inner+"\n")
+
+	// Verify we can extract each nested tag
+	assert.Equal(t, "agent-abc", ExtractTag(notification, TaskIDTag))
+	assert.Equal(t, "completed", ExtractTag(notification, StatusTag))
+	assert.Equal(t, "task finished successfully", ExtractTag(notification, SummaryTag))
+}

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/skills"
 )
 
@@ -22,9 +23,9 @@ const (
 	MinDescLength             = 20
 )
 
-// commandNameTag is the XML tag used to indicate an already-loaded skill.
+// commandNameTag references the canonical XML tag constant for already-loaded skills.
 // Source: constants/xml.ts — COMMAND_NAME_TAG
-const commandNameTag = "command-name"
+var commandNameTag = message.CommandNameTag
 
 // SkillTool executes a skill (prompt-based command).
 type SkillTool struct {
