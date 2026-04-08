@@ -3324,7 +3324,7 @@ func TestOutputStyle_ReturnsDeprecationMsg(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected OutputStyleMsg, got %T", msg)
 	}
-	if !strings.Contains(m.Message, "replaced by output-style plugins") {
+	if !strings.Contains(m.Message, "has been deprecated") {
 		t.Errorf("expected deprecation message, got %q", m.Message)
 	}
 }
