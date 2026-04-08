@@ -18,6 +18,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/ui/commands"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
 	"github.com/projectbarks/gopher-code/pkg/ui/core"
+	"github.com/projectbarks/gopher-code/pkg/ui/hooks"
 	"github.com/projectbarks/gopher-code/pkg/ui/screens"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
@@ -234,6 +235,12 @@ type AppModel struct {
 
 	// T164: Scroll activity tracking
 	scrollTracker *scrollTracker
+
+	// T399: File/context suggestions for @-mention autocomplete.
+	// Source: useInputSuggestion.tsx — file path autocomplete on @ prefix.
+	fileSuggester     *hooks.FileSuggester
+	fileSuggestions   []hooks.SuggestionItem
+	fileSuggestActive bool
 }
 
 // NewAppModel creates a new AppModel with the given session and bridge.
@@ -272,6 +279,9 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 		activeToolCalls: make(map[string]string),
 		scrollTracker:   newScrollTracker(),
 	}
+
+	// T399: File suggestion engine for @-mention autocomplete.
+	app.initFileSuggester(sessCWD)
 
 	// Remote permission bridge for CCR synthetic wrapping
 	app.remoteBridge = remote.NewPermissionBridge()
@@ -534,6 +544,11 @@ func (a *AppModel) View() tea.View {
 		sections = append(sections, a.slashInput.View().Content)
 	}
 
+	// T399: File suggestion autocomplete, rendered below input when @-mention active.
+	if fileSuggestView := a.renderFileSuggestions(); fileSuggestView != "" {
+		sections = append(sections, fileSuggestView)
+	}
+
 	// Second divider below input (Claude has dividers above AND below prompt)
 	sections = append(sections, dividerStyle.Render(strings.Repeat(components.DividerChar, a.width)))
 
@@ -663,6 +678,7 @@ func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
 	// state from the resulting input-buffer contents.
 	cmd := a.focus.Route(msg)
 	a.refreshSlashAutocomplete()
+	a.refreshFileAutocomplete()
 	return a, cmd
 }
 

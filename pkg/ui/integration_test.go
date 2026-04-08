@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/projectbarks/gopher-code/pkg/query"
@@ -267,5 +269,88 @@ func TestEventRoutingPreventsPlaceholderIssues(t *testing.T) {
 	for _, evt := range eventSeq {
 		// Should not panic
 		appModel.Update(QueryEventMsg{Event: evt})
+	}
+}
+
+// TestFileSuggestionsIntegration_AtMention exercises the full code path from
+// AppModel through FileSuggester for @-mention file autocomplete.
+// Source: useInputSuggestion.tsx — @path triggers file suggestions.
+func TestFileSuggestionsIntegration_AtMention(t *testing.T) {
+	// Create a temp directory with known files to suggest.
+	dir := t.TempDir()
+	for _, name := range []string{"main.go", "utils.go", "README.md"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("// "+name), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	config := session.DefaultConfig()
+	sess := session.New(config, dir)
+	app := NewAppModel(sess, nil)
+
+	// Verify the file suggester is initialized and rooted at session CWD.
+	if app.FileSuggester() == nil {
+		t.Fatal("FileSuggester should be initialized in NewAppModel")
+	}
+
+	// Simulate the user typing "@main" -- set input value and refresh.
+	app.input.SetValue("@main")
+	app.refreshFileAutocomplete()
+
+	if !app.FileSuggestionsActive() {
+		t.Fatal("File suggestions should be active after typing @main")
+	}
+	suggestions := app.FileSuggestions()
+	if len(suggestions) == 0 {
+		t.Fatal("Expected at least one suggestion for @main")
+	}
+
+	found := false
+	for _, s := range suggestions {
+		if s.DisplayText == "main.go" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected main.go in suggestions, got %v", suggestions)
+	}
+
+	// Verify View renders the suggestions.
+	app.width = 80
+	app.height = 24
+	view := app.View()
+	if view.Content == "" {
+		t.Error("View should render content")
+	}
+
+	// Clear the @-mention: suggestions should deactivate.
+	app.input.SetValue("hello world")
+	app.refreshFileAutocomplete()
+	if app.FileSuggestionsActive() {
+		t.Error("File suggestions should be inactive without @-mention")
+	}
+}
+
+// TestExtractAtPartial validates the @-mention partial extraction logic.
+func TestExtractAtPartial(t *testing.T) {
+	tests := []struct {
+		input  string
+		want   string
+		wantOK bool
+	}{
+		{"@main", "main", true},
+		{"look at @src/app", "src/app", true},
+		{"no mention", "", false},
+		{"email@test", "", false}, // preceded by non-space
+		{"@", "", true},           // empty partial, still valid
+		{"@path with space", "", false},
+	}
+	for _, tt := range tests {
+		got, ok := extractAtPartial(tt.input)
+		if ok != tt.wantOK || got != tt.want {
+			t.Errorf("extractAtPartial(%q) = (%q, %v), want (%q, %v)",
+				tt.input, got, ok, tt.want, tt.wantOK)
+		}
 	}
 }
