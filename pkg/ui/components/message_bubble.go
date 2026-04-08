@@ -14,9 +14,10 @@ import (
 // MessageBubble renders a single message (user or assistant) with
 // role-based styling. It's a pure rendering helper, not a tea.Model.
 type MessageBubble struct {
-	theme    theme.Theme
-	width    int
-	renderer *glamour.TermRenderer
+	theme        theme.Theme
+	width        int
+	renderer     *glamour.TermRenderer
+	spinnerFrame int // T364: animation frame for tool-use loading
 }
 
 // NewMessageBubble creates a new message bubble renderer.
@@ -28,6 +29,9 @@ func NewMessageBubble(t theme.Theme, width int) *MessageBubble {
 	mb.initRenderer()
 	return mb
 }
+
+// SetSpinnerFrame updates the spinner animation frame for tool-use loading.
+func (mb *MessageBubble) SetSpinnerFrame(frame int) { mb.spinnerFrame = frame }
 
 // initRenderer sets up the Glamour markdown renderer.
 func (mb *MessageBubble) initRenderer() {
@@ -196,9 +200,18 @@ func (mb *MessageBubble) renderToolUseBlock(block message.ContentBlock) string {
 	iconStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(cs.Spinner))
 
-	// Tool name header — Claude uses ⏺ (U+23FA) prefix for tool use too
+	// Tool name header with loading animation.
+	// Source: components/ToolUseLoader.tsx — spinning indicator while tool runs.
+	// Active tools show spinner frames; completed tools show ⏺.
+	icon := "⏺"
+	if block.IsLoading {
+		frames := SpinnerGlyphs
+		if len(frames) > 0 {
+			icon = frames[mb.spinnerFrame%len(frames)]
+		}
+	}
 	header := fmt.Sprintf("%s %s",
-		iconStyle.Render("⏺"),
+		iconStyle.Render(icon),
 		toolStyle.Render(block.Name),
 	)
 

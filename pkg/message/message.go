@@ -34,6 +34,8 @@ type ContentBlock struct {
 	IsError   bool             `json:"is_error,omitempty"`    // for tool_result
 	Thinking  string           `json:"thinking,omitempty"`    // for thinking blocks
 	Signature string           `json:"signature,omitempty"`   // for redacted_thinking blocks
+	// IsLoading is a UI-only flag indicating the tool is currently executing.
+	IsLoading bool `json:"-"`
 	// Display is an optional UI-only structured payload attached by tools
 	// for rich rendering (e.g. a diff hunk array). Not serialized to the
 	// API; the Content string remains the LLM-visible result.
