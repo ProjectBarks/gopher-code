@@ -23,6 +23,7 @@ import (
 	bridgehooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/bridge"
 	cmdhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/commands"
 	"github.com/projectbarks/gopher-code/pkg/ui/hooks/ide"
+	"github.com/projectbarks/gopher-code/pkg/ui/hooks/lifecycle"
 	"github.com/projectbarks/gopher-code/pkg/ui/hooks/notifications"
 	swarmhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/swarm"
 	"github.com/projectbarks/gopher-code/pkg/ui/screens"
@@ -239,10 +240,10 @@ type AppModel struct {
 	// Source: remotePermissionBridge.ts
 	remoteBridge *remote.PermissionBridge
 
-	// Ctrl+C double-press tracking
+	// Ctrl+C double-press tracking using lifecycle.DoublePress (T414).
 	// Claude requires two Ctrl+C presses on empty idle input to quit.
-	// First press shows "Press Ctrl-C again to exit" hint.
-	ctrlCPending bool
+	// First press shows "Press Ctrl-C again to exit" hint; 800ms timeout resets.
+	ctrlCExit *lifecycle.DoublePress
 
 	// T164: Scroll activity tracking
 	scrollTracker *scrollTracker
@@ -305,6 +306,7 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 		spinner:         components.NewThinkingSpinner(t),
 		activeToolCalls: make(map[string]string),
 		scrollTracker:   newScrollTracker(),
+		ctrlCExit:       lifecycle.NewDoublePress(),
 	}
 
 	// T399: File suggestion engine for @-mention autocomplete.
@@ -389,6 +391,9 @@ func (a *AppModel) Init() tea.Cmd {
 
 // Update handles messages and routes them to the appropriate handler.
 func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// T414: Forward messages to the double-press detector for timeout processing.
+	a.ctrlCExit.Update(msg)
+
 	// When doctor screen is active, delegate all messages to it.
 	if a.showDoctor && a.doctorModel != nil {
 		switch msg := msg.(type) {
@@ -738,9 +743,9 @@ func (a *AppModel) handleResize(msg tea.WindowSizeMsg) (*AppModel, tea.Cmd) {
 }
 
 func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
-	// Reset Ctrl+C pending on any non-Ctrl+C key
-	if !(msg.Code == 'c' && msg.Mod == tea.ModCtrl) && a.ctrlCPending {
-		a.ctrlCPending = false
+	// Reset Ctrl+C pending on any non-Ctrl+C key (T414: delegate to lifecycle.DoublePress).
+	if !(msg.Code == 'c' && msg.Mod == tea.ModCtrl) && a.ctrlCExit.Pending() {
+		a.ctrlCExit.Reset()
 		a.statusLine.Update(components.ModeChangeMsg{Mode: components.ModeIdle})
 	}
 
@@ -759,21 +764,21 @@ func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
 	case msg.Code == 'c' && msg.Mod == tea.ModCtrl:
 		if a.mode != ModeIdle && a.cancelQuery != nil {
 			a.cancelQuery()
-			a.ctrlCPending = false
+			a.ctrlCExit.Reset()
 			return a, nil
 		}
 		if a.input.HasText() {
 			a.input.Clear()
-			a.ctrlCPending = false
+			a.ctrlCExit.Reset()
 			return a, nil
 		}
-		// Empty input: double-press to quit
-		if a.ctrlCPending {
+		// Empty input: double-press to quit (T414: lifecycle.DoublePress with 800ms timeout)
+		fired, cmd := a.ctrlCExit.Press()
+		if fired {
 			return a, tea.Quit
 		}
-		a.ctrlCPending = true
 		a.statusLine.Update(components.CtrlCHintMsg{})
-		return a, nil
+		return a, cmd
 
 	// Focus cycling
 	case msg.Code == tea.KeyTab && msg.Mod == 0:

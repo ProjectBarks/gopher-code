@@ -340,11 +340,11 @@ func TestVisualParity_QueryEventFlow(t *testing.T) {
 // text→clear, empty→hint, hint→quit, streaming→cancel.
 //
 // Unique behaviors (not covered by CtrlCQuitsWhenIdle which only tests double-press):
-// 1. Ctrl+C with text → clears input, does NOT quit, resets ctrlCPending
+// 1. Ctrl+C with text → clears input, does NOT quit, resets ctrlCExit pending state
 // 2. After clear, input.HasText() is false
-// 3. Ctrl+C on empty → sets ctrlCPending=true (hint shown), no quit
+// 3. Ctrl+C on empty → sets ctrlCExit pending (hint shown), no quit
 // 4. Second Ctrl+C on empty → quits (QuitMsg returned)
-// 5. Non-Ctrl+C key after hint → resets ctrlCPending back to false
+// 5. Non-Ctrl+C key after hint → resets ctrlCExit pending state back to false
 //
 // Cross-ref: app.go:352-375 — Ctrl+C handler with 4 paths
 // Cross-ref: REPL.tsx stashedPrompt — Claude stashes then clears on Ctrl+C
@@ -378,9 +378,9 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 	if app.input.HasText() {
 		t.Error("Input should be empty after Ctrl+C clear")
 	}
-	// ctrlCPending should be false (clearing resets it)
-	if app.ctrlCPending {
-		t.Error("ctrlCPending should be false after clearing text")
+	// ctrlCExit should not be pending (clearing resets it)
+	if app.ctrlCExit.Pending() {
+		t.Error("ctrlCExit should not be pending after clearing text")
 	}
 
 	// 3. Now input is empty — first Ctrl+C shows hint
@@ -391,14 +391,14 @@ func TestParity_CtrlCFourStateMachine(t *testing.T) {
 			t.Fatal("First Ctrl+C on empty should show hint, not quit")
 		}
 	}
-	if !app.ctrlCPending {
-		t.Error("ctrlCPending should be true after first Ctrl+C on empty")
+	if !app.ctrlCExit.Pending() {
+		t.Error("ctrlCExit should be pending after first Ctrl+C on empty")
 	}
 
 	// 5. Non-Ctrl+C key resets the pending state
 	app.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
-	if app.ctrlCPending {
-		t.Error("ctrlCPending should reset on non-Ctrl+C key")
+	if app.ctrlCExit.Pending() {
+		t.Error("ctrlCExit should reset on non-Ctrl+C key")
 	}
 
 	// Clear the 'x' we just typed
