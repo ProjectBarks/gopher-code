@@ -82,6 +82,45 @@ func initBridgeDeps() {
 	})
 }
 
+// buildPermissionPolicy creates a WaterfallPolicy from settings files and the
+// resolved permission mode. It loads allow/deny/ask rules from user, project,
+// and local settings via PermissionRulePersister, parses them into
+// PermissionRuleValue slices, and returns both the PermissionContext (for
+// session-level state tracking) and the policy (for tool permission checks).
+//
+// Source: utils/permissions/permissionSetup.ts — buildPermissionPolicy
+func buildPermissionPolicy(mode permissions.PermissionMode, cwd string) (*permissions.PermissionContext, permissions.PermissionPolicy) {
+	homeDir, _ := os.UserHomeDir()
+	persister := permissions.NewPermissionRulePersister(homeDir, cwd)
+	toolPermCtx := persister.LoadPermissionContext(string(mode))
+
+	// Parse rule strings into PermissionRuleValue slices for the waterfall.
+	parseRules := func(raw []string) []permissions.PermissionRuleValue {
+		out := make([]permissions.PermissionRuleValue, 0, len(raw))
+		for _, r := range raw {
+			out = append(out, permissions.ParsePermissionRuleValue(r))
+		}
+		return out
+	}
+
+	denyRules := parseRules(toolPermCtx.AllDenyRules())
+	allowRules := parseRules(toolPermCtx.AllAllowRules())
+	// Ask rules are not currently in the config schema but supported by the waterfall.
+	var askRules []permissions.PermissionRuleValue
+
+	// In auto mode, strip dangerous bash allow rules (they bypass the classifier).
+	// Source: permissionSetup.ts:510-553
+	isBypassAvailable := false
+	if mode == permissions.ModeAuto || mode == permissions.ModeBypassPermissions {
+		allowRules, _ = permissions.StripDangerousPermissions(allowRules)
+		isBypassAvailable = true
+	}
+
+	policy := permissions.NewWaterfallPolicy(mode, denyRules, allowRules, askRules, isBypassAvailable)
+	permCtx := permissions.NewPermissionContext(&permissions.SlogLogger{Logger: slog.Default()})
+	return permCtx, policy
+}
+
 func main() {
 	// Existing flags
 	model := flag.String("model", "claude-sonnet-4-20250514", "Model to use")
@@ -1160,29 +1199,45 @@ func main() {
 		*maxTurns = settings.MaxTurns
 	}
 
-	// Determine permission mode from settings
-	permMode := permissions.AutoApprove
-	if settings.PermissionMode == "deny" {
+	// Determine permission mode from settings.
+	// Map legacy "interactive"/"auto"/"deny" strings to canonical PermissionMode values,
+	// then allow --permission-mode flag to override.
+	permMode := permissions.ModeBypassPermissions // default: auto-approve
+	if settings.PermissionMode != "" {
+		permMode = permissions.PermissionModeFromString(settings.PermissionMode)
+	}
+	// Legacy compat: map old string names used in settings
+	switch settings.PermissionMode {
+	case "deny":
 		permMode = permissions.Deny
-	} else if settings.PermissionMode == "interactive" {
-		permMode = permissions.Interactive
+	case "interactive":
+		permMode = permissions.ModeDefault
+	case "auto":
+		permMode = permissions.ModeBypassPermissions
 	}
 	// --permission-mode flag overrides settings
 	if *permModeFlag != "" {
 		switch *permModeFlag {
 		case "auto":
-			permMode = permissions.AutoApprove
+			permMode = permissions.ModeBypassPermissions
 		case "interactive":
-			permMode = permissions.Interactive
+			permMode = permissions.ModeDefault
 		case "deny":
 			permMode = permissions.Deny
+		case "default", "acceptEdits", "bypassPermissions", "dontAsk", "plan":
+			permMode = permissions.PermissionModeFromString(*permModeFlag)
 		default:
-			cliErrorf("Unknown permission mode: %s (use auto, interactive, deny)", *permModeFlag)
+			cliErrorf("Unknown permission mode: %s (use auto, interactive, deny, default, acceptEdits, bypassPermissions, dontAsk, plan)", *permModeFlag)
 		}
 	}
 	if *skipPerms {
-		permMode = permissions.AutoApprove
+		permMode = permissions.ModeBypassPermissions
 	}
+
+	// Build the full permission policy: load rules from settings files,
+	// create a WaterfallPolicy with deny/allow/ask rules, and wrap it
+	// with a PermissionContext for session-level state tracking.
+	permCtx, permPolicy := buildPermissionPolicy(permMode, *cwd)
 
 	// Resolve thinking / effort configuration
 	thinkingEnabled := false
@@ -1399,10 +1454,11 @@ func main() {
 		sess.ProjectRoot = *cwd
 	}
 
-	// Wire interactive permission policy (runtime only, not serialized)
-	if permMode == permissions.Interactive {
-		sess.PermissionPolicy = permissions.NewInteractivePolicy()
-	}
+	// Wire the permission policy into the session (runtime only, not serialized).
+	// permPolicy is the WaterfallPolicy built from settings rules + mode.
+	// permCtx is the session-level state tracker for allow/deny decisions.
+	sess.PermissionPolicy = permPolicy
+	_ = permCtx // PermissionContext available for TUI interactive handler wiring
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
