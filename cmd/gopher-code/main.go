@@ -24,6 +24,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
 	pluginsBundled "github.com/projectbarks/gopher-code/pkg/plugins/bundled"
+	"github.com/projectbarks/gopher-code/pkg/product"
 	"github.com/projectbarks/gopher-code/pkg/prompt"
 	"github.com/projectbarks/gopher-code/pkg/provider"
 	"github.com/projectbarks/gopher-code/pkg/query"
@@ -1084,7 +1085,7 @@ func main() {
 
 	// Handle --version
 	if *showVersion {
-		cliOk(fmt.Sprintf("gopher-code v%s", Version))
+		cliOk(fmt.Sprintf("gopher-code v%s (%s)", Version, product.ProductURL))
 	}
 
 	// Debug mode

@@ -249,10 +249,19 @@ func TestRemoteSessionHook_URLGeneration(t *testing.T) {
 }
 
 func TestRemoteSessionHook_CustomIngressURL(t *testing.T) {
+	// A non-staging, non-local ingress URL resolves to the production base.
 	url := GetRemoteSessionURL("sess_xyz", "https://custom.ingress.example.com")
-	expected := "https://custom.ingress.example.com/code/"
-	if len(url) < len(expected) || url[:len(expected)] != expected {
-		t.Errorf("URL = %q, want prefix %q", url, expected)
+	expected := "https://claude.ai/code/sess_xyz"
+	if url != expected {
+		t.Errorf("URL = %q, want %q", url, expected)
+	}
+}
+
+func TestRemoteSessionHook_StagingIngressURL(t *testing.T) {
+	url := GetRemoteSessionURL("cse_abc", "https://staging.example.com")
+	expected := "https://claude-ai.staging.ant.dev/code/session_abc"
+	if url != expected {
+		t.Errorf("URL = %q, want %q", url, expected)
 	}
 }
 
@@ -473,20 +482,50 @@ func TestMailboxBridgeHook_PollError(t *testing.T) {
 
 func TestGetRemoteSessionURL_DefaultBase(t *testing.T) {
 	url := GetRemoteSessionURL("test-session-id", "")
-	if url == "" {
-		t.Fatal("expected non-empty URL")
-	}
-	// Should use claude.ai as default.
-	if len(url) < 21 || url[:21] != "https://claude.ai/cod" {
-		t.Errorf("URL = %q, want prefix https://claude.ai/code/", url)
+	expected := "https://claude.ai/code/test-session-id"
+	if url != expected {
+		t.Errorf("URL = %q, want %q", url, expected)
 	}
 }
 
-func TestGetRemoteSessionURL_CustomIngress(t *testing.T) {
-	url := GetRemoteSessionURL("session-123", "https://my-ingress.example.com")
-	expected := "https://my-ingress.example.com/code/"
-	if len(url) < len(expected) || url[:len(expected)] != expected {
-		t.Errorf("URL = %q, want prefix %q", url, expected)
+func TestGetRemoteSessionURL_CseToCompat(t *testing.T) {
+	// cse_ prefix is converted to session_ compat form.
+	url := GetRemoteSessionURL("cse_abc123", "")
+	expected := "https://claude.ai/code/session_abc123"
+	if url != expected {
+		t.Errorf("URL = %q, want %q", url, expected)
+	}
+}
+
+func TestGetRemoteSessionURL_LocalIngress(t *testing.T) {
+	url := GetRemoteSessionURL("cse_local_abc", "http://localhost:4000")
+	expected := "http://localhost:4000/code/session_local_abc"
+	if url != expected {
+		t.Errorf("URL = %q, want %q", url, expected)
+	}
+}
+
+func TestGetRemoteSessionURL_ProductIntegration(t *testing.T) {
+	// Verify the bridge hook delegates to pkg/product for all three environments.
+	// This is the integration test for T378: product URLs wired into binary.
+	cases := []struct {
+		name       string
+		sessionID  string
+		ingressURL string
+		wantPrefix string
+	}{
+		{"prod", "session_abc", "", "https://claude.ai/code/"},
+		{"staging", "cse_staging_x", "", "https://claude-ai.staging.ant.dev/code/"},
+		{"local", "cse_local_x", "", "http://localhost:4000/code/"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			url := GetRemoteSessionURL(tc.sessionID, tc.ingressURL)
+			if len(url) < len(tc.wantPrefix) || url[:len(tc.wantPrefix)] != tc.wantPrefix {
+				t.Errorf("GetRemoteSessionURL(%q, %q) = %q, want prefix %q",
+					tc.sessionID, tc.ingressURL, url, tc.wantPrefix)
+			}
+		})
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	br "github.com/projectbarks/gopher-code/pkg/bridge"
+	"github.com/projectbarks/gopher-code/pkg/product"
 	"github.com/projectbarks/gopher-code/pkg/session"
 )
 
@@ -411,14 +412,10 @@ func (h *RemoteSessionHook) IsEcho(uuid string) bool {
 }
 
 // GetRemoteSessionURL constructs the remote session URL from a session ID and
-// optional ingress URL. Matches TS getRemoteSessionUrl from constants/product.ts.
+// optional ingress URL. Delegates to pkg/product for environment-aware base URL
+// resolution. Matches TS getRemoteSessionUrl from constants/product.ts.
 func GetRemoteSessionURL(sessionID string, ingressURL string) string {
-	compatID := br.ToCompatSessionID(sessionID)
-	base := "https://claude.ai"
-	if ingressURL != "" {
-		base = ingressURL
-	}
-	return fmt.Sprintf("%s/code/%s", base, compatID)
+	return product.GetRemoteSessionURL(sessionID, ingressURL)
 }
 
 // generateURLCmd returns a Cmd that computes the remote session URL.
