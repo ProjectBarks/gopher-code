@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/projectbarks/gopher-code/pkg/billing"
 )
 
 // Priority determines notification ordering and display urgency.
@@ -65,6 +67,63 @@ type RateLimitState struct {
 	SubscriptionType string
 	// HasBillingAccess indicates the user can manage billing.
 	HasBillingAccess bool
+}
+
+// RateLimitStateFromUtilization converts a billing.Utilization (from the
+// /api/oauth/usage endpoint) into a RateLimitState suitable for notification
+// checks. It examines all rate-limit dimensions and extra-usage state to
+// determine whether the user is approaching or has exceeded their limits.
+//
+// Source: src/hooks/notifs/useRateLimitWarningNotification.tsx — derives
+// warning/overage text from the utilization response.
+func RateLimitStateFromUtilization(u *billing.Utilization, subscriptionType string, hasBillingAccess bool) RateLimitState {
+	if u == nil {
+		return RateLimitState{
+			SubscriptionType: subscriptionType,
+			HasBillingAccess: hasBillingAccess,
+		}
+	}
+
+	state := RateLimitState{
+		SubscriptionType: subscriptionType,
+		HasBillingAccess: hasBillingAccess,
+	}
+
+	// Check extra_usage for overage
+	if u.ExtraUsage != nil && u.ExtraUsage.IsEnabled {
+		if u.ExtraUsage.Utilization != nil && *u.ExtraUsage.Utilization > 0 {
+			state.IsUsingOverage = true
+			if u.ExtraUsage.UsedCredits != nil && u.ExtraUsage.MonthlyLimit != nil {
+				state.OverageText = fmt.Sprintf("Using extra credits: $%.2f / $%.2f", *u.ExtraUsage.UsedCredits, *u.ExtraUsage.MonthlyLimit)
+			} else {
+				state.OverageText = "You have exceeded your usage limit"
+			}
+		}
+	}
+
+	// Check highest utilization across all dimensions for approaching-limit warning
+	const warningThreshold = 80.0
+	highestPct := 0.0
+	var highestResetAt string
+
+	for _, rl := range []*billing.RateLimit{u.FiveHour, u.SevenDay, u.SevenDayOAuthApps, u.SevenDayOpus, u.SevenDaySonnet} {
+		if rl != nil && rl.Utilization != nil && *rl.Utilization > highestPct {
+			highestPct = *rl.Utilization
+			if rl.ResetsAt != nil {
+				highestResetAt = *rl.ResetsAt
+			}
+		}
+	}
+
+	if highestPct >= warningThreshold && !state.IsUsingOverage {
+		if highestResetAt != "" {
+			state.WarningText = fmt.Sprintf("Approaching rate limit (%.0f%% used, resets at %s)", highestPct, highestResetAt)
+		} else {
+			state.WarningText = fmt.Sprintf("Approaching rate limit (%.0f%% used)", highestPct)
+		}
+	}
+
+	return state
 }
 
 // CheckRateLimit evaluates rate-limit state and returns notifications.

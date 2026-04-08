@@ -34,6 +34,7 @@ type SessionConfig struct {
 	TokenBudgetTarget int     `json:"token_budget_target,omitempty"` // +500k feature: output token target
 	FallbackModel     string  `json:"fallback_model,omitempty"`      // --fallback-model: switch on 529 exhaustion
 	QuerySource       provider.QuerySource `json:"query_source,omitempty"` // origin of query for retry policy + analytics
+	RetryBaseDelay    time.Duration        `json:"-"`                      // override retry backoff base delay (tests only)
 }
 
 // DefaultConfig returns sensible defaults.
@@ -309,6 +310,16 @@ type SessionState struct {
 	// Source: bootstrap/state.ts — pendingPostCompaction
 	PendingPostCompaction bool `json:"-"`
 
+	// T482: Compact tracking state — wired from pkg/compact
+	// Source: services/compact/autoCompact.ts — autoCompactTrackingState
+	AutoCompactTracking *compact.AutoCompactTrackingState `json:"-"`
+	// Source: services/compact/compactWarningState.ts
+	CompactWarning *compact.CompactWarningState `json:"-"`
+	// Source: services/compact/postCompactCleanup.ts
+	PostCompactCleaner *compact.PostCompactCleaner `json:"-"`
+	// Source: services/compact/sessionMemoryCompact.ts
+	SessionMemoryCompact *compact.SessionMemoryCompactState `json:"-"`
+
 	// T163: Callbacks fired when SwitchSession changes the active session ID.
 	// Source: bootstrap/state.ts — onSessionSwitch (createSignal pattern)
 	sessionSwitchCallbacks []func(sessionID string) `json:"-"`
@@ -334,22 +345,26 @@ func New(config SessionConfig, cwd string) *SessionState {
 	now := time.Now()
 	resolvedCwd := resolveCWD(cwd)
 	return &SessionState{
-		ID:                  uuid.New().String(),
-		Config:              config,
-		Messages:            make([]message.Message, 0),
-		CWD:                 resolvedCwd,
-		OriginalCWD:         resolvedCwd,
-		ProjectRoot:         resolvedCwd,
-		CreatedAt:           now,
-		StartTime:           now,
-		LastInteractionTime: now,
-		ModelUsage:          make(map[string]*ModelUsageEntry),
-		ClientType:          "cli",
-		SessionCronTasks:    make([]SessionCronTask, 0),
-		SessionCreatedTeams: make(map[string]struct{}),
-		PlanSlugCache:       make(map[string]string),
-		InvokedSkills:       make(map[string]bool),
-		SlowOperations:      make(map[string]time.Duration),
+		ID:                   uuid.New().String(),
+		Config:               config,
+		Messages:             make([]message.Message, 0),
+		CWD:                  resolvedCwd,
+		OriginalCWD:          resolvedCwd,
+		ProjectRoot:          resolvedCwd,
+		CreatedAt:            now,
+		StartTime:            now,
+		LastInteractionTime:  now,
+		ModelUsage:           make(map[string]*ModelUsageEntry),
+		ClientType:           "cli",
+		SessionCronTasks:     make([]SessionCronTask, 0),
+		SessionCreatedTeams:  make(map[string]struct{}),
+		PlanSlugCache:        make(map[string]string),
+		InvokedSkills:        make(map[string]bool),
+		SlowOperations:       make(map[string]time.Duration),
+		AutoCompactTracking:  &compact.AutoCompactTrackingState{},
+		CompactWarning:       compact.NewCompactWarningState(),
+		PostCompactCleaner:   compact.NewPostCompactCleaner(),
+		SessionMemoryCompact: compact.NewSessionMemoryCompactState(),
 	}
 }
 

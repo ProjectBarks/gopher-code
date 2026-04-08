@@ -119,7 +119,7 @@ func ClassifyHTTPError(statusCode int, body []byte, retryAfter string) *APIError
 		switch {
 		case strings.Contains(msg, "OAuth token has been revoked"):
 			err.Type = ErrTokenRevoked
-			err.Retryable = true // retry after refresh
+			// Not retryable at the HTTP level; token refresh is handled by the query loop.
 		case containsCI(msg, "organization has been disabled"):
 			err.Type = ErrOrgDisabled
 		case strings.Contains(msg, "does not have access to Claude Code"):

@@ -83,8 +83,10 @@ func TestClassifyHTTPError_403(t *testing.T) {
 		if err.Type != ErrTokenRevoked {
 			t.Errorf("type = %q, want token_revoked", err.Type)
 		}
-		if !err.Retryable {
-			t.Error("token revoked should be retryable (after refresh)")
+		// Token revoked is NOT retryable at the HTTP level; token refresh
+		// is handled by the query loop's auth error path.
+		if err.Retryable {
+			t.Error("token revoked should not be retryable at HTTP level")
 		}
 	})
 

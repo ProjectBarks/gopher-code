@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/coordinator"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
@@ -211,6 +212,7 @@ func Query(
 			FallbackModel:               sess.Config.FallbackModel,
 			QuerySource:                 sess.Config.QuerySource,
 			InitialConsecutive529Errors: retryBudget.Consecutive529Count(),
+			BaseDelay:                   sess.Config.RetryBaseDelay,
 		})
 		if retryAttempt > 0 {
 			attempt = retryAttempt
@@ -299,6 +301,13 @@ func Query(
 			// Auth errors: fail immediately
 			if strings.Contains(errStr, "401") || strings.Contains(errStr, "auth") {
 				return &AgentError{Kind: ErrProvider, Wrapped: originalErr}
+			}
+
+			// Retryable errors detected by string pattern (429, 529, 5xx).
+			// retryBudget.CanRetry only works with *APIError; for plain errors
+			// we use string matching + attempt budget.
+			if isRetryable(errStr) && retryBudget.TotalAttempts() <= provider.DefaultMaxRetries {
+				continue
 			}
 
 			return &AgentError{Kind: ErrProvider, Wrapped: originalErr}
@@ -582,16 +591,75 @@ func microCompact(content string) string {
 	return content[:microCompactThreshold] + "...[truncated]"
 }
 
-// CompactSession removes middle messages from the session to reduce context size.
-// It keeps the first message and the last few messages.
+// CompactSession performs proactive auto-compaction on the session.
+// It uses the compact package's full compaction pipeline: warning state
+// calculation, auto-compact tracking (circuit breaker), microcompact
+// for tool results, and message grouping. If autocompact has failed
+// too many times consecutively, it falls back to head truncation.
+//
+// Source: services/compact/autoCompact.ts — proactiveAutoCompact
 func CompactSession(sess *session.SessionState) {
 	msgs := sess.Messages
 	if len(msgs) <= 4 {
 		return
 	}
-	// Keep the first message and the last 2 messages.
-	keep := make([]message.Message, 0, 3)
-	keep = append(keep, msgs[0])
-	keep = append(keep, msgs[len(msgs)-2:]...)
-	sess.Messages = keep
+
+	// Check circuit breaker: skip if too many consecutive failures.
+	if sess.AutoCompactTracking != nil && sess.AutoCompactTracking.ShouldSkipAutoCompact() {
+		return
+	}
+
+	// Calculate token warning state for diagnostics/logging.
+	tokenWarning := compact.CalculateTokenWarningState(
+		sess.LastInputTokens,
+		sess.Config.TokenBudget.ContextWindow,
+	)
+
+	// Clear warning suppression since we're attempting a new compact.
+	if sess.CompactWarning != nil {
+		sess.CompactWarning.ClearSuppression()
+	}
+
+	// Use MicroCompactMessages to shrink tool results first (cheaper than
+	// full LLM-based compaction). keepRecent=2 preserves the last 2
+	// compactable tool results.
+	compacted, savedTokens := compact.MicroCompactMessages(msgs, 2)
+
+	if savedTokens > 0 {
+		sess.Messages = compacted
+		// Record success in auto-compact tracking.
+		if sess.AutoCompactTracking != nil {
+			sess.AutoCompactTracking.RecordSuccess()
+		}
+		// Suppress the compact warning — token counts are stale until
+		// the next API response.
+		if sess.CompactWarning != nil {
+			sess.CompactWarning.Suppress()
+		}
+		// Run post-compact cleanup.
+		if sess.PostCompactCleaner != nil {
+			sess.PostCompactCleaner.Run(compact.QuerySource(sess.Config.QuerySource))
+		}
+		// Mark post-compaction for analytics.
+		sess.MarkPostCompaction()
+		return
+	}
+
+	// MicroCompact didn't help — fall back to head truncation.
+	// This mirrors TruncateHeadForPTLRetry with 20% drop.
+	truncated := compact.TruncateHeadForPTLRetry(msgs, 0.2)
+	if truncated != nil {
+		sess.Messages = truncated
+		if sess.AutoCompactTracking != nil {
+			sess.AutoCompactTracking.RecordSuccess()
+		}
+		sess.MarkPostCompaction()
+		return
+	}
+
+	// Nothing could be compacted — record failure.
+	if sess.AutoCompactTracking != nil {
+		sess.AutoCompactTracking.RecordFailure()
+	}
+	_ = tokenWarning // consumed for diagnostics; will be used by analytics in future
 }
