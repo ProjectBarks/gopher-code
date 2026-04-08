@@ -3210,7 +3210,7 @@ func TestLogout_DispatchReturnsMsg(t *testing.T) {
 // T266: /mobile — mobile QR pairing
 // ---------------------------------------------------------------------------
 
-func TestMobile_ReturnsPairingURL(t *testing.T) {
+func TestMobile_ReturnsAppStoreURL(t *testing.T) {
 	h := newMobileHandler()
 	msg := h("")()
 	m, ok := msg.(MobileMsg)
@@ -3218,22 +3218,28 @@ func TestMobile_ReturnsPairingURL(t *testing.T) {
 		t.Fatalf("expected MobileMsg, got %T", msg)
 	}
 	if m.URL == "" {
-		t.Fatal("expected non-empty pairing URL")
+		t.Fatal("expected non-empty URL")
 	}
-	if !strings.Contains(m.URL, "https://claude.ai/mobile/pair?token=") {
-		t.Errorf("unexpected URL format: %s", m.URL)
+	if !strings.Contains(m.URL, "apps.apple.com") {
+		t.Errorf("default should be iOS, got: %s", m.URL)
 	}
-	if !strings.Contains(m.Message, m.URL) {
-		t.Errorf("message should contain the URL")
+	if m.Platform != "ios" {
+		t.Errorf("platform = %q, want ios", m.Platform)
+	}
+	if m.QRCode == "" {
+		t.Error("QR code should not be empty")
 	}
 }
 
-func TestMobile_TokenIsRandom(t *testing.T) {
+func TestMobile_AndroidPlatform(t *testing.T) {
 	h := newMobileHandler()
-	m1 := h("")().(MobileMsg)
-	m2 := h("")().(MobileMsg)
-	if m1.URL == m2.URL {
-		t.Error("expected different tokens on successive calls")
+	msg := h("android")()
+	m := msg.(MobileMsg)
+	if !strings.Contains(m.URL, "play.google.com") {
+		t.Errorf("android should give Play Store URL, got: %s", m.URL)
+	}
+	if m.Platform != "android" {
+		t.Errorf("platform = %q, want android", m.Platform)
 	}
 }
 

@@ -18,6 +18,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	qrcode "github.com/skip2/go-qrcode"
+
 	"github.com/projectbarks/gopher-code/pkg/auth"
 	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/keybindings"
@@ -183,10 +185,13 @@ type AgentsMsg struct {
 	Message string
 }
 
-// MobileMsg is returned when /mobile generates a pairing URL.
+// MobileMsg is returned when /mobile shows app store QR codes.
+// Source: commands/mobile/mobile.tsx
 type MobileMsg struct {
-	Message string
-	URL     string
+	Message  string
+	URL      string
+	QRCode   string // UTF-8 QR code art
+	Platform string // "ios" or "android"
 }
 
 // MCPStatusMsg is returned when /mcp lists configured MCP servers.
@@ -2997,23 +3002,48 @@ func newLogoutHandler() Handler {
 // T266: /mobile — generate QR pairing URL for mobile companion
 // ---------------------------------------------------------------------------
 
+// App store URLs for the Claude mobile app.
+// Source: commands/mobile/mobile.tsx:14-22
+const (
+	iosAppURL     = "https://apps.apple.com/app/claude-by-anthropic/id6473753684"
+	androidAppURL = "https://play.google.com/store/apps/details?id=com.anthropic.claude"
+)
+
 func newMobileHandler() Handler {
 	return func(args string) tea.Cmd {
 		return func() tea.Msg {
-			const tokenLen = 16
-			const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-			token := make([]byte, tokenLen)
-			for i := range token {
-				token[i] = charset[rand.Intn(len(charset))]
+			platform := "ios"
+			if strings.EqualFold(args, "android") {
+				platform = "android"
 			}
-			pairingURL := fmt.Sprintf("https://claude.ai/mobile/pair?token=%s", string(token))
-			msg := fmt.Sprintf("Mobile pairing URL:\n\n  %s\n\nOpen this URL on your mobile device to pair.", pairingURL)
+
+			url := iosAppURL
+			if platform == "android" {
+				url = androidAppURL
+			}
+
+			qrCode := generateQRCode(url)
+
+			msg := fmt.Sprintf("Download Claude for %s:\n\n%s\n\n  %s\n\nPress ← / → to switch platform, Escape to close.",
+				strings.ToUpper(platform[:1])+platform[1:], qrCode, url)
+
 			return MobileMsg{
-				Message: msg,
-				URL:     pairingURL,
+				Message:  msg,
+				URL:      url,
+				QRCode:   qrCode,
+				Platform: platform,
 			}
 		}
 	}
+}
+
+// generateQRCode creates a terminal-friendly QR code string.
+func generateQRCode(url string) string {
+	qr, err := qrcode.New(url, qrcode.Low)
+	if err != nil {
+		return "(QR code generation failed)"
+	}
+	return qr.ToSmallString(false)
 }
 
 // ---------------------------------------------------------------------------
