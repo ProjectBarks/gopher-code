@@ -286,6 +286,93 @@ func TestIsEnvDefinedFalsy(t *testing.T) {
 	}
 }
 
+// ── T369: Date helpers wired through BuildSystemPrompt ──────────
+
+func TestBuildSystemPrompt_UsesDateHelper(t *testing.T) {
+	// When CLAUDE_CODE_OVERRIDE_DATE is set, BuildSystemPrompt should
+	// use util.GetLocalISODate which honors it, instead of raw time.Now().
+	t.Setenv("CLAUDE_CODE_OVERRIDE_DATE", "2099-12-25")
+	prompt := BuildSystemPrompt("", "/tmp", "test-model")
+	if !strings.Contains(prompt, "Current date: 2099-12-25") {
+		t.Errorf("BuildSystemPrompt should honor CLAUDE_CODE_OVERRIDE_DATE, got:\n%s", prompt)
+	}
+}
+
+func TestBuildSystemPrompt_DefaultDate(t *testing.T) {
+	// Without the override env, the date should be today's date in YYYY-MM-DD format.
+	os.Unsetenv("CLAUDE_CODE_OVERRIDE_DATE")
+	prompt := BuildSystemPrompt("", "/tmp", "test-model")
+	if !strings.Contains(prompt, "Current date: ") {
+		t.Error("BuildSystemPrompt should include current date line")
+	}
+	// Verify it's a valid YYYY-MM-DD pattern (10 chars after "Current date: ")
+	idx := strings.Index(prompt, "Current date: ")
+	if idx < 0 {
+		t.Fatal("missing 'Current date: ' in prompt")
+	}
+	dateStr := prompt[idx+len("Current date: ") : idx+len("Current date: ")+10]
+	if len(dateStr) != 10 || dateStr[4] != '-' || dateStr[7] != '-' {
+		t.Errorf("date not in YYYY-MM-DD format: %q", dateStr)
+	}
+}
+
+// ── T381 integration: prefix + BuildSystemPrompt wired together ──
+
+func TestIntegration_PrefixPrependedToSystemPrompt(t *testing.T) {
+	// Simulates the real code path in main.go: prefix is prepended to the
+	// full system prompt produced by BuildSystemPrompt.
+	os.Unsetenv("CLAUDE_CODE_USE_VERTEX")
+
+	// Interactive mode → DefaultPrefix
+	sysPrompt := BuildSystemPrompt("", "/tmp/test", "claude-sonnet-4-6")
+	prefix := GetCLISyspromptPrefix(nil)
+	full := prefix + "\n" + sysPrompt
+	if !strings.HasPrefix(full, DefaultPrefix) {
+		t.Errorf("interactive prompt should start with DefaultPrefix, got prefix: %q", full[:80])
+	}
+	if !strings.Contains(full, "# Environment") {
+		t.Error("full prompt should still contain environment section")
+	}
+
+	// Non-interactive with append → AgentSDKClaudeCodePresetPrefix
+	prefix2 := GetCLISyspromptPrefix(&PrefixOptions{
+		IsNonInteractive:      true,
+		HasAppendSystemPrompt: true,
+	})
+	full2 := prefix2 + "\n" + sysPrompt
+	if !strings.HasPrefix(full2, AgentSDKClaudeCodePresetPrefix) {
+		t.Errorf("non-interactive+append should start with AgentSDKClaudeCodePresetPrefix, got: %q", full2[:100])
+	}
+
+	// Non-interactive without append → AgentSDKPrefix
+	prefix3 := GetCLISyspromptPrefix(&PrefixOptions{
+		IsNonInteractive:      true,
+		HasAppendSystemPrompt: false,
+	})
+	full3 := prefix3 + "\n" + sysPrompt
+	if !strings.HasPrefix(full3, AgentSDKPrefix) {
+		t.Errorf("non-interactive should start with AgentSDKPrefix, got: %q", full3[:80])
+	}
+}
+
+func TestIntegration_AttributionHeaderForProvider(t *testing.T) {
+	// Simulates the real code path in main.go: GetAttributionHeader is called
+	// with the version and fingerprint, then set on the provider via SetExtraHeaders.
+	os.Unsetenv("CLAUDE_CODE_ATTRIBUTION_HEADER")
+	t.Setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
+
+	header := GetAttributionHeader("go", AttributionConfig{Version: "0.2.0"})
+	if header == "" {
+		t.Fatal("attribution header should not be empty")
+	}
+	if !strings.Contains(header, "cc_version=0.2.0.go") {
+		t.Errorf("header should contain version+fingerprint, got: %q", header)
+	}
+	if !strings.Contains(header, "cc_entrypoint=cli") {
+		t.Errorf("header should contain entrypoint, got: %q", header)
+	}
+}
+
 func TestCyberRiskInstruction_Constant(t *testing.T) {
 	// Verify the constant matches the TS source exactly
 	if !strings.HasPrefix(CyberRiskInstruction, "IMPORTANT: Assist with authorized security testing") {
@@ -293,5 +380,107 @@ func TestCyberRiskInstruction_Constant(t *testing.T) {
 	}
 	if !strings.Contains(CyberRiskInstruction, "pentesting engagements, CTF competitions, security research, or defensive use cases") {
 		t.Error("CyberRiskInstruction should contain the authorization context list")
+	}
+}
+
+// ── T382: Section factory integration through BuildSystemPrompt ──
+
+func TestBuildSystemPrompt_WithSections(t *testing.T) {
+	// Reset section cache so prior tests don't pollute.
+	ClearSystemPromptSections()
+
+	memoryText := "# Project Memory\nAlways use gofmt."
+	sec := SystemPromptSection("memory", func() *string {
+		return &memoryText
+	})
+
+	result := BuildSystemPrompt("base prompt", "/tmp", "test-model", sec)
+
+	if !strings.Contains(result, "base prompt") {
+		t.Error("should contain base prompt")
+	}
+	if !strings.Contains(result, memoryText) {
+		t.Error("should contain resolved section text")
+	}
+}
+
+func TestBuildSystemPrompt_SectionsNilSkipped(t *testing.T) {
+	ClearSystemPromptSections()
+
+	sec := SystemPromptSection("nil-section", func() *string {
+		return nil
+	})
+
+	result := BuildSystemPrompt("base", "/tmp", "m", sec)
+	// The prompt should still have the base; the nil section should not
+	// add any extra content.
+	if !strings.Contains(result, "base") {
+		t.Error("should contain base prompt")
+	}
+	// No trailing double-newline from a nil section.
+	if strings.HasSuffix(result, "\n\n\n\n") {
+		t.Error("nil section should not add extra blank lines at end")
+	}
+}
+
+func TestBuildSystemPrompt_CachedAndUncachedSections(t *testing.T) {
+	ClearSystemPromptSections()
+
+	cachedCalls := 0
+	uncachedCalls := 0
+
+	cached := SystemPromptSection("cached-sec", func() *string {
+		cachedCalls++
+		v := "cached-content"
+		return &v
+	})
+	uncached := UncachedSystemPromptSection("uncached-sec", func() *string {
+		uncachedCalls++
+		v := "uncached-content"
+		return &v
+	}, "test: always recompute")
+
+	// First build — both compute.
+	r1 := BuildSystemPrompt("base", "/tmp", "m", cached, uncached)
+	if !strings.Contains(r1, "cached-content") {
+		t.Error("first call should contain cached section")
+	}
+	if !strings.Contains(r1, "uncached-content") {
+		t.Error("first call should contain uncached section")
+	}
+
+	// Second build — cached section reuses, uncached recomputes.
+	r2 := BuildSystemPrompt("base", "/tmp", "m", cached, uncached)
+	if !strings.Contains(r2, "cached-content") {
+		t.Error("second call should still contain cached section")
+	}
+	if cachedCalls != 1 {
+		t.Errorf("cached section should compute once, got %d", cachedCalls)
+	}
+	if uncachedCalls != 2 {
+		t.Errorf("uncached section should compute twice, got %d", uncachedCalls)
+	}
+}
+
+func TestBuildSystemPrompt_ClearResetsCache(t *testing.T) {
+	ClearSystemPromptSections()
+
+	calls := 0
+	sec := SystemPromptSection("clearable", func() *string {
+		calls++
+		v := "value"
+		return &v
+	})
+
+	BuildSystemPrompt("base", "/tmp", "m", sec)
+	if calls != 1 {
+		t.Fatalf("expected 1 call, got %d", calls)
+	}
+
+	ClearSystemPromptSections()
+
+	BuildSystemPrompt("base", "/tmp", "m", sec)
+	if calls != 2 {
+		t.Errorf("after ClearSystemPromptSections, section should recompute; got %d", calls)
 	}
 }

@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
+	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/projectbarks/gopher-code/pkg/provider"
+	"github.com/projectbarks/gopher-code/pkg/util"
 )
 
 // Source: constants/system.ts
@@ -127,7 +127,9 @@ func GetAttributionHeader(fingerprint string, cfg AttributionConfig) string {
 }
 
 // BuildSystemPrompt constructs the full system prompt with environment context.
-func BuildSystemPrompt(base string, cwd string, model string) string {
+// It composes the prompt from section builders in constants.go so the binary
+// exercises every section builder through this single call site.
+func BuildSystemPrompt(base string, cwd string, model string, sections ...Section) string {
 	var sb strings.Builder
 
 	if base != "" {
@@ -136,20 +138,57 @@ func BuildSystemPrompt(base string, cwd string, model string) string {
 		sb.WriteString(DefaultSystemPrompt())
 	}
 
-	// Add environment section
-	sb.WriteString("\n\n# Environment\n")
-	sb.WriteString(fmt.Sprintf("- Platform: %s\n", runtime.GOOS))
-	sb.WriteString(fmt.Sprintf("- Architecture: %s\n", runtime.GOARCH))
-	sb.WriteString(fmt.Sprintf("- Current date: %s\n", time.Now().Format("2006-01-02")))
-	sb.WriteString(fmt.Sprintf("- Working directory: %s\n", cwd))
-	sb.WriteString(fmt.Sprintf("- Model: %s\n", model))
+	// Detect git and worktree status for the working directory.
+	isGit := isGitRepo(cwd)
+	isWorktree := isGitWorktree(cwd)
 
-	// Git info
+	// Environment section via ComputeSimpleEnvInfo (constants.go).
+	sb.WriteString("\n\n")
+	sb.WriteString(ComputeSimpleEnvInfo(cwd, model, isGit, isWorktree, nil))
+
+	// Current date (not part of the TS ComputeSimpleEnvInfo but used by the CLI).
+	sb.WriteString(fmt.Sprintf("\n - Current date: %s", util.GetLocalISODate()))
+
+	// Git branch/status details (supplemental to the bool in env info).
 	if gitInfo := getGitInfo(cwd); gitInfo != "" {
+		sb.WriteString("\n")
 		sb.WriteString(gitInfo)
 	}
 
+	// Hooks guidance section (constants.go).
+	sb.WriteString("\n\n")
+	sb.WriteString(HooksSection())
+
+	// Resolve and append dynamic sections.
+	if len(sections) > 0 {
+		resolved := ResolveSystemPromptSections(sections)
+		for _, v := range resolved {
+			if v != nil && *v != "" {
+				sb.WriteString("\n\n")
+				sb.WriteString(*v)
+			}
+		}
+	}
+
 	return sb.String()
+}
+
+// isGitRepo returns true if cwd is inside a git repository.
+func isGitRepo(cwd string) bool {
+	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	cmd.Dir = cwd
+	out, err := cmd.Output()
+	return err == nil && strings.TrimSpace(string(out)) == "true"
+}
+
+// isGitWorktree returns true if cwd is a git worktree (as opposed to the
+// main working tree). A worktree has a .git file instead of a .git directory.
+func isGitWorktree(cwd string) bool {
+	info, err := os.Stat(filepath.Join(cwd, ".git"))
+	if err != nil {
+		return false
+	}
+	return !info.IsDir()
 }
 
 // CyberRiskInstruction is the security boundary instruction from the Safeguards team.
@@ -158,6 +197,8 @@ func BuildSystemPrompt(base string, cwd string, model string) string {
 const CyberRiskInstruction = `IMPORTANT: Assist with authorized security testing, defensive security, CTF challenges, and educational contexts. Refuse requests for destructive techniques, DoS attacks, mass targeting, supply chain compromise, or detection evasion for malicious purposes. Dual-use security tools (C2 frameworks, credential testing, exploit development) require clear authorization context: pentesting engagements, CTF competitions, security research, or defensive use cases.`
 
 // DefaultSystemPrompt returns the default system prompt for gopher-code.
+// It composes from section builders in constants.go so the binary exercises
+// ActionsSection, OutputEfficiencySection, and ToneAndStyleSection.
 // Source: constants/prompts.ts — getSystemPrompt()
 func DefaultSystemPrompt() string {
 	return `You are an interactive agent that helps users with software engineering tasks. Use the tools available to you to assist the user.
@@ -176,9 +217,7 @@ IMPORTANT: You must NEVER generate or guess URLs for the user unless you are con
 - Do not create files unless they're absolutely necessary.
 - Avoid giving time estimates or predictions.
 
-# Executing actions with care
-- Carefully consider the reversibility and blast radius of actions.
-- For actions that are hard to reverse or affect shared systems, check with the user before proceeding.
+` + ActionsSection() + `
 
 # Using your tools
 - To read files use the Read tool instead of cat, head, tail, or sed
@@ -187,10 +226,9 @@ IMPORTANT: You must NEVER generate or guess URLs for the user unless you are con
 - To search for files use the Glob tool instead of find or ls
 - To search content use the Grep tool instead of grep or rg
 
-# Tone and style
-- Your responses should be short and concise.
-- Go straight to the point. Try the simplest approach first.
-- Keep your text output brief and direct.`
+` + OutputEfficiencySection() + `
+
+` + ToneAndStyleSection()
 }
 
 func getGitInfo(cwd string) string {
