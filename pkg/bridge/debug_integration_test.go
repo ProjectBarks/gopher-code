@@ -2,10 +2,12 @@ package bridge
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/projectbarks/gopher-code/pkg/analytics"
+	apperrors "github.com/projectbarks/gopher-code/pkg/errors"
 )
 
 // TestDebugIntegration_LevelsAndBuffer verifies that a BridgeDebug instance
@@ -72,6 +74,57 @@ func TestDebugIntegration_LevelsAndBuffer(t *testing.T) {
 	}
 	if !strings.Contains(entries[5].Message, "API POST /poll") {
 		t.Errorf("last entry: got %q", entries[5].Message)
+	}
+}
+
+// TestDebugIntegration_LogErrorWithID verifies that LogErrorWithID attaches a
+// numeric error ID from pkg/errors to the log entry attrs, matching the TS
+// pattern where err.cause = { errorId: E_TOOL_USE_SUMMARY_GENERATION_FAILED }.
+func TestDebugIntegration_LogErrorWithID(t *testing.T) {
+	var buf bytes.Buffer
+	d := NewBridgeDebug(LogLevelDebug, 32, testLogger(&buf))
+
+	// Log an error with the tool-use summary generation error ID.
+	d.LogErrorWithID(
+		"summary generation failed",
+		errors.New("context deadline exceeded"),
+		apperrors.EToolUseSummaryGenerationFailed,
+	)
+
+	entries := d.Entries()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+
+	e := entries[0]
+	if e.Level != LogLevelError {
+		t.Errorf("level = %s, want ERROR", e.Level)
+	}
+	if e.Message != "summary generation failed" {
+		t.Errorf("message = %q, want 'summary generation failed'", e.Message)
+	}
+	if e.Attrs["error_id"] != "344" {
+		t.Errorf("error_id attr = %q, want '344'", e.Attrs["error_id"])
+	}
+	if e.Attrs["error"] != "context deadline exceeded" {
+		t.Errorf("error attr = %q, want 'context deadline exceeded'", e.Attrs["error"])
+	}
+
+	// Verify slog output contains the error ID.
+	slogOut := buf.String()
+	if !strings.Contains(slogOut, "344") {
+		t.Error("slog output missing error ID '344'")
+	}
+
+	// Also test with nil error — only error_id should be in attrs.
+	d.LogErrorWithID("nil error case", nil, apperrors.EToolUseSummaryGenerationFailed)
+	entries = d.Entries()
+	last := entries[len(entries)-1]
+	if _, hasErr := last.Attrs["error"]; hasErr {
+		t.Error("expected no 'error' attr when err is nil")
+	}
+	if last.Attrs["error_id"] != "344" {
+		t.Errorf("error_id = %q, want '344'", last.Attrs["error_id"])
 	}
 }
 

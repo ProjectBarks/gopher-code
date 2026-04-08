@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	apperrors "github.com/projectbarks/gopher-code/pkg/errors"
 )
 
 // ---------------------------------------------------------------------------
@@ -212,6 +214,22 @@ func (d *BridgeDebug) LogTransition(from, to, reason string) {
 // LogError logs an error at error level.
 func (d *BridgeDebug) LogError(msg string, err error) {
 	attrs := map[string]string{}
+	if err != nil {
+		attrs["error"] = err.Error()
+	}
+	d.log(LogLevelError, msg, attrs)
+}
+
+// LogErrorWithID logs an error at error level and attaches a numeric error ID
+// from pkg/errors so that production traces can identify the call site without
+// leaking internal names. Mirrors the TS pattern:
+//
+//	err.cause = { errorId: E_TOOL_USE_SUMMARY_GENERATION_FAILED }
+//	logError(err)
+func (d *BridgeDebug) LogErrorWithID(msg string, err error, errorID int) {
+	attrs := map[string]string{
+		"error_id": apperrors.FormatErrorID(errorID),
+	}
 	if err != nil {
 		attrs["error"] = err.Error()
 	}
