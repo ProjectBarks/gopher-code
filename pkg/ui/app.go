@@ -18,6 +18,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/ui/commands"
 	"github.com/projectbarks/gopher-code/pkg/ui/components"
 	"github.com/projectbarks/gopher-code/pkg/ui/core"
+	bridgehooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/bridge"
 	"github.com/projectbarks/gopher-code/pkg/ui/screens"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
 )
@@ -234,6 +235,12 @@ type AppModel struct {
 
 	// T164: Scroll activity tracking
 	scrollTracker *scrollTracker
+
+	// T406: Bridge/remote hooks — REPL bridge, remote session, mailbox polling.
+	// Source: useReplBridge.tsx, useRemoteSession.ts, useMailboxBridge.ts
+	replBridgeHook    *bridgehooks.ReplBridgeHook
+	remoteSessionHook *bridgehooks.RemoteSessionHook
+	mailboxHook       *bridgehooks.MailboxBridgeHook
 }
 
 // NewAppModel creates a new AppModel with the given session and bridge.
@@ -292,6 +299,11 @@ func NewAppModel(sess *session.SessionState, bridge *EventBridge) *AppModel {
 	app.showWelcome = true
 	app.welcome = components.NewWelcomeScreen(t, modelName, cwd)
 
+	// T406: Bridge/remote hooks (disabled by default, activated by remote-control mode).
+	app.replBridgeHook = bridgehooks.NewReplBridgeHook(bridgehooks.ReplBridgeHookConfig{})
+	app.remoteSessionHook = bridgehooks.NewRemoteSessionHook(nil)
+	app.mailboxHook = bridgehooks.NewMailboxBridgeHook(bridgehooks.MailboxBridgeConfig{})
+
 	return app
 }
 
@@ -302,7 +314,13 @@ func (a *AppModel) SetQueryFunc(fn QueryFunc) {
 
 // Init initializes the AppModel and all child components.
 func (a *AppModel) Init() tea.Cmd {
-	return a.input.Init()
+	var cmds []tea.Cmd
+	cmds = append(cmds, a.input.Init())
+	// T406: Initialize bridge/remote hooks.
+	cmds = append(cmds, a.replBridgeHook.Init())
+	cmds = append(cmds, a.remoteSessionHook.Init())
+	cmds = append(cmds, a.mailboxHook.Init())
+	return tea.Batch(cmds...)
 }
 
 // Update handles messages and routes them to the appropriate handler.
@@ -450,6 +468,27 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case permissions.PermissionResponseMsg:
 		return a.handlePermissionResponse(msg)
+
+	// T406: Bridge/remote hook message routing
+	case bridgehooks.BridgeStatusMsg:
+		var cmds []tea.Cmd
+		_, cmd1 := a.replBridgeHook.Update(msg)
+		_, cmd2 := a.remoteSessionHook.Update(msg)
+		if cmd1 != nil {
+			cmds = append(cmds, cmd1)
+		}
+		if cmd2 != nil {
+			cmds = append(cmds, cmd2)
+		}
+		return a, tea.Batch(cmds...)
+
+	case bridgehooks.RemoteSessionURLMsg:
+		_, cmd := a.remoteSessionHook.Update(msg)
+		return a, cmd
+
+	case bridgehooks.MailboxPollMsg:
+		_, cmd := a.mailboxHook.Update(msg)
+		return a, cmd
 
 	// --- Slash command: /compact ---
 	// Source: REPL.tsx — /compact triggers context window compaction
@@ -1109,4 +1148,23 @@ func (a *AppModel) handleThinkingToggle() (*AppModel, tea.Cmd) {
 	}
 	a.conversation.AddMessage(infoMsg)
 	return a, nil
+}
+
+// ---------------------------------------------------------------------------
+// T406: Bridge/remote hook accessors
+// ---------------------------------------------------------------------------
+
+// ReplBridgeHook returns the REPL bridge hook for external configuration.
+func (a *AppModel) ReplBridgeHook() *bridgehooks.ReplBridgeHook {
+	return a.replBridgeHook
+}
+
+// RemoteSessionHook returns the remote session hook for external configuration.
+func (a *AppModel) RemoteSessionHook() *bridgehooks.RemoteSessionHook {
+	return a.remoteSessionHook
+}
+
+// MailboxHook returns the mailbox bridge hook for external configuration.
+func (a *AppModel) MailboxHook() *bridgehooks.MailboxBridgeHook {
+	return a.mailboxHook
 }
