@@ -796,6 +796,13 @@ func (a *AppModel) handleKey(msg tea.KeyPressMsg) (*AppModel, tea.Cmd) {
 		}
 	}
 
+	// T403: Check command keybindings.
+	if a.cmdKeybindings != nil {
+		if cmd := a.cmdKeybindings.Update(msg); cmd != nil {
+			return a, cmd
+		}
+	}
+
 	// Slash autocomplete: when active, arrow keys / Enter / Tab / Escape
 	// are routed to the autocomplete. Other keys fall through so the user
 	// can keep typing to filter suggestions.
