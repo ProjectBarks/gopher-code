@@ -224,3 +224,35 @@ func pow2(n int) float64 {
 func jitterRand() float64 {
 	return rand.Float64()
 }
+
+// StreamWithRetryResult holds the result of a StreamWithRetry call.
+type StreamWithRetryResult struct {
+	Ch      <-chan StreamResult
+	Attempt int
+}
+
+// StreamWithRetry wraps a ModelProvider.Stream call with exponential backoff
+// retry logic using WithRetry. It retries transient errors (429, 529, 5xx)
+// with proper backoff delays and jitter, and surfaces non-retryable errors
+// immediately.
+//
+// Source: services/api/withRetry.ts — wrapping the stream call
+func StreamWithRetry(
+	ctx context.Context,
+	prov ModelProvider,
+	req ModelRequest,
+	opts RetryOptions,
+) (<-chan StreamResult, int, error) {
+	result, err := WithRetry(ctx, func(attempt int, retryCtx RetryContext) (StreamWithRetryResult, error) {
+		ch, streamErr := prov.Stream(ctx, req)
+		if streamErr != nil {
+			return StreamWithRetryResult{}, streamErr
+		}
+		return StreamWithRetryResult{Ch: ch, Attempt: attempt}, nil
+	}, opts)
+
+	if err != nil {
+		return nil, 0, err
+	}
+	return result.Ch, result.Attempt, nil
+}

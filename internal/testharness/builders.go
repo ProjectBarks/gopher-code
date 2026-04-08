@@ -4,24 +4,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
 	"github.com/projectbarks/gopher-code/pkg/provider"
 	"github.com/projectbarks/gopher-code/pkg/session"
-	"github.com/google/uuid"
 )
 
 // --- Session builders ---
 
 // MakeSession creates a default test session with "hello" user message.
+// Uses 1ms retry base delay to keep tests fast.
 func MakeSession() *session.SessionState {
 	cfg := session.SessionConfig{
 		Model:          "test-model",
 		MaxTurns:       100,
 		TokenBudget:    compact.DefaultBudget(),
 		PermissionMode: permissions.AutoApprove,
+		RetryBaseDelay: 1 * time.Millisecond,
 	}
 	s := session.New(cfg, os.TempDir())
 	s.PushMessage(message.UserMessage("hello"))
@@ -42,6 +45,7 @@ func MakeSessionWithCWD(cwd string) *session.SessionState {
 		MaxTurns:       100,
 		TokenBudget:    compact.DefaultBudget(),
 		PermissionMode: permissions.AutoApprove,
+		RetryBaseDelay: 1 * time.Millisecond,
 	}
 	s := session.New(cfg, cwd)
 	s.PushMessage(message.UserMessage("hello"))
