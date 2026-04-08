@@ -209,6 +209,18 @@ type StickersMsg struct {
 	Message string
 }
 
+// VersionMsg is returned by /version (ant-only).
+type VersionMsg struct {
+	Version   string
+	BuildTime string
+}
+
+// VimToggleMsg is returned when /vim toggles editor mode.
+type VimToggleMsg struct {
+	NewMode string // "vim" or "normal"
+	Message string
+}
+
 // MovedToPluginMsg informs the user a command moved to a plugin.
 type MovedToPluginMsg struct {
 	Command    string
@@ -3577,4 +3589,40 @@ Follow these steps:
 
 If there are no comments, return "No comments found."`,
 	}))
+
+	// T300: /version — show build version (ant-only)
+	// Source: src/commands/version.ts
+	d.RegisterCommand(CommandRegistration{
+		Name:        "version",
+		Description: "Print the version this session is running",
+		Type:        CommandTypeLocal,
+		IsHidden:    true,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				return VersionMsg{
+					Version:   "0.1.0-dev",
+					BuildTime: "",
+				}
+			}
+		},
+	})
+
+	// T301: /vim — toggle vim/normal editor mode
+	// Source: src/commands/vim/vim.ts
+	d.RegisterCommand(CommandRegistration{
+		Name:        "vim",
+		Description: "Toggle vim keybindings",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				// TODO: read/write editorMode from global config
+				return VimToggleMsg{
+					NewMode: "vim",
+					Message: "Editor mode set to vim. Use Escape key to toggle between INSERT and NORMAL modes.",
+				}
+			}
+		},
+	})
 }
