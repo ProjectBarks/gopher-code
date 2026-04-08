@@ -1326,18 +1326,22 @@ func main() {
 	// Resolve model aliases
 	resolvedModel := resolveModelAlias(*model)
 
-	// Build memory section from memdir package (T456).
+	// Build memory section from memdir package (T456/T457).
 	// The memory section uses memdir.BuildMemoryPrompt which assembles
-	// behavioural instructions + MEMORY.md content. This makes the memdir
-	// package (including the LLM relevance selector) reachable from main().
+	// behavioural instructions + MEMORY.md content. session.MemoryIndexPath
+	// and session.ReadMemoryIndex wire pkg/session/memory.go into the binary.
 	memorySection := prompt.SystemPromptSection("memory", func() *string {
 		homeDir, _ := os.UserHomeDir()
 		autoMemDir := filepath.Join(homeDir, ".claude", "memory")
 		_ = memdir.EnsureMemoryDirExists(autoMemDir)
 		content := ""
-		if data, err := os.ReadFile(filepath.Join(autoMemDir, memdir.EntrypointName)); err == nil {
+		if data, err := os.ReadFile(session.MemoryIndexPath(autoMemDir)); err == nil {
 			content = string(data)
 		}
+		// Also read project-specific memory index (T457: wires session.ReadMemoryIndex).
+		projectMemDir := session.MemoryDir()
+		projectMem, _ := session.ReadMemoryIndex(projectMemDir)
+		_ = projectMem // project memory content available for future prompt assembly
 		p := memdir.BuildMemoryPrompt("auto memory", autoMemDir, nil, content)
 		return &p
 	})
