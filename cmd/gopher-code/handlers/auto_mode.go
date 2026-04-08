@@ -10,6 +10,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/projectbarks/gopher-code/pkg/provider"
 )
 
 // AutoModeRules is the shape of the settings.autoMode config: three classifier
@@ -313,4 +315,54 @@ func AutoModeCritiqueHandler(ctx context.Context, cfg *AutoModeConfig, model str
 
 	fmt.Fprint(os.Stdout, "No critique was generated. Please try again.\n")
 	return nil
+}
+
+// NewProviderSideQuery creates a SideQueryFunc that delegates to provider.QueryWithModel,
+// bridging the handler-level side query types to the real provider infrastructure.
+// Source: services/api/claude.ts:3300-3348
+func NewProviderSideQuery(prov provider.ModelProvider) SideQueryFunc {
+	return func(ctx context.Context, opts SideQueryOptions) (*SideQueryResponse, error) {
+		// Build system prompt blocks
+		var systemBlocks []string
+		if opts.System != "" {
+			systemBlocks = []string{opts.System}
+		}
+
+		// Build user prompt from messages (side queries typically have a single user message)
+		var userPrompt string
+		for _, m := range opts.Messages {
+			if m.Role == "user" {
+				userPrompt = m.Content
+				break
+			}
+		}
+
+		maxTokens := opts.MaxTokens
+		if maxTokens <= 0 {
+			maxTokens = provider.MaxNonStreamingTokens
+		}
+
+		result, err := provider.QueryWithModel(ctx, prov, provider.QueryWithModelRequest{
+			SystemPrompt: systemBlocks,
+			UserPrompt:   userPrompt,
+			Options: provider.QueryOptions{
+				Model:           opts.Model,
+				QuerySource:     provider.QuerySource(opts.QuerySource),
+				MaxOutputTokens: maxTokens,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert provider response to handler response
+		resp := &SideQueryResponse{}
+		for _, c := range result.Response.Content {
+			resp.Content = append(resp.Content, ContentBlock{
+				Type: c.Type,
+				Text: c.Text,
+			})
+		}
+		return resp, nil
+	}
 }

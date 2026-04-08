@@ -384,6 +384,9 @@ type CompactDeps struct {
 	TranscriptPath func() string
 	// OnComplete is called after successful compaction with the new message list.
 	OnComplete func(msgs []message.Message)
+	// HookInstructions returns hook-provided custom instructions for compaction.
+	// Source: services/compact/compact.ts — hookInstructions
+	HookInstructions func() string
 }
 
 // Handler is a function that processes a slash command.
@@ -1542,6 +1545,14 @@ func newCompactHandler(deps CompactDeps) Handler {
 			}
 
 			customInstructions := strings.TrimSpace(args)
+
+			// Merge user-supplied instructions with hook-provided instructions.
+			// Source: services/compact/compact.ts — mergeHookInstructions
+			if deps.HookInstructions != nil {
+				hookInstr := deps.HookInstructions()
+				customInstructions = compact.MergeHookInstructions(customInstructions, hookInstr)
+			}
+
 			transcriptPath := ""
 			if deps.TranscriptPath != nil {
 				transcriptPath = deps.TranscriptPath()

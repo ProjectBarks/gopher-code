@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	pkgdoctor "github.com/projectbarks/gopher-code/pkg/doctor"
 	"github.com/projectbarks/gopher-code/pkg/message"
+	"github.com/projectbarks/gopher-code/pkg/compact"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
 	"github.com/projectbarks/gopher-code/pkg/query"
 	"github.com/projectbarks/gopher-code/pkg/remote"
@@ -899,7 +900,13 @@ func (a *AppModel) handleSubmit(msg components.SubmitMsg) (*AppModel, tea.Cmd) {
 
 	// Regular user input — add to session and dispatch query
 	userMsg := message.UserMessage(text)
+
+	// Extract token budget from user input (e.g. "+500k", "use 2M tokens").
+	// Source: utils/tokenBudget.ts — parseTokenBudget applied to user messages
 	if a.session != nil {
+		if budget := compact.ParseTokenBudget(text); budget > 0 {
+			a.session.Config.TokenBudgetTarget = budget
+		}
 		a.session.PushMessage(userMsg)
 	}
 	a.conversation.AddMessage(userMsg)
