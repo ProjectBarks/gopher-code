@@ -447,6 +447,10 @@ func Query(
 		var resultBlocks []message.ContentBlock
 		for _, r := range results {
 			content := microCompact(r.Output.Content)
+			// Source: utils/messages.ts:506 — never send empty content to the API.
+			if content == "" {
+				content = message.NoContentMessage
+			}
 			block := message.ToolResultBlock(r.ToolUseID, content, r.Output.IsError)
 			block.Display = r.Output.Display
 			resultBlocks = append(resultBlocks, block)
