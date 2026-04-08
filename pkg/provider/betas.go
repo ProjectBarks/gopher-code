@@ -241,3 +241,26 @@ func GetMergedBetas(model string, isAgenticQuery bool) []string {
 
 	return betas
 }
+
+// ModelSupportsStructuredOutputs returns true if the model supports structured JSON output.
+// Source: utils/betas.ts:modelSupportsStructuredOutputs
+func ModelSupportsStructuredOutputs(model string) bool {
+	m := strings.ToLower(model)
+	return strings.Contains(m, "sonnet-4") || strings.Contains(m, "opus-4") || strings.Contains(m, "haiku-4")
+}
+
+// ModelSupportsAutoMode returns true if the model supports auto-mode.
+// Source: utils/betas.ts:modelSupportsAutoMode
+func ModelSupportsAutoMode(model string) bool {
+	m := strings.ToLower(model)
+	return strings.Contains(m, "opus-4") || strings.Contains(m, "sonnet-4-6")
+}
+
+// ShouldUseGlobalCacheScope returns true if prompt cache scope should be "global".
+// Source: utils/betas.ts:shouldUseGlobalCacheScope
+func ShouldUseGlobalCacheScope() bool {
+	return os.Getenv("CLAUDE_CODE_GLOBAL_CACHE_SCOPE") != ""
+}
+
+// ClearBetasCaches resets memoized beta computation (no-op in Go — not memoized).
+func ClearBetasCaches() {}

@@ -190,3 +190,62 @@ func ModelSupportsAdaptiveThinking(model string) bool {
 	p := GetAPIProvider()
 	return p == ProviderFirstParty || p == ProviderFoundry
 }
+
+// GetEffortSuffix returns " with {level} effort" for display, or "" if no explicit effort.
+// Source: utils/effort.ts:getEffortSuffix
+func GetEffortSuffix(model string, effortValue EffortLevel) string {
+	if effortValue == "" {
+		return ""
+	}
+	resolved := ResolveAppliedEffort(model, effortValue)
+	if resolved == "" {
+		return ""
+	}
+	return " with " + string(resolved) + " effort"
+}
+
+// ToPersistableEffort filters effort values that should be saved to settings.
+// Only low/medium/high are persisted; max is session-scoped for non-ant users.
+// Source: utils/effort.ts:toPersistableEffort
+func ToPersistableEffort(value EffortLevel) EffortLevel {
+	switch value {
+	case EffortLow, EffortMedium, EffortHigh:
+		return value
+	case EffortMax:
+		if os.Getenv("USER_TYPE") == "ant" {
+			return value
+		}
+		return ""
+	default:
+		return ""
+	}
+}
+
+// GetDefaultEffortForModel returns the default effort for a model.
+// Returns "" for no default (API defaults to high).
+// Source: utils/effort.ts:getDefaultEffortForModel
+func GetDefaultEffortForModel(model string) EffortLevel {
+	m := strings.ToLower(model)
+	if strings.Contains(m, "opus-4-6") {
+		return EffortMedium // Default Opus 4.6 to medium
+	}
+	return "" // No default — API uses high
+}
+
+// GetEffortEnvOverride returns the effort level from the CLAUDE_CODE_EFFORT_LEVEL env var.
+// Returns "" if not set, or the parsed level.
+// Source: utils/effort.ts:getEffortEnvOverride
+func GetEffortEnvOverride() EffortLevel {
+	env := os.Getenv("CLAUDE_CODE_EFFORT_LEVEL")
+	if env == "" {
+		return ""
+	}
+	lower := strings.ToLower(env)
+	if lower == "unset" || lower == "auto" {
+		return ""
+	}
+	if level, ok := ParseEffortValue(lower); ok {
+		return level
+	}
+	return ""
+}
