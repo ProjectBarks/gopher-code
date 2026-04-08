@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/projectbarks/gopher-code/pkg/provider"
 	"github.com/projectbarks/gopher-code/pkg/tools"
 )
 
@@ -783,6 +784,44 @@ func TestFileReadTool(t *testing.T) {
 			t.Errorf("last line should be line 2000, got %q", outputLines[len(outputLines)-1])
 		}
 	})
+}
+
+// TestFileReadTool_APILimitsIntegration verifies that the FileReadTool's page
+// range validation uses the canonical constants from pkg/provider/api_limits.go.
+// This ensures the provider limits are wired into the binary through tools.
+func TestFileReadTool_APILimitsIntegration(t *testing.T) {
+	// Verify the re-exported constant matches the provider canonical value.
+	if tools.PDFMaxPagesPerRead != provider.PDFMaxPagesPerRead {
+		t.Fatalf("tools.PDFMaxPagesPerRead (%d) != provider.PDFMaxPagesPerRead (%d)",
+			tools.PDFMaxPagesPerRead, provider.PDFMaxPagesPerRead)
+	}
+
+	tool := tools.FileReadTool{}
+	tc := &tools.ToolContext{CWD: t.TempDir()}
+
+	// Request exactly at the limit should NOT be rejected on page count alone.
+	atLimit := fmt.Sprintf(`{"file_path": "/tmp/test.pdf", "pages": "1-%d"}`, provider.PDFMaxPagesPerRead)
+	out, err := tool.Execute(context.Background(), tc, json.RawMessage(atLimit))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.IsError && strings.Contains(out.Content, "exceeds maximum") {
+		t.Errorf("page range at limit (%d) should not be rejected for exceeding max pages", provider.PDFMaxPagesPerRead)
+	}
+
+	// Request one page over the limit MUST be rejected.
+	overLimit := fmt.Sprintf(`{"file_path": "/tmp/test.pdf", "pages": "1-%d"}`, provider.PDFMaxPagesPerRead+1)
+	out, err = tool.Execute(context.Background(), tc, json.RawMessage(overLimit))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !out.IsError {
+		t.Fatal("expected error for page range exceeding provider.PDFMaxPagesPerRead")
+	}
+	expected := fmt.Sprintf("exceeds maximum of %d pages", provider.PDFMaxPagesPerRead)
+	if !strings.Contains(out.Content, expected) {
+		t.Errorf("error should reference provider limit %d, got %q", provider.PDFMaxPagesPerRead, out.Content)
+	}
 }
 
 func min(a, b int) int {
