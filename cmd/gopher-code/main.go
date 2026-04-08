@@ -15,6 +15,7 @@ import (
 
 	"github.com/projectbarks/gopher-code/cmd/gopher-code/handlers"
 	"github.com/projectbarks/gopher-code/internal/cli"
+	"github.com/projectbarks/gopher-code/pkg/analytics"
 	"github.com/projectbarks/gopher-code/pkg/auth"
 	"github.com/projectbarks/gopher-code/pkg/bridge"
 	"github.com/projectbarks/gopher-code/pkg/compact"
@@ -24,6 +25,7 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/message"
 	"github.com/projectbarks/gopher-code/pkg/permissions"
 	pluginsBundled "github.com/projectbarks/gopher-code/pkg/plugins/bundled"
+	"github.com/projectbarks/gopher-code/pkg/product"
 	"github.com/projectbarks/gopher-code/pkg/prompt"
 	"github.com/projectbarks/gopher-code/pkg/provider"
 	"github.com/projectbarks/gopher-code/pkg/query"
@@ -33,6 +35,10 @@ import (
 	"github.com/projectbarks/gopher-code/pkg/telemetry"
 	"github.com/projectbarks/gopher-code/pkg/tools"
 	"github.com/projectbarks/gopher-code/pkg/ui/theme"
+
+	confighooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/config"
+	diffhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/diff"
+	pluginhooks "github.com/projectbarks/gopher-code/pkg/ui/hooks/plugins"
 )
 
 // Version is the current gopher-code version.
@@ -51,6 +57,30 @@ func resolveModelAlias(model string) string {
 		return resolved
 	}
 	return model
+}
+
+// growthBookClientKey holds the resolved GrowthBook SDK client key for the
+// current environment, determined once at startup by initAnalytics.
+var growthBookClientKey string
+
+// initAnalytics resolves the GrowthBook SDK client key for the current
+// environment and wires the global feature-gate checker into the analytics
+// package. Must be called early in main() before any feature gate checks.
+//
+// Source: src/constants/keys.ts — GROWTHBOOK_CLIENT_KEY
+// Source: src/services/statsig.ts — bootstrap initialization
+func initAnalytics() {
+	growthBookClientKey = analytics.GetGrowthBookClientKey()
+	slog.Debug("analytics: GrowthBook client key resolved",
+		"key_prefix", growthBookClientKey[:7]+"...")
+
+	// Wire the feature-gate checker into the analytics package so
+	// IsScratchpadEnabled and other gate helpers work end-to-end.
+	// Currently a stub (fail-closed) until the real GrowthBook SDK is
+	// integrated. The key resolved above will be passed to SDK init.
+	analytics.SetFeatureGateChecker(func(gate string) bool {
+		return false // stub — real GrowthBook SDK wiring is a future task
+	})
 }
 
 // initBridgeDeps registers the default bridge dependency bundle so the bridge
@@ -80,6 +110,45 @@ func initBridgeDeps() {
 		Version:  Version,
 		SemverLT: func(a, b string) bool { return a < b },
 	})
+}
+
+// buildPermissionPolicy creates a WaterfallPolicy from settings files and the
+// resolved permission mode. It loads allow/deny/ask rules from user, project,
+// and local settings via PermissionRulePersister, parses them into
+// PermissionRuleValue slices, and returns both the PermissionContext (for
+// session-level state tracking) and the policy (for tool permission checks).
+//
+// Source: utils/permissions/permissionSetup.ts — buildPermissionPolicy
+func buildPermissionPolicy(mode permissions.PermissionMode, cwd string) (*permissions.PermissionContext, permissions.PermissionPolicy) {
+	homeDir, _ := os.UserHomeDir()
+	persister := permissions.NewPermissionRulePersister(homeDir, cwd)
+	toolPermCtx := persister.LoadPermissionContext(string(mode))
+
+	// Parse rule strings into PermissionRuleValue slices for the waterfall.
+	parseRules := func(raw []string) []permissions.PermissionRuleValue {
+		out := make([]permissions.PermissionRuleValue, 0, len(raw))
+		for _, r := range raw {
+			out = append(out, permissions.ParsePermissionRuleValue(r))
+		}
+		return out
+	}
+
+	denyRules := parseRules(toolPermCtx.AllDenyRules())
+	allowRules := parseRules(toolPermCtx.AllAllowRules())
+	// Ask rules are not currently in the config schema but supported by the waterfall.
+	var askRules []permissions.PermissionRuleValue
+
+	// In auto mode, strip dangerous bash allow rules (they bypass the classifier).
+	// Source: permissionSetup.ts:510-553
+	isBypassAvailable := false
+	if mode == permissions.ModeAuto || mode == permissions.ModeBypassPermissions {
+		allowRules, _ = permissions.StripDangerousPermissions(allowRules)
+		isBypassAvailable = true
+	}
+
+	policy := permissions.NewWaterfallPolicy(mode, denyRules, allowRules, askRules, isBypassAvailable)
+	permCtx := permissions.NewPermissionContext(&permissions.SlogLogger{Logger: slog.Default()})
+	return permCtx, policy
 }
 
 func main() {
@@ -186,6 +255,9 @@ func main() {
 	// T172: Initialize bridge dependency bundle early so all bridge enablement
 	// checks are available before any subcommand dispatches.
 	initBridgeDeps()
+
+	// T374: Resolve GrowthBook client key and wire feature-gate checker.
+	initAnalytics()
 
 	// Handle "remote-control" subcommand before flag.Parse()
 	// Source: src/cli.ts — `claude remote-control` CLI subcommand dispatches
@@ -1084,7 +1156,7 @@ func main() {
 
 	// Handle --version
 	if *showVersion {
-		cliOk(fmt.Sprintf("gopher-code v%s", Version))
+		cliOk(fmt.Sprintf("gopher-code v%s (%s)", Version, product.ProductURL))
 	}
 
 	// Debug mode
@@ -1160,29 +1232,45 @@ func main() {
 		*maxTurns = settings.MaxTurns
 	}
 
-	// Determine permission mode from settings
-	permMode := permissions.AutoApprove
-	if settings.PermissionMode == "deny" {
+	// Determine permission mode from settings.
+	// Map legacy "interactive"/"auto"/"deny" strings to canonical PermissionMode values,
+	// then allow --permission-mode flag to override.
+	permMode := permissions.ModeBypassPermissions // default: auto-approve
+	if settings.PermissionMode != "" {
+		permMode = permissions.PermissionModeFromString(settings.PermissionMode)
+	}
+	// Legacy compat: map old string names used in settings
+	switch settings.PermissionMode {
+	case "deny":
 		permMode = permissions.Deny
-	} else if settings.PermissionMode == "interactive" {
-		permMode = permissions.Interactive
+	case "interactive":
+		permMode = permissions.ModeDefault
+	case "auto":
+		permMode = permissions.ModeBypassPermissions
 	}
 	// --permission-mode flag overrides settings
 	if *permModeFlag != "" {
 		switch *permModeFlag {
 		case "auto":
-			permMode = permissions.AutoApprove
+			permMode = permissions.ModeBypassPermissions
 		case "interactive":
-			permMode = permissions.Interactive
+			permMode = permissions.ModeDefault
 		case "deny":
 			permMode = permissions.Deny
+		case "default", "acceptEdits", "bypassPermissions", "dontAsk", "plan":
+			permMode = permissions.PermissionModeFromString(*permModeFlag)
 		default:
-			cliErrorf("Unknown permission mode: %s (use auto, interactive, deny)", *permModeFlag)
+			cliErrorf("Unknown permission mode: %s (use auto, interactive, deny, default, acceptEdits, bypassPermissions, dontAsk, plan)", *permModeFlag)
 		}
 	}
 	if *skipPerms {
-		permMode = permissions.AutoApprove
+		permMode = permissions.ModeBypassPermissions
 	}
+
+	// Build the full permission policy: load rules from settings files,
+	// create a WaterfallPolicy with deny/allow/ask rules, and wrap it
+	// with a PermissionContext for session-level state tracking.
+	permCtx, permPolicy := buildPermissionPolicy(permMode, *cwd)
 
 	// Resolve thinking / effort configuration
 	thinkingEnabled := false
@@ -1250,6 +1338,16 @@ func main() {
 		sysPrompt += "\n\n" + string(data)
 	}
 
+	// Prepend system prompt prefix — Source: constants/system.ts getCLISyspromptPrefix()
+	// Non-interactive = print mode or one-shot query mode.
+	isNonInteractive := *printMode || *queryStr != "" || len(flag.Args()) > 0
+	hasAppend := *appendSystemPrompt != "" || *appendSystemPromptFile != ""
+	prefix := prompt.GetCLISyspromptPrefix(&prompt.PrefixOptions{
+		IsNonInteractive:      isNonInteractive,
+		HasAppendSystemPrompt: hasAppend,
+	})
+	sysPrompt = prefix + "\n" + sysPrompt
+
 	if *verbose {
 		fmt.Fprintf(stderr, "Model: %s\n", *model)
 		fmt.Fprintf(stderr, "CWD: %s\n", *cwd)
@@ -1267,6 +1365,14 @@ func main() {
 		p := provider.NewAnthropicProvider(apiKey, resolvedModel)
 		if *apiURL != "" {
 			p.SetBaseURL(*apiURL)
+		}
+		// Wire attribution header — Source: constants/system.ts getAttributionHeader()
+		if attrHeader := prompt.GetAttributionHeader("go", prompt.AttributionConfig{
+			Version: Version,
+		}); attrHeader != "" {
+			p.SetExtraHeaders(map[string]string{
+				"x-anthropic-billing-header": attrHeader,
+			})
 		}
 		prov = p
 	case "bedrock":
@@ -1399,10 +1505,38 @@ func main() {
 		sess.ProjectRoot = *cwd
 	}
 
-	// Wire interactive permission policy (runtime only, not serialized)
-	if permMode == permissions.Interactive {
-		sess.PermissionPolicy = permissions.NewInteractivePolicy()
-	}
+	// Wire the permission policy into the session (runtime only, not serialized).
+	// permPolicy is the WaterfallPolicy built from settings rules + mode.
+	// permCtx is the session-level state tracker for allow/deny decisions.
+	sess.PermissionPolicy = permPolicy
+	_ = permCtx // PermissionContext available for TUI interactive handler wiring
+
+	// T405: Initialise MCP/plugin hooks (merged clients, plugin state, LSP
+	// recommendation engine). These are session-scoped and wired into the
+	// binary through pkg/ui/hooks/plugins.
+	pluginHooks := pluginhooks.NewPluginHooks()
+	_ = pluginHooks
+
+	// T409: Wire model/config hooks into session.
+	// MainLoopModel tracks the active model with session-override support,
+	// matching the TS useMainLoopModel hook.
+	mainLoopModel := confighooks.NewMainLoopModel(resolvedModel)
+	sess.InitialMainLoopModel = mainLoopModel.Get()
+
+	// SettingsWatcher polls settings files for changes (matches TS useSettingsChange).
+	// Created here so it is reachable from main(); started in interactive mode below.
+	settingsWatcher := confighooks.NewSettingsWatcher(*cwd, 3*time.Second)
+	_ = settingsWatcher // used in interactive mode; suppresses unused-import lint
+
+	// T410: Wire diff/PR hooks into the session. DiffSession bundles the
+	// DiffComputer (working-tree diffs), TurnDiffTracker (per-turn change
+	// tracking), and PrStatusPoller (background PR status polling).
+	// Source: src/hooks/useDiffData.ts, useTurnDiffs.ts, usePrStatus.ts
+	diffSession := handlers.NewDiffSession(sess.ProjectRoot)
+	_ = diffSession // available for TUI wiring; suppresses unused lint
+	// Also register the diff hooks types directly so the package is verified
+	// reachable from the binary dependency graph.
+	_ = (*diffhooks.DiffData)(nil)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()

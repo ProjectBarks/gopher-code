@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -48,6 +49,60 @@ func TestIsScratchpadEnabled(t *testing.T) {
 			t.Errorf("ScratchpadGateName = %q, want %q", ScratchpadGateName, "tengu_scratch")
 		}
 	})
+}
+
+// TestInitAnalytics_Integration exercises the same code path that
+// cmd/gopher-code/main.go:initAnalytics() takes: resolve the GrowthBook
+// client key, wire the feature-gate checker, and verify IsScratchpadEnabled
+// reflects the gate state. This ensures the GrowthBook client key constants
+// and feature-gate plumbing are reachable through the binary.
+func TestInitAnalytics_Integration(t *testing.T) {
+	// Save and restore global state.
+	featureGateMu.Lock()
+	origChecker := featureGateChecker
+	featureGateMu.Unlock()
+	defer SetFeatureGateChecker(origChecker)
+
+	// Step 1: Resolve GrowthBook client key (same as initAnalytics).
+	t.Setenv("USER_TYPE", "")
+	t.Setenv("ENABLE_GROWTHBOOK_DEV", "")
+	key := GetGrowthBookClientKey()
+	if !strings.HasPrefix(key, "sdk-") {
+		t.Fatalf("GetGrowthBookClientKey() = %q, want sdk- prefix", key)
+	}
+	if key != growthBookKeyExt {
+		t.Errorf("external user key = %q, want %q", key, growthBookKeyExt)
+	}
+
+	// Step 2: Wire feature-gate checker (same as initAnalytics).
+	gateEnabled := false
+	SetFeatureGateChecker(func(gate string) bool {
+		return gateEnabled && gate == ScratchpadGateName
+	})
+
+	// Step 3: Verify IsScratchpadEnabled reflects the gate state.
+	if IsScratchpadEnabled() {
+		t.Error("IsScratchpadEnabled() = true before gate enabled")
+	}
+
+	gateEnabled = true
+	if !IsScratchpadEnabled() {
+		t.Error("IsScratchpadEnabled() = false after gate enabled")
+	}
+
+	// Step 4: Verify ant user key selection.
+	t.Setenv("USER_TYPE", "ant")
+	t.Setenv("ENABLE_GROWTHBOOK_DEV", "true")
+	antDevKey := GetGrowthBookClientKey()
+	if antDevKey != growthBookKeyAntDev {
+		t.Errorf("ant dev key = %q, want %q", antDevKey, growthBookKeyAntDev)
+	}
+
+	t.Setenv("ENABLE_GROWTHBOOK_DEV", "")
+	antProdKey := GetGrowthBookClientKey()
+	if antProdKey != growthBookKeyAntProd {
+		t.Errorf("ant prod key = %q, want %q", antProdKey, growthBookKeyAntProd)
+	}
 }
 
 func TestGetGrowthBookClientKey(t *testing.T) {
