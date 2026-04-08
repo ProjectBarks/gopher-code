@@ -25,6 +25,25 @@ type webSearchInput struct {
 func (t *WebSearchTool) Name() string        { return "WebSearch" }
 func (t *WebSearchTool) Description() string { return "Search the web and return results" }
 func (t *WebSearchTool) IsReadOnly() bool    { return true }
+func (t *WebSearchTool) SearchHint() string  { return "search the web for current information" }
+func (t *WebSearchTool) MaxResultSizeChars() int { return 100_000 }
+
+// Prompt returns the WebSearch tool prompt matching the TS source.
+// Source: tools/WebSearchTool/prompt.ts
+func (t *WebSearchTool) Prompt() string {
+	return `- Allows Claude to search the web and use the results to inform responses
+- Provides up-to-date information for current events and recent data
+- Returns search result information formatted as search result blocks
+- Use this tool for accessing information beyond Claude's knowledge cutoff
+
+CRITICAL REQUIREMENT - You MUST follow this:
+  - After answering the user's question, you MUST include a "Sources:" section
+  - List all relevant URLs from the search results as markdown hyperlinks: [Title](URL)
+  - This is MANDATORY - never skip including sources in your response
+
+Usage notes:
+  - Domain filtering is supported to include or block specific websites`
+}
 
 func (t *WebSearchTool) InputSchema() json.RawMessage {
 	return json.RawMessage(`{
@@ -75,11 +94,18 @@ func (t *WebSearchTool) Execute(ctx context.Context, tc *ToolContext, input json
 		return ErrorOutput(fmt.Sprintf("failed to read response: %s", err)), nil
 	}
 
-	results := parseSearchResults(string(body), params.MaxResults)
-	if results == "" {
+	parsed := parseSearchResultsRaw(string(body), params.MaxResults*2) // over-fetch for filtering
+	filtered := filterByDomain(parsed, params.AllowedDomains, params.BlockedDomains)
+	if len(filtered) > params.MaxResults {
+		filtered = filtered[:params.MaxResults]
+	}
+	elapsed := time.Since(time.Now().Add(-time.Since(time.Now()))) // placeholder
+	_ = elapsed
+
+	if len(filtered) == 0 {
 		return SuccessOutput("No results found"), nil
 	}
-	return SuccessOutput(results), nil
+	return SuccessOutput(formatSearchResults(filtered)), nil
 }
 
 // searchResult holds a single parsed search result.
@@ -95,7 +121,102 @@ var resultLinkRe = regexp.MustCompile(`(?is)<a[^>]+class="result__a"[^>]*href="(
 // resultSnippetRe matches DuckDuckGo result snippets.
 var resultSnippetRe = regexp.MustCompile(`(?is)<a[^>]+class="result__snippet"[^>]*>(.*?)</a>`)
 
-// parseSearchResults extracts search results from DuckDuckGo HTML response.
+// filterByDomain applies allowed/blocked domain filtering to results.
+// Source: WebSearchTool.ts — makeToolSchema (allowed_domains, blocked_domains)
+func filterByDomain(results []searchResult, allowed, blocked []string) []searchResult {
+	if len(allowed) == 0 && len(blocked) == 0 {
+		return results
+	}
+
+	allowSet := make(map[string]bool, len(allowed))
+	for _, d := range allowed {
+		allowSet[strings.ToLower(d)] = true
+	}
+	blockSet := make(map[string]bool, len(blocked))
+	for _, d := range blocked {
+		blockSet[strings.ToLower(d)] = true
+	}
+
+	var filtered []searchResult
+	for _, r := range results {
+		domain := extractDomain(r.URL)
+		if len(allowSet) > 0 && !domainMatches(domain, allowSet) {
+			continue
+		}
+		if domainMatches(domain, blockSet) {
+			continue
+		}
+		filtered = append(filtered, r)
+	}
+	return filtered
+}
+
+func extractDomain(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+func domainMatches(domain string, set map[string]bool) bool {
+	if set[domain] {
+		return true
+	}
+	// Check if domain is a subdomain of any entry (e.g. "docs.github.com" matches "github.com")
+	for d := range set {
+		if strings.HasSuffix(domain, "."+d) {
+			return true
+		}
+	}
+	return false
+}
+
+// parseSearchResultsRaw extracts search results as structured data.
+func parseSearchResultsRaw(html string, maxResults int) []searchResult {
+	resultBlockRe := regexp.MustCompile(`(?is)<div[^>]+class="[^"]*result[^"]*results_links[^"]*"[^>]*>(.*?)</div>\s*</div>`)
+	blocks := resultBlockRe.FindAllString(html, -1)
+
+	if len(blocks) == 0 {
+		return parseSearchResultsFallbackRaw(html, maxResults)
+	}
+
+	var results []searchResult
+	for _, block := range blocks {
+		if len(results) >= maxResults {
+			break
+		}
+		linkMatch := resultLinkRe.FindStringSubmatch(block)
+		if linkMatch == nil {
+			continue
+		}
+		r := searchResult{URL: linkMatch[1], Title: stripHTML(linkMatch[2])}
+		snippetMatch := resultSnippetRe.FindStringSubmatch(block)
+		if snippetMatch != nil {
+			r.Snippet = stripHTML(snippetMatch[1])
+		}
+		if r.URL != "" && r.Title != "" {
+			results = append(results, r)
+		}
+	}
+	return results
+}
+
+func parseSearchResultsFallbackRaw(html string, maxResults int) []searchResult {
+	linkMatches := resultLinkRe.FindAllStringSubmatch(html, maxResults)
+	snippetMatches := resultSnippetRe.FindAllStringSubmatch(html, maxResults)
+	var results []searchResult
+	for i, lm := range linkMatches {
+		r := searchResult{URL: lm[1], Title: stripHTML(lm[2])}
+		if i < len(snippetMatches) {
+			r.Snippet = stripHTML(snippetMatches[i][1])
+		}
+		results = append(results, r)
+	}
+	return results
+}
+
+// parseSearchResults extracts search results from DuckDuckGo HTML response (legacy string return).
 func parseSearchResults(html string, maxResults int) string {
 	// Split by result blocks
 	resultBlockRe := regexp.MustCompile(`(?is)<div[^>]+class="[^"]*result[^"]*results_links[^"]*"[^>]*>(.*?)</div>\s*</div>`)
