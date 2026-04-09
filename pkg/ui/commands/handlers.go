@@ -226,6 +226,12 @@ type VimToggleMsg struct {
 	Message string
 }
 
+// OpenRewindSelectorMsg requests opening the message selector for rewinding.
+type OpenRewindSelectorMsg struct{}
+
+// ToggleVoiceMsg requests toggling voice mode.
+type ToggleVoiceMsg struct{}
+
 // SessionInfoMsg is returned when /session shows the remote session URL.
 type SessionInfoMsg struct {
 	Message string
@@ -3947,6 +3953,34 @@ If there are no comments, return "No comments found."`,
 		Source:      "builtin",
 		Handler: func(args string) tea.Cmd {
 			return func() tea.Msg { return ShowThemePickerMsg{} }
+		},
+	})
+
+	// T283: /rewind — open the message selector for rewinding
+	// Source: commands/rewind/rewind.ts
+	d.RegisterCommand(CommandRegistration{
+		Name:        "rewind",
+		Description: "Restore the code and/or conversation to a previous point",
+		Type:        CommandTypeLocal,
+		Aliases:     []string{"checkpoint"},
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				return OpenRewindSelectorMsg{}
+			}
+		},
+	})
+
+	// T302: /voice — toggle voice mode
+	d.RegisterCommand(CommandRegistration{
+		Name:        "voice",
+		Description: "Toggle voice input mode",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				return ToggleVoiceMsg{}
+			}
 		},
 	})
 
