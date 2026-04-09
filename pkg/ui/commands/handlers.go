@@ -226,6 +226,9 @@ type VimToggleMsg struct {
 	Message string
 }
 
+// ShowUsageMsg requests showing the usage/limits screen.
+type ShowUsageMsg struct{}
+
 // RemoteEnvConfigMsg requests opening the remote environment configuration.
 type RemoteEnvConfigMsg struct{}
 
@@ -3968,6 +3971,19 @@ If there are no comments, return "No comments found."`,
 		Source:       "builtin",
 		Handler: func(args string) tea.Cmd {
 			return func() tea.Msg { return RemoteEnvConfigMsg{} }
+		},
+	})
+
+	// T299: /usage — show plan usage limits
+	// Source: commands/usage/usage.tsx — opens Settings on Usage tab
+	d.RegisterCommand(CommandRegistration{
+		Name:         "usage",
+		Description:  "Show plan usage limits",
+		Type:         CommandTypeLocal,
+		Availability: []CommandAvailability{AvailabilityClaudeAI},
+		Source:       "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg { return ShowUsageMsg{} }
 		},
 	})
 
