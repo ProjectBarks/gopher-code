@@ -226,6 +226,11 @@ type VimToggleMsg struct {
 	Message string
 }
 
+// RateLimitOptionsMsg is returned when /rate-limit-options shows upgrade options.
+type RateLimitOptionsMsg struct {
+	Message string
+}
+
 // PrivacySettingsMsg is returned when /privacy-settings opens the privacy page.
 type PrivacySettingsMsg struct {
 	Message string
@@ -3773,6 +3778,27 @@ If there are no comments, return "No comments found."`,
 					msg = "Opened privacy settings in your browser: " + url
 				}
 				return PrivacySettingsMsg{Message: msg, URL: url, Opened: opened}
+			}
+		},
+	})
+
+	// T275: /rate-limit-options — shown internally when rate limited
+	// Source: commands/rate-limit-options/
+	d.RegisterCommand(CommandRegistration{
+		Name:         "rate-limit-options",
+		Description:  "Show options when rate limit is reached",
+		Type:         CommandTypeLocal,
+		IsHidden:     true,
+		Availability: []CommandAvailability{AvailabilityClaudeAI},
+		Source:       "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				return RateLimitOptionsMsg{
+					Message: "You've reached your rate limit. Options:\n" +
+						"  1. Wait for your limit to reset\n" +
+						"  2. Run /upgrade to increase your plan\n" +
+						"  3. Use /extra-usage to purchase additional usage",
+				}
 			}
 		},
 	})
