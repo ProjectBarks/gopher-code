@@ -600,3 +600,106 @@ func BuiltInAgentTypes() []string {
 func FmtAgentDescription(agent AgentDefinition) string {
 	return fmt.Sprintf("%q: %s", agent.AgentType, agent.WhenToUse)
 }
+
+// ---------------------------------------------------------------------------
+// T503: Agent support — display, override resolution, memory, color management
+// Source: tools/AgentTool/agentDisplay.ts, agentMemory.ts
+// ---------------------------------------------------------------------------
+
+// AgentSourceGroup describes a display group for agents.
+// Source: agentDisplay.ts:24-32
+type AgentSourceGroup struct {
+	Label  string
+	Source AgentSource
+}
+
+// AgentSourceGroups is the ordered list for display (consistent CLI + TUI ordering).
+var AgentSourceGroups = []AgentSourceGroup{
+	{Label: "User agents", Source: AgentSourceUser},
+	{Label: "Project agents", Source: AgentSourceProject},
+	{Label: "Local agents", Source: AgentSourceFlag},
+	{Label: "Managed agents", Source: AgentSourcePolicy},
+	{Label: "Plugin agents", Source: AgentSourcePlugin},
+	{Label: "Built-in agents", Source: AgentSourceBuiltIn},
+}
+
+// ResolvedAgent is an agent annotated with override information.
+type ResolvedAgent struct {
+	AgentDefinition
+	OverriddenBy AgentSource // non-empty if this agent is shadowed
+}
+
+// ResolveAgentOverrides annotates agents with override info. An agent is
+// "overridden" when another agent with the same type from a higher-priority
+// source takes precedence.
+// Source: agentDisplay.ts:46-80
+func ResolveAgentOverrides(allAgents, activeAgents []AgentDefinition) []ResolvedAgent {
+	activeMap := make(map[string]AgentDefinition)
+	for _, a := range activeAgents {
+		activeMap[a.AgentType] = a
+	}
+
+	seen := make(map[string]bool) // "agentType:source"
+	var resolved []ResolvedAgent
+	for _, agent := range allAgents {
+		key := agent.AgentType + ":" + string(agent.Source)
+		if seen[key] {
+			continue // deduplicate worktree duplicates
+		}
+		seen[key] = true
+
+		ra := ResolvedAgent{AgentDefinition: agent}
+		if active, ok := activeMap[agent.AgentType]; ok && active.Source != agent.Source {
+			ra.OverriddenBy = active.Source
+		}
+		resolved = append(resolved, ra)
+	}
+	return resolved
+}
+
+// GetAgentMemoryDir returns the memory directory for an agent's persistent memory.
+// Source: agentMemory.ts:29-67
+func GetAgentMemoryDir(agentType string, scope AgentMemoryScope, cwd string) string {
+	safeType := strings.ReplaceAll(agentType, ":", "-")
+
+	switch scope {
+	case AgentMemoryUser:
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, ".claude", "agent-memory", safeType)
+	case AgentMemoryProject:
+		return filepath.Join(cwd, ".claude", "agent-memory", safeType)
+	case AgentMemoryLocal:
+		return filepath.Join(cwd, ".claude", "agent-memory-local", safeType)
+	default:
+		return filepath.Join(cwd, ".claude", "agent-memory", safeType)
+	}
+}
+
+// AgentColorManager assigns consistent colors to agents within a session.
+// Source: tools/AgentTool/agentDisplay.ts (color assignment in TS is in bootstrap/state)
+type AgentColorManager struct {
+	assigned map[string]string
+	nextIdx  int
+}
+
+// NewAgentColorManager creates a new color manager.
+func NewAgentColorManager() *AgentColorManager {
+	return &AgentColorManager{assigned: make(map[string]string)}
+}
+
+// AssignColor returns a consistent color for the given agent type.
+// Same agent always gets the same color within a session.
+func (m *AgentColorManager) AssignColor(agentType string) string {
+	if c, ok := m.assigned[agentType]; ok {
+		return c
+	}
+	color := AgentColors[m.nextIdx%len(AgentColors)]
+	m.assigned[agentType] = color
+	m.nextIdx++
+	return color
+}
+
+// GetColor returns the assigned color, or empty if not yet assigned.
+func (m *AgentColorManager) GetColor(agentType string) string {
+	return m.assigned[agentType]
+}
