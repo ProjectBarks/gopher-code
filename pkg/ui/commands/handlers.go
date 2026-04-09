@@ -226,6 +226,13 @@ type VimToggleMsg struct {
 	Message string
 }
 
+// UpgradeMsg is returned when /upgrade opens the Max upgrade page.
+type UpgradeMsg struct {
+	Message string
+	URL     string
+	Opened  bool
+}
+
 // RateLimitOptionsMsg is returned when /rate-limit-options shows upgrade options.
 type RateLimitOptionsMsg struct {
 	Message string
@@ -3799,6 +3806,30 @@ If there are no comments, return "No comments found."`,
 						"  2. Run /upgrade to increase your plan\n" +
 						"  3. Use /extra-usage to purchase additional usage",
 				}
+			}
+		},
+	})
+
+	// T298: /upgrade — upgrade to Max plan
+	// Source: commands/upgrade/upgrade.tsx
+	d.RegisterCommand(CommandRegistration{
+		Name:         "upgrade",
+		Description:  "Upgrade to Max for higher rate limits and more Opus",
+		Type:         CommandTypeLocal,
+		Availability: []CommandAvailability{AvailabilityClaudeAI},
+		Source:       "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				url := "https://claude.ai/upgrade/max"
+				opened := false
+				if err := openBrowser(url); err == nil {
+					opened = true
+				}
+				msg := "Visit " + url + " to upgrade to Claude Max."
+				if opened {
+					msg = "Opened " + url + " in your browser. Complete the upgrade and run /login to activate."
+				}
+				return UpgradeMsg{Message: msg, URL: url, Opened: opened}
 			}
 		},
 	})
