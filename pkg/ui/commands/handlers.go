@@ -226,6 +226,12 @@ type VimToggleMsg struct {
 	Message string
 }
 
+// SandboxToggleMsg is returned when /sandbox changes sandbox settings.
+type SandboxToggleMsg struct {
+	Action  string // "toggle", "enable", "disable", "exclude"
+	Pattern string // for "exclude" action
+}
+
 // RenameSessionMsg is returned when /rename sets a new session name.
 type RenameSessionMsg struct {
 	Name string
@@ -3756,6 +3762,40 @@ If there are no comments, return "No comments found."`,
 					return OutputStyleMsg{Message: "Usage: /rename <name>"}
 				}
 				return RenameSessionMsg{Name: name}
+			}
+		},
+	})
+
+	// T284: /sandbox — toggle sandbox mode
+	// Source: commands/sandbox-toggle/sandbox-toggle.tsx
+	d.RegisterCommand(CommandRegistration{
+		Name:         "sandbox",
+		Description:  "Toggle sandbox mode for tool execution",
+		Type:         CommandTypeLocal,
+		ArgumentHint: `exclude "command pattern"`,
+		Source:       "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				trimmed := strings.TrimSpace(args)
+				if trimmed == "" {
+					// Toggle sandbox
+					return SandboxToggleMsg{Action: "toggle"}
+				}
+				if strings.HasPrefix(trimmed, "exclude ") {
+					pattern := strings.TrimSpace(strings.TrimPrefix(trimmed, "exclude "))
+					pattern = strings.Trim(pattern, `"'`)
+					if pattern == "" {
+						return OutputStyleMsg{Message: `Usage: /sandbox exclude "command pattern"`}
+					}
+					return SandboxToggleMsg{Action: "exclude", Pattern: pattern}
+				}
+				if trimmed == "on" || trimmed == "enable" {
+					return SandboxToggleMsg{Action: "enable"}
+				}
+				if trimmed == "off" || trimmed == "disable" {
+					return SandboxToggleMsg{Action: "disable"}
+				}
+				return SandboxToggleMsg{Action: "toggle"}
 			}
 		},
 	})
