@@ -3,6 +3,7 @@ package skills
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -12,17 +13,20 @@ func TestGetBuiltInAgents(t *testing.T) {
 	// Source: builtInAgents.ts:45-71
 	agents := GetBuiltInAgents()
 
-	if len(agents) < 5 {
-		t.Errorf("expected at least 5 built-in agents, got %d", len(agents))
+	if len(agents) != 6 {
+		t.Errorf("expected 6 built-in agents, got %d", len(agents))
 	}
 
-	// All must have source=built-in
+	// All must have source=built-in and a system prompt
 	for _, a := range agents {
 		if a.Source != AgentSourceBuiltIn {
 			t.Errorf("agent %q source = %q, want built-in", a.AgentType, a.Source)
 		}
 		if a.BaseDir != "built-in" {
 			t.Errorf("agent %q baseDir = %q, want built-in", a.AgentType, a.BaseDir)
+		}
+		if a.SystemPrompt == "" {
+			t.Errorf("agent %q has empty SystemPrompt", a.AgentType)
 		}
 	}
 }
@@ -36,6 +40,7 @@ func TestBuiltInAgentTypes(t *testing.T) {
 		"Explore":          false,
 		"Plan":             false,
 		"claude-code-guide": false,
+		"verification":     false,
 	}
 
 	for _, a := range agents {
@@ -130,6 +135,79 @@ func TestStatuslineSetupAgent(t *testing.T) {
 	if len(sl.Tools) != 2 {
 		t.Errorf("tools count = %d, want 2 (Read, Edit)", len(sl.Tools))
 	}
+}
+
+func TestVerificationAgent(t *testing.T) {
+	// Source: built-in/verificationAgent.ts
+	agents := GetBuiltInAgents()
+	v := FindAgent(agents, AgentTypeVerification)
+	if v == nil {
+		t.Fatal("verification agent not found")
+	}
+	if v.Model != "inherit" {
+		t.Errorf("model = %q, want inherit", v.Model)
+	}
+	if v.Color != "red" {
+		t.Errorf("color = %q, want red", v.Color)
+	}
+	if !v.Background {
+		t.Error("verification agent should have background=true")
+	}
+	if len(v.DisallowedTools) == 0 {
+		t.Error("verification should have disallowed tools")
+	}
+	if v.CriticalSystemReminder == "" {
+		t.Error("verification should have CriticalSystemReminder")
+	}
+}
+
+func TestBuiltInAgentSystemPrompts(t *testing.T) {
+	agents := GetBuiltInAgents()
+	for _, a := range agents {
+		if len(a.SystemPrompt) < 50 {
+			t.Errorf("agent %q has suspiciously short SystemPrompt (%d chars)", a.AgentType, len(a.SystemPrompt))
+		}
+	}
+
+	// Spot-check key content in specific prompts
+	gp := FindAgent(agents, AgentTypeGeneralPurpose)
+	if gp == nil || !containsAll(gp.SystemPrompt, "agent for Claude Code", "NEVER create files") {
+		t.Error("general-purpose prompt missing key content")
+	}
+
+	explore := FindAgent(agents, AgentTypeExplore)
+	if explore == nil || !containsAll(explore.SystemPrompt, "READ-ONLY", "file search specialist") {
+		t.Error("explore prompt missing key content")
+	}
+
+	plan := FindAgent(agents, AgentTypePlan)
+	if plan == nil || !containsAll(plan.SystemPrompt, "software architect", "READ-ONLY") {
+		t.Error("plan prompt missing key content")
+	}
+
+	guide := FindAgent(agents, AgentTypeClaudeCodeGuide)
+	if guide == nil || !containsAll(guide.SystemPrompt, "Claude guide agent", "Claude Agent SDK") {
+		t.Error("claude-code-guide prompt missing key content")
+	}
+
+	sl := FindAgent(agents, AgentTypeStatuslineSetup)
+	if sl == nil || !containsAll(sl.SystemPrompt, "status line", "PS1") {
+		t.Error("statusline-setup prompt missing key content")
+	}
+
+	v := FindAgent(agents, AgentTypeVerification)
+	if v == nil || !containsAll(v.SystemPrompt, "verification specialist", "VERDICT") {
+		t.Error("verification prompt missing key content")
+	}
+}
+
+func containsAll(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if !strings.Contains(s, sub) {
+			return false
+		}
+	}
+	return true
 }
 
 func TestAgentTypeConstants(t *testing.T) {
@@ -572,8 +650,8 @@ description: A custom project agent
 Custom system prompt.`), 0644)
 
 	result := LoadAllAgents(cwd)
-	if len(result.AllAgents) < 6 { // 5 built-in + 1 custom
-		t.Errorf("expected at least 6 agents, got %d", len(result.AllAgents))
+	if len(result.AllAgents) < 7 { // 6 built-in + 1 custom
+		t.Errorf("expected at least 7 agents, got %d", len(result.AllAgents))
 	}
 
 	// Find custom agent
