@@ -471,3 +471,107 @@ func GetPublicModelName(model string) string {
 	}
 	return "Claude (" + model + ")"
 }
+
+// ---------------------------------------------------------------------------
+// T566: Model utilities remaining
+// Source: utils/model/model.ts, aliases.ts, modelAllowlist.ts, modelCapabilities.ts
+// ---------------------------------------------------------------------------
+
+// ResolveModelAlias resolves a model alias ("sonnet", "opus", "haiku") or
+// family alias to the canonical model ID. Returns the input unchanged if
+// it's not an alias.
+// Source: utils/model/aliases.ts — resolveAlias
+func ResolveModelAlias(model string) string {
+	lower := strings.ToLower(model)
+	switch lower {
+	case "sonnet":
+		return GetDefaultSonnetModel()
+	case "opus":
+		return GetDefaultOpusModel()
+	case "haiku":
+		return GetDefaultHaikuModel()
+	}
+	return model
+}
+
+// GetUserSpecifiedModel returns the model from env/settings, or "" for default.
+// Priority: ANTHROPIC_MODEL env → settings → ""
+// Source: utils/model/model.ts:61-78
+func GetUserSpecifiedModel() string {
+	if env := os.Getenv("ANTHROPIC_MODEL"); env != "" {
+		resolved := ResolveModelAlias(env)
+		if IsModelAllowed(resolved) {
+			return resolved
+		}
+	}
+	return ""
+}
+
+// modelAllowlist is the set of models the user is allowed to use.
+// Empty means all models are allowed.
+var modelAllowlist []string
+
+// SetModelAllowlist configures the set of allowed models.
+func SetModelAllowlist(models []string) {
+	modelAllowlist = models
+}
+
+// IsModelAllowed returns true if the model is in the allowlist (or if no
+// allowlist is configured).
+// Source: utils/model/modelAllowlist.ts — isModelAllowed
+func IsModelAllowed(model string) bool {
+	if len(modelAllowlist) == 0 {
+		return true
+	}
+	lower := strings.ToLower(model)
+	for _, m := range modelAllowlist {
+		if strings.ToLower(m) == lower {
+			return true
+		}
+		// Also check if it's an alias of an allowed model
+		if strings.EqualFold(ResolveModelAlias(m), model) {
+			return true
+		}
+	}
+	return false
+}
+
+// ModelSupports1M returns true if the model has 1M context window access.
+// Source: utils/model/model.ts + utils/context.ts — modelSupports1M
+func ModelSupports1M(model string) bool {
+	m := strings.ToLower(model)
+	return strings.Contains(m, "opus-4-6") || strings.Contains(m, "sonnet-4-6")
+}
+
+// ModelCapabilities describes what a model supports.
+// Source: utils/model/modelCapabilities.ts
+type ModelCapabilities struct {
+	Effort           bool
+	MaxEffort        bool
+	Thinking         bool
+	StructuredOutput bool
+	AutoMode         bool
+	WebSearch        bool
+	Context1M        bool
+}
+
+// GetModelCapabilities returns the capabilities of a model.
+// Source: utils/model/modelCapabilities.ts
+func GetModelCapabilities(model string) ModelCapabilities {
+	return ModelCapabilities{
+		Effort:           ModelSupportsEffort(model),
+		MaxEffort:        ModelSupportsMaxEffort(model),
+		Thinking:         ModelSupportsThinking(model),
+		StructuredOutput: ModelSupportsStructuredOutputs(model),
+		AutoMode:         ModelSupportsAutoMode(model),
+		WebSearch:        true, // All Claude models support web search
+		Context1M:        ModelSupports1M(model),
+	}
+}
+
+// GetDefaultMainLoopModel returns the default model for the main query loop.
+// Checks subscription type to determine default (Max→Opus, Pro→Sonnet, etc.)
+// Source: utils/model/model.ts:80-120
+func GetDefaultMainLoopModel() string {
+	return GetDefaultSonnetModel() // Default to Sonnet for most users
+}
