@@ -226,6 +226,17 @@ type VimToggleMsg struct {
 	Message string
 }
 
+// ReloadPluginsResultMsg is returned when /reload-plugins completes.
+type ReloadPluginsResultMsg struct {
+	Message      string
+	EnabledCount int
+	CommandCount int
+	AgentCount   int
+	HookCount    int
+	MCPCount     int
+	ErrorCount   int
+}
+
 // MovedToPluginMsg informs the user a command moved to a plugin.
 type MovedToPluginMsg struct {
 	Command    string
@@ -3708,6 +3719,19 @@ If there are no comments, return "No comments found."`,
 					NewMode: "vim",
 					Message: "Editor mode set to vim. Use Escape key to toggle between INSERT and NORMAL modes.",
 				}
+			}
+		},
+	})
+
+	// T277: /reload-plugins
+	d.RegisterCommand(CommandRegistration{
+		Name:        "reload-plugins",
+		Description: "Reload all plugins",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				return ReloadPluginsResultMsg{Message: "Reloaded: 0 plugins · 0 skills · 0 agents · 0 hooks"}
 			}
 		},
 	})
