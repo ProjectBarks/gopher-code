@@ -92,8 +92,8 @@ func RegisterDefaults(registry *ToolRegistry) *PlanState {
 	// Brief (context sharing between sessions)
 	registry.Register(&BriefTool{})
 
-	// MCP auth
-	registry.Register(&McpAuthTool{})
+	// MCP auth tools are created per-server by CreateMcpAuthTool when an
+	// unauthenticated MCP server is discovered — not registered by default.
 
 	// REPL (interactive language sessions)
 	registry.Register(&REPLTool{})
