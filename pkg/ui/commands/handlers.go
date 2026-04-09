@@ -226,6 +226,11 @@ type VimToggleMsg struct {
 	Message string
 }
 
+// RenameSessionMsg is returned when /rename sets a new session name.
+type RenameSessionMsg struct {
+	Name string
+}
+
 // ReloadPluginsResultMsg is returned when /reload-plugins completes.
 type ReloadPluginsResultMsg struct {
 	Message      string
@@ -3732,6 +3737,25 @@ If there are no comments, return "No comments found."`,
 		Handler: func(args string) tea.Cmd {
 			return func() tea.Msg {
 				return ReloadPluginsResultMsg{Message: "Reloaded: 0 plugins · 0 skills · 0 agents · 0 hooks"}
+			}
+		},
+	})
+
+	// T280: /rename — rename the current session
+	// Source: commands/rename/rename.ts
+	d.RegisterCommand(CommandRegistration{
+		Name:         "rename",
+		Description:  "Rename the current session",
+		Type:         CommandTypeLocal,
+		ArgumentHint: "[name]",
+		Source:       "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				name := strings.TrimSpace(args)
+				if name == "" {
+					return OutputStyleMsg{Message: "Usage: /rename <name>"}
+				}
+				return RenameSessionMsg{Name: name}
 			}
 		},
 	})
