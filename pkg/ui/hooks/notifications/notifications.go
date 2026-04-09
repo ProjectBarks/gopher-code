@@ -43,8 +43,10 @@ type Notification struct {
 	Priority Priority
 	// Color is the theme color key (warning, suggestion, fastMode).
 	Color string
-	// TimeoutMs is how long the notification stays visible (0 = default 3s).
+	// TimeoutMs is how long the notification stays visible (0 = default 8s).
 	TimeoutMs int
+	// Invalidates is a list of notification keys that this notification removes.
+	Invalidates []string
 }
 
 // Separator used between notification text segments (matches TS " · ").
