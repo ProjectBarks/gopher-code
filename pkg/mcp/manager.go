@@ -47,6 +47,57 @@ func (m *Manager) RegisterTools(ctx context.Context, registry *tools.ToolRegistr
 	return nil
 }
 
+// ResourceClient returns a tools.MCPResourceClient for the named server, or nil.
+func (m *Manager) ResourceClient(name string) tools.MCPResourceClient {
+	m.mu.Lock()
+	client, ok := m.clients[name]
+	m.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	return &mcpResourceAdapter{client: client, serverName: name}
+}
+
+// mcpResourceAdapter wraps MCPClient to implement tools.MCPResourceClient.
+type mcpResourceAdapter struct {
+	client     *MCPClient
+	serverName string
+}
+
+func (a *mcpResourceAdapter) ListResources(ctx context.Context) ([]tools.MCPResourceInfo, error) {
+	resources, err := a.client.ListResources(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]tools.MCPResourceInfo, len(resources))
+	for i, r := range resources {
+		result[i] = tools.MCPResourceInfo{
+			URI:         r.URI,
+			Name:        r.Name,
+			MimeType:    r.MimeType,
+			Description: r.Description,
+			Server:      a.serverName,
+		}
+	}
+	return result, nil
+}
+
+func (a *mcpResourceAdapter) ReadResource(ctx context.Context, uri string) (*tools.MCPResourceResult, error) {
+	result, err := a.client.ReadResource(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
+	contents := make([]tools.MCPResourceContent, len(result.Contents))
+	for i, c := range result.Contents {
+		contents[i] = tools.MCPResourceContent{
+			URI:      c.URI,
+			MimeType: c.MimeType,
+			Text:     c.Text,
+		}
+	}
+	return &tools.MCPResourceResult{Contents: contents}, nil
+}
+
 // CloseAll shuts down all MCP server connections.
 func (m *Manager) CloseAll() {
 	m.mu.Lock()

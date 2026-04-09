@@ -62,6 +62,42 @@ type FileHistoryTracker interface {
 	TrackEdit(path string, content string) error
 }
 
+// MCPResourceClient is the interface for listing/reading MCP resources.
+// Defined here to avoid import cycles between tools and mcp packages.
+type MCPResourceClient interface {
+	ListResources(ctx context.Context) ([]MCPResourceInfo, error)
+	ReadResource(ctx context.Context, uri string) (*MCPResourceResult, error)
+}
+
+// MCPResourceInfo describes a resource available from an MCP server.
+type MCPResourceInfo struct {
+	URI         string `json:"uri"`
+	Name        string `json:"name"`
+	MimeType    string `json:"mimeType,omitempty"`
+	Description string `json:"description,omitempty"`
+	Server      string `json:"server"`
+}
+
+// MCPResourceResult holds the result of reading an MCP resource.
+type MCPResourceResult struct {
+	Contents []MCPResourceContent `json:"contents"`
+}
+
+// MCPResourceContent is a single content item from a resource read.
+type MCPResourceContent struct {
+	URI      string `json:"uri"`
+	MimeType string `json:"mimeType,omitempty"`
+	Text     string `json:"text,omitempty"`
+}
+
+// MCPClientProvider gives tools access to MCP clients by server name.
+type MCPClientProvider interface {
+	// ServerNames returns the names of all connected MCP servers.
+	ServerNames() []string
+	// ResourceClient returns a resource client for the named server, or nil.
+	ResourceClient(name string) MCPResourceClient
+}
+
 // ToolContext provides context for tool execution.
 type ToolContext struct {
 	CWD            string
@@ -73,4 +109,5 @@ type ToolContext struct {
 	Hooks          HookRunner          // optional hook runner for pre/post tool hooks
 	ReadFileState *ReadFileState      // tracks file read timestamps for staleness guard
 	FileHistory   FileHistoryTracker  // optional file history for undo/checkpoint
+	MCP           MCPClientProvider   // optional MCP client access for resource tools
 }

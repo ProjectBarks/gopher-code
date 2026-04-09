@@ -121,6 +121,55 @@ func (c *MCPClient) CallTool(ctx context.Context, name string, args json.RawMess
 	return c.call(ctx, "tools/call", params)
 }
 
+// ResourceInfo describes a resource provided by the MCP server.
+type ResourceInfo struct {
+	URI         string `json:"uri"`
+	Name        string `json:"name"`
+	MimeType    string `json:"mimeType,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// ResourceContent is a content item from a resources/read response.
+type ResourceContent struct {
+	URI      string `json:"uri"`
+	MimeType string `json:"mimeType,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Blob     string `json:"blob,omitempty"` // base64-encoded binary
+}
+
+// ResourceResult is the result of a resources/read call.
+type ResourceResult struct {
+	Contents []ResourceContent `json:"contents"`
+}
+
+// ListResources returns all resources provided by the server.
+func (c *MCPClient) ListResources(ctx context.Context) ([]ResourceInfo, error) {
+	result, err := c.call(ctx, "resources/list", nil)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Resources []ResourceInfo `json:"resources"`
+	}
+	if err := json.Unmarshal(result, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal resources/list: %w", err)
+	}
+	return resp.Resources, nil
+}
+
+// ReadResource reads a resource by URI.
+func (c *MCPClient) ReadResource(ctx context.Context, uri string) (*ResourceResult, error) {
+	result, err := c.call(ctx, "resources/read", map[string]interface{}{"uri": uri})
+	if err != nil {
+		return nil, err
+	}
+	var resp ResourceResult
+	if err := json.Unmarshal(result, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal resources/read: %w", err)
+	}
+	return &resp, nil
+}
+
 // Close shuts down the MCP server.
 func (c *MCPClient) Close() error {
 	c.stdin.Close()
