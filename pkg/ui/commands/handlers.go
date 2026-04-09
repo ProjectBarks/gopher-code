@@ -226,6 +226,13 @@ type VimToggleMsg struct {
 	Message string
 }
 
+// PrivacySettingsMsg is returned when /privacy-settings opens the privacy page.
+type PrivacySettingsMsg struct {
+	Message string
+	URL     string
+	Opened  bool
+}
+
 // SandboxToggleMsg is returned when /sandbox changes sandbox settings.
 type SandboxToggleMsg struct {
 	Action  string // "toggle", "enable", "disable", "exclude"
@@ -3743,6 +3750,29 @@ If there are no comments, return "No comments found."`,
 		Handler: func(args string) tea.Cmd {
 			return func() tea.Msg {
 				return ReloadPluginsResultMsg{Message: "Reloaded: 0 plugins · 0 skills · 0 agents · 0 hooks"}
+			}
+		},
+	})
+
+	// T274: /privacy-settings — privacy controls
+	// Source: commands/privacy-settings/
+	d.RegisterCommand(CommandRegistration{
+		Name:        "privacy-settings",
+		Description: "View and update your privacy settings",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				url := "https://claude.ai/settings/data-privacy-controls"
+				opened := false
+				if err := openBrowser(url); err == nil {
+					opened = true
+				}
+				msg := "Review and manage your privacy settings at " + url
+				if opened {
+					msg = "Opened privacy settings in your browser: " + url
+				}
+				return PrivacySettingsMsg{Message: msg, URL: url, Opened: opened}
 			}
 		},
 	})
