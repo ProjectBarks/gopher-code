@@ -41,7 +41,7 @@ func (m *Manager) RegisterTools(ctx context.Context, registry *tools.ToolRegistr
 			return err
 		}
 		for _, info := range toolList {
-			registry.Register(&MCPTool{client: client, info: info, serverName: name})
+			registry.Register(NewMCPTool(client, name, info))
 		}
 	}
 	return nil
