@@ -171,6 +171,139 @@ func (m Model) View() string {
 	return sb.String()
 }
 
+// ---------------------------------------------------------------------------
+// Permission request routing — Source: components/permissions/PermissionRequest.tsx
+// ---------------------------------------------------------------------------
+
+// RequestTypeForTool returns the request type for a given tool name.
+// Source: PermissionRequest.tsx:permissionComponentForTool
+func RequestTypeForTool(toolName string) RequestType {
+	switch toolName {
+	case "Bash":
+		return RequestBash
+	case "Edit", "FileEdit":
+		return RequestEdit
+	case "Write", "FileWrite":
+		return RequestWrite
+	case "PowerShell":
+		return RequestBash // same UI as Bash
+	case "WebFetch":
+		return RequestWebFetch
+	case "NotebookEdit":
+		return RequestEdit
+	case "ExitPlanMode":
+		return RequestPlanMode
+	case "EnterPlanMode":
+		return RequestPlanMode
+	case "Skill":
+		return RequestSkill
+	case "AskUserQuestion":
+		return RequestFallback // handled by separate ask_question component
+	case "Glob", "Grep", "Read", "FileRead":
+		return RequestFallback // read-only, usually auto-allowed
+	default:
+		return RequestFallback
+	}
+}
+
+// BuildRequest creates a Request from tool invocation details.
+func BuildRequest(toolName string, description string, params map[string]string) Request {
+	reqType := RequestTypeForTool(toolName)
+	req := Request{
+		Type:        reqType,
+		ToolName:    toolName,
+		Description: description,
+	}
+
+	// Populate type-specific fields from params
+	if cmd, ok := params["command"]; ok {
+		req.Command = cmd
+	}
+	if fp, ok := params["file_path"]; ok {
+		req.FilePath = fp
+	}
+	if fp, ok := params["filePath"]; ok && req.FilePath == "" {
+		req.FilePath = fp
+	}
+	if url, ok := params["url"]; ok {
+		req.URL = url
+	}
+
+	// Mark dangerous commands
+	if reqType == RequestBash && req.Command != "" {
+		req.IsDangerous = isDangerousCommand(req.Command)
+	}
+
+	return req
+}
+
+// isDangerousCommand checks if a bash command is potentially dangerous.
+func isDangerousCommand(cmd string) bool {
+	dangerous := []string{
+		"rm -rf", "rm -r /", "dd if=",
+		"mkfs.", "> /dev/",
+		"chmod 777", "chmod -R 777",
+		":(){ :|:& };:",
+		"curl | sh", "wget | sh",
+		"curl | bash", "wget | bash",
+	}
+	lower := strings.ToLower(cmd)
+	for _, d := range dangerous {
+		if strings.Contains(lower, d) {
+			return true
+		}
+	}
+	return false
+}
+
+// PermissionQueue manages pending permission requests.
+type PermissionQueue struct {
+	pending []PendingRequest
+}
+
+// PendingRequest is a queued permission request awaiting user decision.
+type PendingRequest struct {
+	ToolUseID string
+	Request   Request
+}
+
+// NewPermissionQueue creates an empty queue.
+func NewPermissionQueue() *PermissionQueue {
+	return &PermissionQueue{}
+}
+
+// Enqueue adds a permission request to the queue.
+func (q *PermissionQueue) Enqueue(toolUseID string, req Request) {
+	q.pending = append(q.pending, PendingRequest{ToolUseID: toolUseID, Request: req})
+}
+
+// Dequeue removes and returns the next pending request, or nil.
+func (q *PermissionQueue) Dequeue() *PendingRequest {
+	if len(q.pending) == 0 {
+		return nil
+	}
+	r := q.pending[0]
+	q.pending = q.pending[1:]
+	return &r
+}
+
+// Peek returns the next pending request without removing it.
+func (q *PermissionQueue) Peek() *PendingRequest {
+	if len(q.pending) == 0 {
+		return nil
+	}
+	return &q.pending[0]
+}
+
+// Len returns the number of pending requests.
+func (q *PermissionQueue) Len() int { return len(q.pending) }
+
+// IsEmpty returns true if there are no pending requests.
+func (q *PermissionQueue) IsEmpty() bool { return len(q.pending) == 0 }
+
+// Clear removes all pending requests.
+func (q *PermissionQueue) Clear() { q.pending = nil }
+
 // RenderCompactPermission returns a one-line permission summary.
 func RenderCompactPermission(req Request) string {
 	switch req.Type {

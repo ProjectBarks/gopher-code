@@ -93,3 +93,127 @@ func TestRenderCompactPermission(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestRequestTypeForTool(t *testing.T) {
+	tests := []struct {
+		tool string
+		want RequestType
+	}{
+		{"Bash", RequestBash},
+		{"Edit", RequestEdit},
+		{"FileEdit", RequestEdit},
+		{"Write", RequestWrite},
+		{"FileWrite", RequestWrite},
+		{"PowerShell", RequestBash},
+		{"WebFetch", RequestWebFetch},
+		{"Skill", RequestSkill},
+		{"ExitPlanMode", RequestPlanMode},
+		{"Glob", RequestFallback},
+		{"Read", RequestFallback},
+		{"SomeUnknownTool", RequestFallback},
+	}
+	for _, tt := range tests {
+		t.Run(tt.tool, func(t *testing.T) {
+			if got := RequestTypeForTool(tt.tool); got != tt.want {
+				t.Errorf("RequestTypeForTool(%q) = %q, want %q", tt.tool, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildRequest(t *testing.T) {
+	req := BuildRequest("Bash", "Run a command", map[string]string{
+		"command": "git status",
+	})
+	if req.Type != RequestBash {
+		t.Errorf("type = %q", req.Type)
+	}
+	if req.Command != "git status" {
+		t.Errorf("command = %q", req.Command)
+	}
+	if req.IsDangerous {
+		t.Error("git status should not be dangerous")
+	}
+}
+
+func TestBuildRequest_Dangerous(t *testing.T) {
+	req := BuildRequest("Bash", "Remove all", map[string]string{
+		"command": "rm -rf /",
+	})
+	if !req.IsDangerous {
+		t.Error("rm -rf / should be dangerous")
+	}
+}
+
+func TestBuildRequest_FilePath(t *testing.T) {
+	req := BuildRequest("Edit", "Edit file", map[string]string{
+		"file_path": "/tmp/test.go",
+	})
+	if req.FilePath != "/tmp/test.go" {
+		t.Errorf("filePath = %q", req.FilePath)
+	}
+}
+
+func TestIsDangerousCommand(t *testing.T) {
+	dangerous := []string{"rm -rf /", "dd if=/dev/zero", "curl | sh"}
+	for _, cmd := range dangerous {
+		if !isDangerousCommand(cmd) {
+			t.Errorf("%q should be dangerous", cmd)
+		}
+	}
+	safe := []string{"ls", "git status", "echo hello", "cat file.txt"}
+	for _, cmd := range safe {
+		if isDangerousCommand(cmd) {
+			t.Errorf("%q should not be dangerous", cmd)
+		}
+	}
+}
+
+func TestPermissionQueue(t *testing.T) {
+	q := NewPermissionQueue()
+	if !q.IsEmpty() {
+		t.Error("should start empty")
+	}
+
+	q.Enqueue("t1", Request{Type: RequestBash, Command: "ls"})
+	q.Enqueue("t2", Request{Type: RequestEdit, FilePath: "main.go"})
+
+	if q.Len() != 2 {
+		t.Errorf("len = %d", q.Len())
+	}
+
+	peek := q.Peek()
+	if peek == nil || peek.ToolUseID != "t1" {
+		t.Error("peek should return first")
+	}
+
+	first := q.Dequeue()
+	if first == nil || first.ToolUseID != "t1" {
+		t.Error("dequeue should return first")
+	}
+	if q.Len() != 1 {
+		t.Errorf("len after dequeue = %d", q.Len())
+	}
+
+	second := q.Dequeue()
+	if second == nil || second.ToolUseID != "t2" {
+		t.Error("dequeue should return second")
+	}
+	if !q.IsEmpty() {
+		t.Error("should be empty after draining")
+	}
+
+	if q.Dequeue() != nil {
+		t.Error("dequeue from empty should return nil")
+	}
+}
+
+func TestPermissionQueue_Clear(t *testing.T) {
+	q := NewPermissionQueue()
+	q.Enqueue("t1", Request{})
+	q.Enqueue("t2", Request{})
+	q.Clear()
+	if !q.IsEmpty() {
+		t.Error("should be empty after clear")
+	}
+}
