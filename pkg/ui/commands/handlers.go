@@ -120,6 +120,11 @@ type ModelShowMsg struct {
 	Message string
 }
 
+// ShowModelPickerMsg requests opening the model picker UI.
+type ShowModelPickerMsg struct {
+	CurrentModel string
+}
+
 // ModelState holds the current model name for the /model command.
 type ModelState struct {
 	// CurrentModel returns the currently active model name.
@@ -962,18 +967,13 @@ func newModelHandler(state ModelState) Handler {
 		return func() tea.Msg {
 			arg := strings.TrimSpace(args)
 
-			// No argument: show current model
+			// No argument: open the model picker UI
 			if arg == "" {
 				cur := ""
 				if state.CurrentModel != nil {
 					cur = state.CurrentModel()
 				}
-				if cur == "" {
-					cur = "(unknown)"
-				}
-				return ModelShowMsg{
-					Message: fmt.Sprintf("Current model: %s\nUse \"/model <name>\" to switch (e.g. \"/model sonnet\", \"/model opus\").", cur),
-				}
+				return ShowModelPickerMsg{CurrentModel: cur}
 			}
 
 			return ModelSwitchMsg{Model: arg}

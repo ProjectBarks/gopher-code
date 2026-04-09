@@ -164,13 +164,13 @@ func TestDispatcherNotACommand(t *testing.T) {
 }
 
 func TestDispatcherModelWithoutArgs(t *testing.T) {
-	// T267: /model with no args now shows the current model instead of returning an error.
+	// T267: /model with no args opens the model picker UI.
 	d := NewDispatcher()
 	cmd := d.Dispatch("/model")
 	msg := cmd()
-	_, ok := msg.(ModelShowMsg)
+	_, ok := msg.(ShowModelPickerMsg)
 	if !ok {
-		t.Fatalf("Expected ModelShowMsg, got %T", msg)
+		t.Fatalf("Expected ShowModelPickerMsg, got %T", msg)
 	}
 }
 
@@ -3352,7 +3352,7 @@ func TestModel_SwitchOpus(t *testing.T) {
 }
 
 
-func TestModel_NoArgsShowsCurrent(t *testing.T) {
+func TestModel_NoArgsOpensModelPicker(t *testing.T) {
 	d := NewDispatcher()
 	// Override the default registration with one that has a known current model.
 	d.RegisterCommand(CommandRegistration{
@@ -3371,12 +3371,12 @@ func TestModel_NoArgsShowsCurrent(t *testing.T) {
 		t.Fatal("expected non-nil cmd")
 	}
 	msg := cmd()
-	sm, ok := msg.(ModelShowMsg)
+	sm, ok := msg.(ShowModelPickerMsg)
 	if !ok {
-		t.Fatalf("expected ModelShowMsg, got %T", msg)
+		t.Fatalf("expected ShowModelPickerMsg, got %T", msg)
 	}
-	if !strings.Contains(sm.Message, "claude-sonnet-4-20250514") {
-		t.Errorf("expected current model in message, got %q", sm.Message)
+	if sm.CurrentModel != "claude-sonnet-4-20250514" {
+		t.Errorf("expected current model in msg, got %q", sm.CurrentModel)
 	}
 }
 
@@ -3418,19 +3418,20 @@ func TestPermissions_WithRules(t *testing.T) {
 	}
 }
 
-func TestModel_NoArgsDefaultUnknown(t *testing.T) {
+func TestModel_NoArgsDefaultEmpty(t *testing.T) {
 	d := NewDispatcher()
 	cmd := d.Dispatch("/model")
 	if cmd == nil {
 		t.Fatal("expected non-nil cmd")
 	}
 	msg := cmd()
-	sm, ok := msg.(ModelShowMsg)
+	sm, ok := msg.(ShowModelPickerMsg)
 	if !ok {
-		t.Fatalf("expected ModelShowMsg, got %T", msg)
+		t.Fatalf("expected ShowModelPickerMsg, got %T", msg)
 	}
-	if !strings.Contains(sm.Message, "(unknown)") {
-		t.Errorf("expected '(unknown)' in message, got %q", sm.Message)
+	// Default handler has empty CurrentModel
+	if sm.CurrentModel != "" {
+		t.Errorf("expected empty current model, got %q", sm.CurrentModel)
 	}
 }
 
