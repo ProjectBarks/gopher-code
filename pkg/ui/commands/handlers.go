@@ -149,6 +149,22 @@ type CompactMsg struct{}
 // ThinkingToggleMsg requests toggling thinking mode.
 type ThinkingToggleMsg struct{}
 
+// EnablePlanModeMsg requests enabling plan mode.
+// If Description is non-empty, it's submitted as a query after enabling.
+type EnablePlanModeMsg struct {
+	Description string
+}
+
+// ShowPlanMsg requests showing the current plan content.
+type ShowPlanMsg struct {
+	Message string
+}
+
+// OpenPlanInEditorMsg requests opening the plan file in an external editor.
+type OpenPlanInEditorMsg struct {
+	PlanPath string
+}
+
 // ShowDoctorMsg requests showing the /doctor screen.
 type ShowDoctorMsg struct{}
 
@@ -977,6 +993,68 @@ func newModelHandler(state ModelState) Handler {
 			}
 
 			return ModelSwitchMsg{Model: arg}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// T271: /plan mode command
+// Source: src/commands/plan/plan.tsx
+// ---------------------------------------------------------------------------
+
+// PlanState holds the current plan mode state.
+type PlanState struct {
+	// IsInPlanMode returns true if currently in plan mode.
+	IsInPlanMode func() bool
+	// GetPlanContent returns the current plan content, or empty.
+	GetPlanContent func() string
+	// GetPlanPath returns the plan file path.
+	GetPlanPath func() string
+}
+
+// newPlanHandler creates the /plan command handler.
+// - Not in plan mode: enable it (with optional description for query)
+// - In plan mode + no plan: say "no plan yet"
+// - In plan mode + "open": open plan in editor
+// - In plan mode + plan exists: show it
+func newPlanHandler(state PlanState) Handler {
+	return func(args string) tea.Cmd {
+		return func() tea.Msg {
+			inPlanMode := false
+			if state.IsInPlanMode != nil {
+				inPlanMode = state.IsInPlanMode()
+			}
+
+			// Not in plan mode → enable it
+			if !inPlanMode {
+				desc := strings.TrimSpace(args)
+				return EnablePlanModeMsg{Description: desc}
+			}
+
+			// Already in plan mode
+			planContent := ""
+			if state.GetPlanContent != nil {
+				planContent = state.GetPlanContent()
+			}
+			planPath := ""
+			if state.GetPlanPath != nil {
+				planPath = state.GetPlanPath()
+			}
+
+			// No plan written yet
+			if planContent == "" {
+				return ShowPlanMsg{Message: "Already in plan mode. No plan written yet."}
+			}
+
+			// "/plan open" → open in editor
+			arg := strings.TrimSpace(args)
+			if arg == "open" {
+				return OpenPlanInEditorMsg{PlanPath: planPath}
+			}
+
+			// Show the current plan
+			msg := fmt.Sprintf("Current Plan\n%s\n\n%s", planPath, planContent)
+			return ShowPlanMsg{Message: msg}
 		}
 	}
 }
@@ -3152,6 +3230,21 @@ func (d *Dispatcher) registerDefaults() {
 		Source:       "builtin",
 		Handler: newModelHandler(ModelState{
 			CurrentModel: func() string { return "" },
+		}),
+	})
+
+	// T271: /plan — enable plan mode or view current plan
+	d.RegisterCommand(CommandRegistration{
+		Name:         "plan",
+		Description:  "Enable plan mode or view the current session plan",
+		Type:         CommandTypeLocal,
+		ArgumentHint: "[open|<description>]",
+		Immediate:    true,
+		Source:       "builtin",
+		Handler: newPlanHandler(PlanState{
+			IsInPlanMode:   func() bool { return false },
+			GetPlanContent: func() string { return "" },
+			GetPlanPath:    func() string { return "" },
 		}),
 	})
 

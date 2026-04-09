@@ -3449,6 +3449,126 @@ func TestModel_Registration(t *testing.T) {
 	}
 }
 
+func TestPlan_EnableMode(t *testing.T) {
+	d := NewDispatcher()
+	d.RegisterCommand(CommandRegistration{
+		Name:      "plan",
+		Type:      CommandTypeLocal,
+		Immediate: true,
+		Source:    "test",
+		Handler: newPlanHandler(PlanState{
+			IsInPlanMode:   func() bool { return false },
+			GetPlanContent: func() string { return "" },
+			GetPlanPath:    func() string { return "" },
+		}),
+	})
+	cmd := d.Dispatch("/plan")
+	msg := cmd()
+	pm, ok := msg.(EnablePlanModeMsg)
+	if !ok {
+		t.Fatalf("expected EnablePlanModeMsg, got %T", msg)
+	}
+	if pm.Description != "" {
+		t.Errorf("no args should have empty description, got %q", pm.Description)
+	}
+}
+
+func TestPlan_EnableModeWithDescription(t *testing.T) {
+	d := NewDispatcher()
+	d.RegisterCommand(CommandRegistration{
+		Name:      "plan",
+		Type:      CommandTypeLocal,
+		Immediate: true,
+		Source:    "test",
+		Handler: newPlanHandler(PlanState{
+			IsInPlanMode: func() bool { return false },
+		}),
+	})
+	cmd := d.Dispatch("/plan build a REST API")
+	msg := cmd()
+	pm, ok := msg.(EnablePlanModeMsg)
+	if !ok {
+		t.Fatalf("expected EnablePlanModeMsg, got %T", msg)
+	}
+	if pm.Description != "build a REST API" {
+		t.Errorf("description = %q, want 'build a REST API'", pm.Description)
+	}
+}
+
+func TestPlan_AlreadyInPlanMode_NoPlan(t *testing.T) {
+	d := NewDispatcher()
+	d.RegisterCommand(CommandRegistration{
+		Name:      "plan",
+		Type:      CommandTypeLocal,
+		Immediate: true,
+		Source:    "test",
+		Handler: newPlanHandler(PlanState{
+			IsInPlanMode:   func() bool { return true },
+			GetPlanContent: func() string { return "" },
+		}),
+	})
+	cmd := d.Dispatch("/plan")
+	msg := cmd()
+	sm, ok := msg.(ShowPlanMsg)
+	if !ok {
+		t.Fatalf("expected ShowPlanMsg, got %T", msg)
+	}
+	if !strings.Contains(sm.Message, "No plan written yet") {
+		t.Errorf("message = %q", sm.Message)
+	}
+}
+
+func TestPlan_ShowPlan(t *testing.T) {
+	d := NewDispatcher()
+	d.RegisterCommand(CommandRegistration{
+		Name:      "plan",
+		Type:      CommandTypeLocal,
+		Immediate: true,
+		Source:    "test",
+		Handler: newPlanHandler(PlanState{
+			IsInPlanMode:   func() bool { return true },
+			GetPlanContent: func() string { return "1. Design API\n2. Implement endpoints" },
+			GetPlanPath:    func() string { return "/tmp/plan.md" },
+		}),
+	})
+	cmd := d.Dispatch("/plan")
+	msg := cmd()
+	sm, ok := msg.(ShowPlanMsg)
+	if !ok {
+		t.Fatalf("expected ShowPlanMsg, got %T", msg)
+	}
+	if !strings.Contains(sm.Message, "Design API") {
+		t.Errorf("should contain plan content: %q", sm.Message)
+	}
+	if !strings.Contains(sm.Message, "/tmp/plan.md") {
+		t.Errorf("should contain plan path: %q", sm.Message)
+	}
+}
+
+func TestPlan_Open(t *testing.T) {
+	d := NewDispatcher()
+	d.RegisterCommand(CommandRegistration{
+		Name:      "plan",
+		Type:      CommandTypeLocal,
+		Immediate: true,
+		Source:    "test",
+		Handler: newPlanHandler(PlanState{
+			IsInPlanMode:   func() bool { return true },
+			GetPlanContent: func() string { return "some plan" },
+			GetPlanPath:    func() string { return "/tmp/plan.md" },
+		}),
+	})
+	cmd := d.Dispatch("/plan open")
+	msg := cmd()
+	om, ok := msg.(OpenPlanInEditorMsg)
+	if !ok {
+		t.Fatalf("expected OpenPlanInEditorMsg, got %T", msg)
+	}
+	if om.PlanPath != "/tmp/plan.md" {
+		t.Errorf("path = %q", om.PlanPath)
+	}
+}
+
 func TestMobile_DispatchReturnsMsg(t *testing.T) {
 	d := NewDispatcher()
 	cmd := d.Dispatch("/mobile")
