@@ -3735,4 +3735,58 @@ If there are no comments, return "No comments found."`,
 			}
 		},
 	})
+
+	// T282: /review — local PR code review via gh CLI
+	// Source: commands/review.ts
+	d.RegisterCommand(CommandRegistration{
+		Name:         "review",
+		Description:  "Review a pull request",
+		Type:         CommandTypePrompt,
+		ArgumentHint: "[PR number]",
+		Source:       "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				prompt := fmt.Sprintf(`You are an expert code reviewer. Follow these steps:
+
+1. If no PR number is provided, run %sgh pr list%s to show open PRs
+2. If a PR number is provided, run %sgh pr view <number>%s to get PR details
+3. Run %sgh pr diff <number>%s to get the diff
+4. Analyze the changes and provide a thorough code review that includes:
+   - Overview of what the PR does
+   - Analysis of code quality and style
+   - Specific suggestions for improvements
+   - Any potential issues or risks
+
+Keep your review concise but thorough. Focus on:
+- Code correctness
+- Following project conventions
+- Performance implications
+- Test coverage
+- Security considerations
+
+Format your review with clear sections and bullet points.
+
+PR number: %s`, "`", "`", "`", "`", "`", "`", args)
+				return PromptMsg{
+					Command: "review",
+					Text:    prompt,
+				}
+			}
+		},
+	})
+
+	// T282: /ultrareview — remote enhanced review (CCR)
+	d.RegisterCommand(CommandRegistration{
+		Name:        "ultrareview",
+		Description: "~10-20 min · Finds and verifies bugs in your branch via Claude Code on the web",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				return OutputStyleMsg{
+					Message: "ultrareview requires Claude Code on the web. Use /review for local PR review.",
+				}
+			}
+		},
+	})
 }
