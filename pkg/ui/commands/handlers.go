@@ -226,6 +226,34 @@ type VimToggleMsg struct {
 	Message string
 }
 
+// SessionInfoMsg is returned when /session shows the remote session URL.
+type SessionInfoMsg struct {
+	Message string
+	URL     string
+	QRCode  string
+}
+
+// StatusInfoMsg is returned when /status runs diagnostics.
+type StatusInfoMsg struct {
+	Message string
+}
+
+// StatuslineConfigMsg is returned when /statusline changes config.
+type StatuslineConfigMsg struct {
+	Args string
+}
+
+// TagSessionMsg is returned when /tag tags a session.
+type TagSessionMsg struct {
+	Tag string
+}
+
+// ShowTasksMsg requests showing the tasks overlay.
+type ShowTasksMsg struct{}
+
+// ShowThemePickerMsg requests showing the theme picker.
+type ShowThemePickerMsg struct{}
+
 // UpgradeMsg is returned when /upgrade opens the Max upgrade page.
 type UpgradeMsg struct {
 	Message string
@@ -3831,6 +3859,94 @@ If there are no comments, return "No comments found."`,
 				}
 				return UpgradeMsg{Message: msg, URL: url, Opened: opened}
 			}
+		},
+	})
+
+	// T286: /session — show remote session URL with QR code
+	// Source: commands/session/session.tsx
+	d.RegisterCommand(CommandRegistration{
+		Name:         "session",
+		Description:  "Show remote session URL and QR code",
+		Type:         CommandTypeLocal,
+		Aliases:      []string{"remote"},
+		Availability: []CommandAvailability{AvailabilityClaudeAI},
+		Source:       "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				// In remote mode, display the session URL + QR code.
+				// The URL comes from session state (replBridgeSessionId).
+				// For now, return a placeholder — the real URL is wired by
+				// the remote hooks (T406) at session start.
+				return SessionInfoMsg{
+					Message: "Session info is available in remote mode. Use /session to view your remote session URL and QR code.",
+				}
+			}
+		},
+	})
+
+	// T289: /status — show diagnostic status
+	d.RegisterCommand(CommandRegistration{
+		Name:        "status",
+		Description: "Show diagnostic status information",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				return StatusInfoMsg{Message: "Run /doctor for full diagnostics."}
+			}
+		},
+	})
+
+	// T290: /statusline — configure status line
+	d.RegisterCommand(CommandRegistration{
+		Name:        "statusline",
+		Description: "Configure the status line display",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				return StatuslineConfigMsg{Args: args}
+			}
+		},
+	})
+
+	// T292: /tag — tag session (ant-only)
+	d.RegisterCommand(CommandRegistration{
+		Name:     "tag",
+		Description: "Tag a session for internal tracking",
+		Type:     CommandTypeLocal,
+		IsHidden: true,
+		Source:   "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg {
+				tag := strings.TrimSpace(args)
+				if tag == "" {
+					return OutputStyleMsg{Message: "Usage: /tag <name>"}
+				}
+				return TagSessionMsg{Tag: tag}
+			}
+		},
+	})
+
+	// T293: /tasks — show background tasks
+	d.RegisterCommand(CommandRegistration{
+		Name:        "tasks",
+		Description: "View and manage background tasks",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg { return ShowTasksMsg{} }
+		},
+	})
+
+	// T295: /theme — change color theme
+	d.RegisterCommand(CommandRegistration{
+		Name:        "theme",
+		Description: "Change the color theme",
+		Type:        CommandTypeLocal,
+		Source:      "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg { return ShowThemePickerMsg{} }
 		},
 	})
 
