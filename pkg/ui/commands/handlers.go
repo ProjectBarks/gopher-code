@@ -226,6 +226,9 @@ type VimToggleMsg struct {
 	Message string
 }
 
+// RemoteEnvConfigMsg requests opening the remote environment configuration.
+type RemoteEnvConfigMsg struct{}
+
 // OpenRewindSelectorMsg requests opening the message selector for rewinding.
 type OpenRewindSelectorMsg struct{}
 
@@ -3953,6 +3956,18 @@ If there are no comments, return "No comments found."`,
 		Source:      "builtin",
 		Handler: func(args string) tea.Cmd {
 			return func() tea.Msg { return ShowThemePickerMsg{} }
+		},
+	})
+
+	// T278: /remote-env — configure remote environment
+	d.RegisterCommand(CommandRegistration{
+		Name:         "remote-env",
+		Description:  "Configure the default remote environment for teleport sessions",
+		Type:         CommandTypeLocal,
+		Availability: []CommandAvailability{AvailabilityClaudeAI},
+		Source:       "builtin",
+		Handler: func(args string) tea.Cmd {
+			return func() tea.Msg { return RemoteEnvConfigMsg{} }
 		},
 	})
 
